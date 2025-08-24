@@ -4,7 +4,12 @@ version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "polars>=1.32.3",
+    "pyarrow>=21.0.0",
+    "pydantic>=2.11.7",
+    "yfinance>=0.2.65",
+]
 [[project.authors]]
 name = "scbtm"
 email = "128545782+scbtm@users.noreply.github.com"
