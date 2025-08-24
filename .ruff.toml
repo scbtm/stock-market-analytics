@@ -1,0 +1,50 @@
+# Ruff configuration for linting and formatting Python code
+# Optimized for ML/DS projects with scientific computing libraries
+
+# Line length (same as Black default)
+line-length = 88
+
+[lint]
+# Enable specific rule sets
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings  
+    "F",   # pyflakes
+    "I",   # isort
+    "B",   # flake8-bugbear
+    "C4",  # flake8-comprehensions
+    "UP",  # pyupgrade
+    "ARG", # flake8-unused-arguments
+    "SIM", # flake8-simplify
+    "TCH", # flake8-type-checking
+    "PTH", # flake8-use-pathlib
+    "NPY", # NumPy-specific rules
+    "PD",  # pandas-vet
+]
+
+# Ignore specific rules that might be too strict for ML/DS work
+ignore = [
+    "E501",  # line too long (handled by formatter)
+    "PD901", # pandas df variable name
+    "NPY002", # numpy legacy random
+]
+
+# Allow these names which are common in scientific computing
+allowed-confusables = ["α", "β", "γ", "δ", "ε", "θ", "μ", "σ", "τ", "φ", "ω"]
+
+[lint.per-file-ignores]
+# Notebooks and scripts can be more relaxed
+"notebooks/*.py" = ["E402", "F401"]
+"scripts/*.py" = ["E402"]
+# Tests can use assert and have unused imports
+"tests/*.py" = ["S101", "F401", "ARG"]
+
+[lint.isort]
+known-first-party = ["src"]
+
+[format]
+# Use double quotes for consistency
+quote-style = "double"
+
+# Format docstrings
+docstring-code-format = true

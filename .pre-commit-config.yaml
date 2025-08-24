@@ -1,0 +1,8 @@
+repos:
+  - repo: local
+    hooks:
+      - id: make-verify
+        name: Run Makefile checks
+        entry: uv run make verify
+        language: system            # use system Python / shell
+        pass_filenames: false       # Make handles its own paths
