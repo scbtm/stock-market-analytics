@@ -1,6 +1,6 @@
 {
   "include": [
-    "src/mlops_project_template",
+    "src/stock_market_analytics",
     "tests"
   ],
   "exclude": [

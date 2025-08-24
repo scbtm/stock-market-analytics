@@ -1,0 +1,26 @@
+[project]
+name = "stock-market-analytics"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = []
+[[project.authors]]
+name = "scbtm"
+email = "128545782+scbtm@users.noreply.github.com"
+
+[build-system]
+requires = [ "uv_build>=0.8.13,<0.9.0",]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "coverage[toml]>=7.10.5",
+    "pre-commit>=4.3.0",
+    "pyright>=1.1.404",
+    "pytest-cov>=6.2.1",
+    "ruff>=0.12.10",
+]
+
+[project.scripts]
+stock-market-analytics = "stock_market_analytics.main:main"
