@@ -78,3 +78,9 @@ venv.bak/
 .env.development.local
 .env.test.local
 .env.production.local
+
+# Metaflow
+.metaflow/
+
+# data
+data/
