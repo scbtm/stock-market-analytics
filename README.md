@@ -167,16 +167,9 @@ uv run python -c "from stock_market_analytics import *"
 - **pydantic**: Data validation using Python type annotations
 - **pyarrow**: Required for pandas-polars conversion
 
-## Contributing
+## Entry Points
 
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Make your changes
-4. Run tests (`uv run pytest`)
-5. Commit your changes (`git commit -m 'Add amazing feature'`)
-6. Push to the branch (`git push origin feature/amazing-feature`)
-7. Open a Pull Request
-
-## License
-
-This project is licensed under the MIT License - see the LICENSE file for details.
+**Run batch data collection of the stocks in the tickers file
+```sh
+uv run batch-collect run
+```
