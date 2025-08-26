@@ -339,6 +339,7 @@ class BatchCollectionFlow(FlowSpec):
         # Load existing data if available
         if stocks_history_path.exists():
             existing_data = pl.read_parquet(stocks_history_path)
+            existing_data = existing_data.select(["date", "symbol", "open", "high", "low", "close", "volume"]).cast({"volume": pl.Int64})
             combined_data = pl.concat([existing_data, new_data])
         else:
             combined_data = new_data
@@ -351,6 +352,9 @@ class BatchCollectionFlow(FlowSpec):
             .agg(pl.all().last())  # Keep the most recent entry for duplicates
             .sort(["symbol", "date"], descending=[False, False])
         )
+
+        # Reorder columns to match storage format (symbol first, then date)
+        final_data = final_data.select(["date", "symbol", "open", "high", "low", "close", "volume"])
         
         # Save updated historical data
         final_data.write_parquet(stocks_history_path)
