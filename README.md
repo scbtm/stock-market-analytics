@@ -169,7 +169,8 @@ uv run python -c "from stock_market_analytics import *"
 
 ## Entry Points
 
-**Run batch data collection of the stocks in the tickers file
+**Run batch data collection of the stocks in the tickers file**
+The tickers file can be downloaded from the [Nasdaq website](https://www.nasdaq.com/market-activity/stocks/screener)
 ```sh
 uv run batch-collect run
 ```
