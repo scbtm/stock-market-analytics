@@ -1,14 +1,14 @@
 import os
 from pathlib import Path
-from typing import Dict, List, Any, Optional
+from typing import Any
 
 import pandas as pd
 import polars as pl
 from metaflow import FlowSpec, step
 
 from stock_market_analytics.data_collection import (
-    YFinanceCollector,
     ContinuousTimelineProcessor,
+    YFinanceCollector,
 )
 
 # Constants
@@ -96,7 +96,7 @@ class BatchCollectionFlow(FlowSpec):
 
         self.next(self.build_collection_plan)
 
-    def _load_tickers(self, base_data_path: Path) -> List[Dict[str, Any]]:
+    def _load_tickers(self, base_data_path: Path) -> list[dict[str, Any]]:
         """Load and validate ticker symbols from CSV file."""
         tickers_path = base_data_path / TICKERS_FILE
 
@@ -113,9 +113,9 @@ class BatchCollectionFlow(FlowSpec):
             return tickers_df.to_dict(orient="records")
 
         except Exception as e:
-            raise ValueError(f"Error loading tickers file: {str(e)}")
+            raise ValueError(f"Error loading tickers file: {str(e)}") from e
 
-    def _load_metadata(self, base_data_path: Path) -> List[Dict[str, Any]]:
+    def _load_metadata(self, base_data_path: Path) -> list[dict[str, Any]]:
         """Load and validate existing metadata from CSV file."""
         metadata_path = base_data_path / METADATA_FILE
 
@@ -144,7 +144,7 @@ class BatchCollectionFlow(FlowSpec):
             return metadata_df.to_dict(orient="records")
 
         except Exception as e:
-            raise ValueError(f"Error loading metadata file: {str(e)}")
+            raise ValueError(f"Error loading metadata file: {str(e)}") from e
 
     @step
     def build_collection_plan(self) -> None:
@@ -179,8 +179,8 @@ class BatchCollectionFlow(FlowSpec):
         self.next(self.collect_data, foreach="collection_plans")
 
     def _create_collection_plan(
-        self, symbol: str, metadata: Optional[Dict[str, Any]]
-    ) -> Optional[Dict[str, str]]:
+        self, symbol: str, metadata: dict[str, Any] | None
+    ) -> dict[str, str] | None:
         """
         Create a collection plan for a single symbol.
 
@@ -257,14 +257,14 @@ class BatchCollectionFlow(FlowSpec):
                 new_metadata["status"] = "data_issue"
                 self.results = {"data": None, "new_metadata": new_metadata}
 
-        except Exception as e:
+        except Exception:
             new_metadata["status"] = "collection_error"
             self.results = {"data": None, "new_metadata": new_metadata}
 
         self.next(self.join_results)
 
     @step
-    def join_results(self, inputs) -> None:
+    def join_results(self, inputs: list[dict[str, Any]]) -> None:
         """
         Aggregate results from all parallel collection tasks.
 
@@ -307,7 +307,7 @@ class BatchCollectionFlow(FlowSpec):
         self.next(self.end)
 
     def _update_metadata(
-        self, base_data_path: Path, metadata_updates: List[Dict[str, Any]]
+        self, base_data_path: Path, metadata_updates: list[dict[str, Any]]
     ) -> None:
         """Update the metadata file with new collection information."""
         if not metadata_updates:
@@ -338,7 +338,7 @@ class BatchCollectionFlow(FlowSpec):
         print(f"📋 Updated metadata for {len(final_metadata_df)} symbols")
 
     def _update_historical_data(
-        self, base_data_path: Path, collected_data: List[pl.DataFrame]
+        self, base_data_path: Path, collected_data: list[pl.DataFrame]
     ) -> None:
         """Update the historical data parquet file with newly collected data."""
         if not collected_data:
@@ -382,7 +382,7 @@ class BatchCollectionFlow(FlowSpec):
         new_records = len(new_data)
         symbols_updated = new_data["symbol"].n_unique()
 
-        print(f"📈 Updated historical dataset:")
+        print("📈 Updated historical dataset:")
         print(f"  • Added {new_records:,} new records")
         print(f"  • Updated {symbols_updated} symbols")
         print(f"  • Total records: {total_records:,}")
