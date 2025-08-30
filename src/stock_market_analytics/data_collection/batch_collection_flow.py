@@ -239,27 +239,28 @@ class BatchCollectionFlow(FlowSpec):
             raw_data = collector.get_historical_data()
 
             if not collector.collection_successful or raw_data.is_empty():
-                self.results = {"data": None, "new_metadata": new_metadata}
-                self.next(self.join_results)
-                return
+                results = {"data": None, "new_metadata": new_metadata}
 
-            # Process data for continuity and validation
-            processor = ContinuousTimelineProcessor(symbol, raw_data)
-            processed_data = processor.process()
-
-            if processed_data is not None and processor.processing_successful:
-                new_metadata["max_date_recorded"] = (
-                    processed_data["date"].max().strftime("%Y-%m-%d")
-                )
-                new_metadata["status"] = "active"
-                self.results = {"data": processed_data, "new_metadata": new_metadata}
             else:
-                new_metadata["status"] = "data_issue"
-                self.results = {"data": None, "new_metadata": new_metadata}
+                # Process data for continuity and validation
+                processor = ContinuousTimelineProcessor(symbol, raw_data)
+                processed_data = processor.process()
+
+                if processed_data is not None and processor.processing_successful:
+                    new_metadata["max_date_recorded"] = (
+                        processed_data["date"].max().strftime("%Y-%m-%d")
+                    )
+                    new_metadata["status"] = "active"
+                    results = {"data": processed_data, "new_metadata": new_metadata}
+                else:
+                    new_metadata["status"] = "data_issue"
+                    results = {"data": None, "new_metadata": new_metadata}
 
         except Exception:
             new_metadata["status"] = "collection_error"
-            self.results = {"data": None, "new_metadata": new_metadata}
+            results = {"data": None, "new_metadata": new_metadata}
+
+        self.results = results
 
         self.next(self.join_results)
 

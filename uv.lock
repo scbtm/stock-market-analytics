@@ -306,15 +306,15 @@ wheels = [
 
 [[package]]
 name = "metaflow"
-version = "2.17.3"
+version = "2.18.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "boto3" },
     { name = "requests" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/88/bb/2cbc5a72cbf88d67c15415fc33dd24f0de4878dbd12e5cd4fa42d754ee41/metaflow-2.17.3.tar.gz", hash = "sha256:e89ab7f99e2942daff4d5cf15b1d0662a092c6d2eb1c821f9e3913b887a72a4c", size = 1520393, upload-time = "2025-08-21T22:45:07.741Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/f9/29/90101a85212d57b3641e39c0366fa24f5a9ae32f125a94bff2ed29203ea1/metaflow-2.18.1.tar.gz", hash = "sha256:8e3a97eec250c3ac7ae80df444cbc2d1ce1767e38dc0243d69af149dbff6b90d", size = 1525861, upload-time = "2025-08-29T13:36:12.704Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/38/09/db7ea7d4c6f40d4bd834ca3514cbcc18a18aa326cf4071f880ad9672df6f/metaflow-2.17.3-py2.py3-none-any.whl", hash = "sha256:d3e3b17cc56205a0edf245960ade856caebede37a2efba856245e12929ef264d", size = 1699055, upload-time = "2025-08-21T22:45:05.629Z" },
+    { url = "https://files.pythonhosted.org/packages/49/00/7db87db91e187ed34b0dee654082aa91accffab7acf283dfc4aca139f02f/metaflow-2.18.1-py2.py3-none-any.whl", hash = "sha256:416a96a5848aeb6b1f536723f2bef3c448d69fab1c7fc135f40333b9ccde659e", size = 1704627, upload-time = "2025-08-29T13:36:10.873Z" },
 ]
 
 [[package]]
@@ -794,7 +794,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "metaflow", specifier = ">=2.17.3" },
+    { name = "metaflow", specifier = "==2.18.1" },
     { name = "polars", specifier = ">=1.32.3" },
     { name = "pyarrow", specifier = ">=21.0.0" },
     { name = "pydantic", specifier = ">=2.11.7" },
