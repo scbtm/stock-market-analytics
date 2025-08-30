@@ -9,6 +9,7 @@ dependencies = [
     "polars>=1.32.3",
     "pyarrow>=21.0.0",
     "pydantic>=2.11.7",
+    "sf-hamilton[visualization]>=1.88.0",
     "yfinance>=0.2.65",
 ]
 [[project.authors]]
