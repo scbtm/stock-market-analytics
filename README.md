@@ -26,6 +26,12 @@ uv sync
 uv pip install -e .
 ```
 
+**NOTE**
+In addition to the uv dependencies, at least for development and visualizations with hamilton, you need:
+```bash
+sudo apt install graphviz
+```
+
 ## Quick Start
 
 ```python
