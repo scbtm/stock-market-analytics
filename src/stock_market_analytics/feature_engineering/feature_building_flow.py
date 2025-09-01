@@ -1,20 +1,21 @@
 import os
 from pathlib import Path
-from typing import Any
 
 import pandas as pd
 import polars as pl
+from hamilton import driver
 from metaflow import FlowSpec, step
 
-from stock_market_analytics.feature_engineering import preprocessing, features
-
-from hamilton import driver
-
-from stock_market_analytics.feature_engineering import features_config
+from stock_market_analytics.feature_engineering import (
+    features,
+    features_config,
+    preprocessing,
+)
 
 # Constants
 STOCKS_HISTORY_FILE = "stocks_history.parquet"
 FEATURES_FILE = "stock_history_features.parquet"
+
 
 class FeatureBuildingFlow(FlowSpec):
     """
@@ -70,17 +71,19 @@ class FeatureBuildingFlow(FlowSpec):
         dr = driver.Builder().with_modules(features, preprocessing).build()
 
         results = dr.execute(
-            final_vars = ['df_features'],
-            inputs={'raw_df': self.data, **features_config},
+            final_vars=["df_features"],
+            inputs={"raw_df": self.data, **features_config},
         )
 
-        past_horizon = features_config.get('past_horizon', 0)
+        past_horizon = features_config.get("past_horizon", 0)
 
         if past_horizon > 0:
-            max_lookback_date = self.data['date'].max() - pd.Timedelta(days=past_horizon)
-            data = results['df_features'].filter(pl.col("date") >= max_lookback_date)
+            max_lookback_date = self.data["date"].max() - pd.Timedelta(
+                days=past_horizon
+            ) #type: ignore
+            data = results["df_features"].filter(pl.col("date") >= max_lookback_date)
         else:
-            data = results['df_features']
+            data = results["df_features"]
 
         self.data = data
 
@@ -104,6 +107,7 @@ class FeatureBuildingFlow(FlowSpec):
         End step: Flow completed.
         """
         print("Feature building flow completed.")
+
 
 if __name__ == "__main__":
     # Entry point for running the flow directly

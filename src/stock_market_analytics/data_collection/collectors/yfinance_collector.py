@@ -1,6 +1,7 @@
+from typing import Any
+
 import polars as pl
 import yfinance as yf
-from typing import Any
 
 from stock_market_analytics.data_collection.models.collection_plans import (
     YFinanceCollectionPlan,
@@ -14,7 +15,9 @@ class YFinanceCollector(FinancialDataCollector):
     Implementation of the FinancialDataCollector protocol using yfinance.
     """
 
-    def __init__(self, collection_plan: YFinanceCollectionPlan | None = None, **kwargs: Any):
+    def __init__(
+        self, collection_plan: YFinanceCollectionPlan | None = None, **kwargs: Any
+    ):
         self.collection_plan = collection_plan
         self.kwargs = kwargs
         # If collection_plan is not provided, create one from kwargs

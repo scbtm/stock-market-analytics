@@ -5,12 +5,12 @@ import pytest
 
 from stock_market_analytics.feature_engineering.preprocessing import (
     base,
-    interpolated,
+    dff,
     dfp,
-    log_returns_d,
     dollar_volume,
+    interpolated,
+    log_returns_d,
     y_log_returns,
-    dff
 )
 
 
@@ -124,7 +124,9 @@ class TestBaseFunction:
             ("GOOGL", date(2023, 1, 3)),
         ]
 
-        actual_order = list(zip(result["symbol"].to_list(), result["date"].to_list(), strict=False))
+        actual_order = list(
+            zip(result["symbol"].to_list(), result["date"].to_list(), strict=False)
+        )
         assert actual_order == expected_order
 
     def test_base_maintains_already_sorted_data(self, sample_already_sorted_data):
@@ -139,7 +141,9 @@ class TestBaseFunction:
             ("GOOGL", date(2023, 1, 3)),
         ]
 
-        actual_order = list(zip(result["symbol"].to_list(), result["date"].to_list(), strict=False))
+        actual_order = list(
+            zip(result["symbol"].to_list(), result["date"].to_list(), strict=False)
+        )
         assert actual_order == expected_order
 
     def test_base_handles_empty_dataframe(self, empty_dataframe):
@@ -194,7 +198,9 @@ class TestBaseFunction:
         result = base(duplicate_symbol_date_data)
 
         assert len(result) == len(duplicate_symbol_date_data)
-        sorted_pairs = list(zip(result["symbol"].to_list(), result["date"].to_list(), strict=False))
+        sorted_pairs = list(
+            zip(result["symbol"].to_list(), result["date"].to_list(), strict=False)
+        )
 
         for i in range(len(sorted_pairs) - 1):
             current_symbol, current_date = sorted_pairs[i]
@@ -233,7 +239,9 @@ class TestBaseFunction:
             ("GOOGL", date(2023, 1, 1)),
         ]
 
-        actual_order = list(zip(result["symbol"].to_list(), result["date"].to_list(), strict=False))
+        actual_order = list(
+            zip(result["symbol"].to_list(), result["date"].to_list(), strict=False)
+        )
         assert actual_order == expected_order
 
 
@@ -412,7 +420,9 @@ class TestInterpolatedFunction:
         assert 150.0 in aapl_opens and 153.0 in aapl_opens
         assert 100.0 in googl_opens and 102.0 in googl_opens
 
-    def test_interpolated_handles_all_nulls_in_column_per_symbol(self, data_all_nulls_per_symbol):
+    def test_interpolated_handles_all_nulls_in_column_per_symbol(
+        self, data_all_nulls_per_symbol
+    ):
         """Test interpolated behavior when all values in a column are null for a symbol."""
         result = interpolated(data_all_nulls_per_symbol)
 
@@ -842,7 +852,9 @@ class TestIntegrationAllFunctions:
 
         # Verify the pipeline worked correctly
         assert len(dfped_data) > 0  # Should have some data remaining
-        assert dfped_data.null_count().sum_horizontal()[0] == 0  # No nulls should remain
+        assert (
+            dfped_data.null_count().sum_horizontal()[0] == 0
+        )  # No nulls should remain
 
         # Verify data is still sorted
         symbols = dfped_data["symbol"].to_list()
@@ -968,41 +980,41 @@ class TestLogReturnsDFunction:
     def test_log_returns_d_calculates_correctly(self, basic_price_data):
         """Test that log_returns_d calculates log returns correctly within each symbol group."""
         import math
-        
+
         result = log_returns_d(basic_price_data)
-        
+
         # Check that log_returns_d column was added
         assert "log_returns_d" in result.columns
-        
+
         aapl_data = result.filter(pl.col("symbol") == "AAPL")
         googl_data = result.filter(pl.col("symbol") == "GOOGL")
-        
+
         # For AAPL: 100.0 -> 105.0 -> 102.0 -> 110.0
         # First return should be None (no previous value)
         assert aapl_data["log_returns_d"][0] is None
-        
+
         # Second return: log(105.0) - log(100.0)
         expected_return_1 = math.log(105.0) - math.log(100.0)
         assert abs(aapl_data["log_returns_d"][1] - expected_return_1) < 1e-10
-        
-        # Third return: log(102.0) - log(105.0) 
+
+        # Third return: log(102.0) - log(105.0)
         expected_return_2 = math.log(102.0) - math.log(105.0)
         assert abs(aapl_data["log_returns_d"][2] - expected_return_2) < 1e-10
-        
+
         # For GOOGL: first return should be None
         assert googl_data["log_returns_d"][0] is None
 
     def test_log_returns_d_per_symbol_group(self, basic_price_data):
         """Test that log returns are calculated separately for each symbol."""
         result = log_returns_d(basic_price_data)
-        
+
         aapl_data = result.filter(pl.col("symbol") == "AAPL")
         googl_data = result.filter(pl.col("symbol") == "GOOGL")
-        
+
         # Each symbol should have its own first null value
         assert aapl_data["log_returns_d"][0] is None
         assert googl_data["log_returns_d"][0] is None
-        
+
         # Subsequent values should be calculated within each group
         assert aapl_data["log_returns_d"][1] is not None
         assert googl_data["log_returns_d"][1] is not None
@@ -1010,11 +1022,11 @@ class TestLogReturnsDFunction:
     def test_log_returns_d_preserves_other_columns(self, basic_price_data):
         """Test that log_returns_d preserves all original columns."""
         result = log_returns_d(basic_price_data)
-        
+
         # Check all original columns are preserved
         for col in basic_price_data.columns:
             assert col in result.columns
-            
+
         # Check that data in original columns is unchanged
         assert result["symbol"].equals(basic_price_data["symbol"])
         assert result["date"].equals(basic_price_data["date"])
@@ -1023,30 +1035,30 @@ class TestLogReturnsDFunction:
     def test_log_returns_d_handles_single_symbol(self, single_symbol_data):
         """Test log_returns_d with single symbol."""
         import math
-        
+
         result = log_returns_d(single_symbol_data)
-        
+
         assert len(result) == 3
         assert result["log_returns_d"][0] is None
-        
+
         # Check the calculations
         expected_return_1 = math.log(110.0) - math.log(100.0)
         expected_return_2 = math.log(121.0) - math.log(110.0)
-        
+
         assert abs(result["log_returns_d"][1] - expected_return_1) < 1e-10
         assert abs(result["log_returns_d"][2] - expected_return_2) < 1e-10
 
     def test_log_returns_d_handles_single_row(self, single_row_data):
         """Test log_returns_d with single row."""
         result = log_returns_d(single_row_data)
-        
+
         assert len(result) == 1
         assert result["log_returns_d"][0] is None
 
     def test_log_returns_d_handles_empty_dataframe(self, empty_dataframe):
         """Test log_returns_d with empty DataFrame."""
         result = log_returns_d(empty_dataframe)
-        
+
         assert isinstance(result, pl.DataFrame)
         assert len(result) == 0
         assert "log_returns_d" in result.columns
@@ -1054,7 +1066,7 @@ class TestLogReturnsDFunction:
     def test_log_returns_d_returns_new_dataframe(self, basic_price_data):
         """Test that log_returns_d returns a new DataFrame object."""
         result = log_returns_d(basic_price_data)
-        
+
         assert result is not basic_price_data
         assert isinstance(result, pl.DataFrame)
 
@@ -1067,9 +1079,9 @@ class TestLogReturnsDFunction:
                 "close": [100.0, 100.0, 100.0],
             }
         )
-        
+
         result = log_returns_d(identical_prices_data)
-        
+
         # Log returns should be 0.0 for identical prices
         assert result["log_returns_d"][0] is None
         assert result["log_returns_d"][1] == 0.0
@@ -1136,10 +1148,10 @@ class TestDollarVolumeFunction:
     def test_dollar_volume_calculates_correctly(self, basic_trading_data):
         """Test that dollar_volume calculates correctly."""
         result = dollar_volume(basic_trading_data)
-        
+
         # Check that dollar_volume column was added
         assert "dollar_volume" in result.columns
-        
+
         # Check calculations
         expected_values = [
             100.0 * 1000,  # 100000.0
@@ -1148,20 +1160,20 @@ class TestDollarVolumeFunction:
             200.0 * 2000,  # 400000.0
             210.0 * 2500,  # 525000.0
         ]
-        
+
         actual_values = result["dollar_volume"].to_list()
-        
-        for expected, actual in zip(expected_values, actual_values):
+
+        for expected, actual in zip(expected_values, actual_values, strict=False):
             assert abs(expected - actual) < 1e-6
 
     def test_dollar_volume_preserves_other_columns(self, basic_trading_data):
         """Test that dollar_volume preserves all original columns."""
         result = dollar_volume(basic_trading_data)
-        
+
         # Check all original columns are preserved
         for col in basic_trading_data.columns:
             assert col in result.columns
-            
+
         # Check that data in original columns is unchanged
         assert result["symbol"].equals(basic_trading_data["symbol"])
         assert result["date"].equals(basic_trading_data["date"])
@@ -1171,29 +1183,29 @@ class TestDollarVolumeFunction:
     def test_dollar_volume_handles_zero_values(self, zero_values_data):
         """Test dollar_volume with zero values."""
         result = dollar_volume(zero_values_data)
-        
+
         expected_values = [
-            0.0 * 1000,   # 0.0
-            105.0 * 0,    # 0.0
-            102.0 * 1200, # 122400.0
+            0.0 * 1000,  # 0.0
+            105.0 * 0,  # 0.0
+            102.0 * 1200,  # 122400.0
         ]
-        
+
         actual_values = result["dollar_volume"].to_list()
-        
-        for expected, actual in zip(expected_values, actual_values):
+
+        for expected, actual in zip(expected_values, actual_values, strict=False):
             assert abs(expected - actual) < 1e-6
 
     def test_dollar_volume_handles_single_row(self, single_row_data):
         """Test dollar_volume with single row."""
         result = dollar_volume(single_row_data)
-        
+
         assert len(result) == 1
         assert result["dollar_volume"][0] == 100.0 * 1000
 
     def test_dollar_volume_handles_empty_dataframe(self, empty_dataframe):
         """Test dollar_volume with empty DataFrame."""
         result = dollar_volume(empty_dataframe)
-        
+
         assert isinstance(result, pl.DataFrame)
         assert len(result) == 0
         assert "dollar_volume" in result.columns
@@ -1201,7 +1213,7 @@ class TestDollarVolumeFunction:
     def test_dollar_volume_returns_new_dataframe(self, basic_trading_data):
         """Test that dollar_volume returns a new DataFrame object."""
         result = dollar_volume(basic_trading_data)
-        
+
         assert result is not basic_trading_data
         assert isinstance(result, pl.DataFrame)
 
@@ -1215,17 +1227,17 @@ class TestDollarVolumeFunction:
                 "volume": [1000, 1500],
             }
         )
-        
+
         result = dollar_volume(fractional_data)
-        
+
         expected_values = [
             100.55 * 1000,  # 100550.0
             105.75 * 1500,  # 158625.0
         ]
-        
+
         actual_values = result["dollar_volume"].to_list()
-        
-        for expected, actual in zip(expected_values, actual_values):
+
+        for expected, actual in zip(expected_values, actual_values, strict=False):
             assert abs(expected - actual) < 1e-6
 
 
@@ -1237,7 +1249,16 @@ class TestYLogReturnsFunction:
         """Create data with close prices for testing y_log_returns."""
         return pl.DataFrame(
             {
-                "symbol": ["AAPL", "AAPL", "AAPL", "AAPL", "AAPL", "GOOGL", "GOOGL", "GOOGL"],
+                "symbol": [
+                    "AAPL",
+                    "AAPL",
+                    "AAPL",
+                    "AAPL",
+                    "AAPL",
+                    "GOOGL",
+                    "GOOGL",
+                    "GOOGL",
+                ],
                 "date": [
                     date(2023, 1, 1),
                     date(2023, 1, 2),
@@ -1258,7 +1279,12 @@ class TestYLogReturnsFunction:
         return pl.DataFrame(
             {
                 "symbol": ["AAPL", "AAPL", "AAPL", "AAPL"],
-                "date": [date(2023, 1, 1), date(2023, 1, 2), date(2023, 1, 3), date(2023, 1, 4)],
+                "date": [
+                    date(2023, 1, 1),
+                    date(2023, 1, 2),
+                    date(2023, 1, 3),
+                    date(2023, 1, 4),
+                ],
                 "close": [100.0, 110.0, 121.0, 105.0],
             }
         )
@@ -1288,39 +1314,39 @@ class TestYLogReturnsFunction:
     def test_y_log_returns_calculates_correctly(self, basic_close_data):
         """Test that y_log_returns calculates correctly with horizon=2."""
         import math
-        
+
         result = y_log_returns(basic_close_data, horizon=2)
-        
+
         # Check that y_log_returns column was added
         assert "y_log_returns" in result.columns
-        
+
         aapl_data = result.filter(pl.col("symbol") == "AAPL")
         googl_data = result.filter(pl.col("symbol") == "GOOGL")
-        
+
         # For AAPL with horizon=2:
         # Row 0: ln(102.0) - ln(100.0) = ln(102.0/100.0)
         expected_0 = math.log(102.0) - math.log(100.0)
         assert abs(aapl_data["y_log_returns"][0] - expected_0) < 1e-10
-        
+
         # Row 1: ln(110.0) - ln(105.0) = ln(110.0/105.0)
         expected_1 = math.log(110.0) - math.log(105.0)
         assert abs(aapl_data["y_log_returns"][1] - expected_1) < 1e-10
-        
+
         # Row 2: ln(108.0) - ln(102.0) = ln(108.0/102.0)
         expected_2 = math.log(108.0) - math.log(102.0)
         assert abs(aapl_data["y_log_returns"][2] - expected_2) < 1e-10
-        
+
         # Row 3: no future value 2 steps ahead, should be None
         assert aapl_data["y_log_returns"][3] is None
-        
-        # Row 4: no future value 2 steps ahead, should be None  
+
+        # Row 4: no future value 2 steps ahead, should be None
         assert aapl_data["y_log_returns"][4] is None
-        
+
         # For GOOGL with horizon=2:
         # Row 0: ln(205.0) - ln(200.0)
         expected_googl_0 = math.log(205.0) - math.log(200.0)
         assert abs(googl_data["y_log_returns"][0] - expected_googl_0) < 1e-10
-        
+
         # Rows 1 and 2: should be None (no future values 2 steps ahead)
         assert googl_data["y_log_returns"][1] is None
         assert googl_data["y_log_returns"][2] is None
@@ -1328,25 +1354,25 @@ class TestYLogReturnsFunction:
     def test_y_log_returns_per_symbol_group(self, basic_close_data):
         """Test that y_log_returns calculations are done separately for each symbol."""
         import math
-        
+
         result = y_log_returns(basic_close_data, horizon=1)
-        
+
         aapl_data = result.filter(pl.col("symbol") == "AAPL")
         googl_data = result.filter(pl.col("symbol") == "GOOGL")
-        
+
         # Each symbol should have calculations done independently
         # AAPL row 0: ln(105.0) - ln(100.0)
         expected_aapl_0 = math.log(105.0) - math.log(100.0)
         assert abs(aapl_data["y_log_returns"][0] - expected_aapl_0) < 1e-10
-        
+
         # AAPL row 1: ln(102.0) - ln(105.0)
         expected_aapl_1 = math.log(102.0) - math.log(105.0)
         assert abs(aapl_data["y_log_returns"][1] - expected_aapl_1) < 1e-10
-        
+
         # GOOGL row 0: ln(210.0) - ln(200.0)
         expected_googl_0 = math.log(210.0) - math.log(200.0)
         assert abs(googl_data["y_log_returns"][0] - expected_googl_0) < 1e-10
-        
+
         # GOOGL row 1: ln(205.0) - ln(210.0)
         expected_googl_1 = math.log(205.0) - math.log(210.0)
         assert abs(googl_data["y_log_returns"][1] - expected_googl_1) < 1e-10
@@ -1354,11 +1380,11 @@ class TestYLogReturnsFunction:
     def test_y_log_returns_preserves_other_columns(self, basic_close_data):
         """Test that y_log_returns preserves all original columns."""
         result = y_log_returns(basic_close_data, horizon=2)
-        
+
         # Check all original columns are preserved
         for col in basic_close_data.columns:
             assert col in result.columns
-            
+
         # Check that data in original columns is unchanged
         assert result["symbol"].equals(basic_close_data["symbol"])
         assert result["date"].equals(basic_close_data["date"])
@@ -1367,32 +1393,32 @@ class TestYLogReturnsFunction:
     def test_y_log_returns_handles_different_horizons(self, single_symbol_data):
         """Test y_log_returns with different horizon sizes."""
         import math
-        
+
         # Test with horizon=1
         result_1 = y_log_returns(single_symbol_data, horizon=1)
-        
+
         # Row 0: ln(110.0) - ln(100.0)
         expected_0 = math.log(110.0) - math.log(100.0)
         assert abs(result_1["y_log_returns"][0] - expected_0) < 1e-10
-        
+
         # Row 1: ln(121.0) - ln(110.0)
         expected_1 = math.log(121.0) - math.log(110.0)
         assert abs(result_1["y_log_returns"][1] - expected_1) < 1e-10
-        
+
         # Row 2: ln(105.0) - ln(121.0)
         expected_2 = math.log(105.0) - math.log(121.0)
         assert abs(result_1["y_log_returns"][2] - expected_2) < 1e-10
-        
+
         # Row 3: no future value, should be None
         assert result_1["y_log_returns"][3] is None
-        
+
         # Test with horizon=3
         result_3 = y_log_returns(single_symbol_data, horizon=3)
-        
+
         # Only row 0 can have a calculation: ln(105.0) - ln(100.0)
         expected_0_h3 = math.log(105.0) - math.log(100.0)
         assert abs(result_3["y_log_returns"][0] - expected_0_h3) < 1e-10
-        
+
         # All other rows should be None (no future values 3 steps ahead)
         for i in range(1, 4):
             assert result_3["y_log_returns"][i] is None
@@ -1400,14 +1426,14 @@ class TestYLogReturnsFunction:
     def test_y_log_returns_handles_short_data(self, short_data):
         """Test y_log_returns when data is shorter than horizon window."""
         result = y_log_returns(short_data, horizon=5)
-        
+
         # All values should be None since horizon exceeds data length
         assert all(val is None for val in result["y_log_returns"])
 
     def test_y_log_returns_handles_empty_dataframe(self, empty_dataframe):
         """Test y_log_returns with empty DataFrame."""
         result = y_log_returns(empty_dataframe, horizon=2)
-        
+
         assert isinstance(result, pl.DataFrame)
         assert len(result) == 0
         assert "y_log_returns" in result.columns
@@ -1415,32 +1441,37 @@ class TestYLogReturnsFunction:
     def test_y_log_returns_returns_new_dataframe(self, basic_close_data):
         """Test that y_log_returns returns a new DataFrame object."""
         result = y_log_returns(basic_close_data, horizon=2)
-        
+
         assert result is not basic_close_data
         assert isinstance(result, pl.DataFrame)
 
     def test_y_log_returns_with_zero_horizon(self, single_symbol_data):
         """Test y_log_returns with horizon=0."""
         result = y_log_returns(single_symbol_data, horizon=0)
-        
+
         # With horizon=0, each row should be: ln(current) - ln(current) = 0
-        assert result["y_log_returns"][0] == 0.0   # ln(100.0) - ln(100.0) = 0.0
-        assert result["y_log_returns"][1] == 0.0   # ln(110.0) - ln(110.0) = 0.0
-        assert result["y_log_returns"][2] == 0.0   # ln(121.0) - ln(121.0) = 0.0
-        assert result["y_log_returns"][3] == 0.0   # ln(105.0) - ln(105.0) = 0.0
+        assert result["y_log_returns"][0] == 0.0  # ln(100.0) - ln(100.0) = 0.0
+        assert result["y_log_returns"][1] == 0.0  # ln(110.0) - ln(110.0) = 0.0
+        assert result["y_log_returns"][2] == 0.0  # ln(121.0) - ln(121.0) = 0.0
+        assert result["y_log_returns"][3] == 0.0  # ln(105.0) - ln(105.0) = 0.0
 
     def test_y_log_returns_with_identical_prices(self):
         """Test y_log_returns behavior with identical consecutive prices."""
         identical_data = pl.DataFrame(
             {
                 "symbol": ["AAPL", "AAPL", "AAPL", "AAPL"],
-                "date": [date(2023, 1, 1), date(2023, 1, 2), date(2023, 1, 3), date(2023, 1, 4)],
+                "date": [
+                    date(2023, 1, 1),
+                    date(2023, 1, 2),
+                    date(2023, 1, 3),
+                    date(2023, 1, 4),
+                ],
                 "close": [100.0, 100.0, 100.0, 100.0],
             }
         )
-        
+
         result = y_log_returns(identical_data, horizon=1)
-        
+
         # Log returns should be 0.0 for identical prices
         assert result["y_log_returns"][0] == 0.0  # ln(100.0) - ln(100.0) = 0.0
         assert result["y_log_returns"][1] == 0.0  # ln(100.0) - ln(100.0) = 0.0
@@ -1451,11 +1482,25 @@ class TestYLogReturnsFunction:
         """Test that y_log_returns calculations for different symbols are independent."""
         multi_symbol_data = pl.DataFrame(
             {
-                "symbol": ["AAPL", "AAPL", "AAPL", "GOOGL", "GOOGL", "GOOGL", "MSFT", "MSFT"],
+                "symbol": [
+                    "AAPL",
+                    "AAPL",
+                    "AAPL",
+                    "GOOGL",
+                    "GOOGL",
+                    "GOOGL",
+                    "MSFT",
+                    "MSFT",
+                ],
                 "date": [
-                    date(2023, 1, 1), date(2023, 1, 2), date(2023, 1, 3),
-                    date(2023, 1, 1), date(2023, 1, 2), date(2023, 1, 3),
-                    date(2023, 1, 1), date(2023, 1, 2),
+                    date(2023, 1, 1),
+                    date(2023, 1, 2),
+                    date(2023, 1, 3),
+                    date(2023, 1, 1),
+                    date(2023, 1, 2),
+                    date(2023, 1, 3),
+                    date(2023, 1, 1),
+                    date(2023, 1, 2),
                 ],
                 "close": [100.0, 110.0, 121.0, 200.0, 220.0, 242.0, 300.0, 330.0],
             }
@@ -1463,25 +1508,31 @@ class TestYLogReturnsFunction:
 
         result = y_log_returns(multi_symbol_data, horizon=1)
 
-        aapl_results = result.filter(pl.col("symbol") == "AAPL")["y_log_returns"].to_list()
-        googl_results = result.filter(pl.col("symbol") == "GOOGL")["y_log_returns"].to_list()
-        msft_results = result.filter(pl.col("symbol") == "MSFT")["y_log_returns"].to_list()
+        aapl_results = result.filter(pl.col("symbol") == "AAPL")[
+            "y_log_returns"
+        ].to_list()
+        googl_results = result.filter(pl.col("symbol") == "GOOGL")[
+            "y_log_returns"
+        ].to_list()
+        msft_results = result.filter(pl.col("symbol") == "MSFT")[
+            "y_log_returns"
+        ].to_list()
 
         # Each symbol should have independent calculations
         import math
-        
+
         # AAPL: ln(110.0/100.0), ln(121.0/110.0), None
-        assert abs(aapl_results[0] - math.log(110.0/100.0)) < 1e-10
-        assert abs(aapl_results[1] - math.log(121.0/110.0)) < 1e-10
+        assert abs(aapl_results[0] - math.log(110.0 / 100.0)) < 1e-10
+        assert abs(aapl_results[1] - math.log(121.0 / 110.0)) < 1e-10
         assert aapl_results[2] is None
-        
+
         # GOOGL: ln(220.0/200.0), ln(242.0/220.0), None
-        assert abs(googl_results[0] - math.log(220.0/200.0)) < 1e-10
-        assert abs(googl_results[1] - math.log(242.0/220.0)) < 1e-10
+        assert abs(googl_results[0] - math.log(220.0 / 200.0)) < 1e-10
+        assert abs(googl_results[1] - math.log(242.0 / 220.0)) < 1e-10
         assert googl_results[2] is None
-        
+
         # MSFT: ln(330.0/300.0), None
-        assert abs(msft_results[0] - math.log(330.0/300.0)) < 1e-10
+        assert abs(msft_results[0] - math.log(330.0 / 300.0)) < 1e-10
         assert msft_results[1] is None
 
     def test_y_log_returns_handles_single_row_per_symbol(self):
@@ -1493,9 +1544,9 @@ class TestYLogReturnsFunction:
                 "close": [100.0, 200.0],
             }
         )
-        
+
         result = y_log_returns(single_row_data, horizon=1)
-        
+
         # All values should be None since there are no future values
         assert all(val is None for val in result["y_log_returns"])
         assert len(result) == 2
@@ -1573,7 +1624,7 @@ class TestDffFunction:
                 "log_returns_d": [None, 0.01, 0.02],
             }
         )
-        
+
         y_returns = pl.DataFrame(
             {
                 "date": [date(2023, 1, 1), date(2023, 1, 2)],  # Missing day 3
@@ -1581,7 +1632,7 @@ class TestDffFunction:
                 "y_log_returns": [0.05, 0.03],
             }
         )
-        
+
         dollar_vol = pl.DataFrame(
             {
                 "date": [date(2023, 1, 2), date(2023, 1, 3)],  # Missing day 1
@@ -1594,7 +1645,7 @@ class TestDffFunction:
                 "volume": [1500, 1200],
             }
         )
-        
+
         return log_returns, y_returns, dollar_vol
 
     @pytest.fixture
@@ -1607,7 +1658,7 @@ class TestDffFunction:
                 "log_returns_d": [],
             }
         )
-        
+
         empty_y_returns = pl.DataFrame(
             {
                 "date": [],
@@ -1615,7 +1666,7 @@ class TestDffFunction:
                 "y_log_returns": [],
             }
         )
-        
+
         empty_dollar_vol = pl.DataFrame(
             {
                 "date": [],
@@ -1628,7 +1679,7 @@ class TestDffFunction:
                 "volume": [],
             }
         )
-        
+
         return empty_log_returns, empty_y_returns, empty_dollar_vol
 
     def test_dff_merges_correctly(
@@ -1636,7 +1687,7 @@ class TestDffFunction:
     ):
         """Test that dff function merges DataFrames correctly."""
         result = dff(log_returns_data, y_log_returns_data, dollar_volume_data)
-        
+
         # Check that all expected columns are present
         expected_columns = [
             "date",
@@ -1650,13 +1701,13 @@ class TestDffFunction:
             "close",
             "volume",
         ]
-        
+
         for col in expected_columns:
             assert col in result.columns
-        
+
         # Check that only the selected columns are present (no extra columns)
         assert len(result.columns) == len(expected_columns)
-        
+
         # Check that the merge worked correctly
         assert len(result) == 5  # All rows from input should match
 
@@ -1665,14 +1716,14 @@ class TestDffFunction:
     ):
         """Test that dff preserves data integrity during merge."""
         result = dff(log_returns_data, y_log_returns_data, dollar_volume_data)
-        
+
         # Check first few rows to ensure data integrity
         aapl_result = result.filter(pl.col("symbol") == "AAPL")
         googl_result = result.filter(pl.col("symbol") == "GOOGL")
-        
+
         assert len(aapl_result) == 3
         assert len(googl_result) == 2
-        
+
         # Check that values are correctly merged
         # AAPL row 1 (index 0 after filtering)
         aapl_row_1 = aapl_result[0]
@@ -1680,7 +1731,7 @@ class TestDffFunction:
         assert aapl_row_1["y_log_returns"][0] == 0.05  # From y_log_returns_data
         assert aapl_row_1["dollar_volume"][0] == 100000.0  # From dollar_volume_data
         assert aapl_row_1["open"][0] == 100.0  # From dollar_volume_data
-        
+
         # GOOGL row 1 (index 0 after filtering)
         googl_row_1 = googl_result[0]
         assert googl_row_1["log_returns_d"][0] is None
@@ -1692,53 +1743,53 @@ class TestDffFunction:
     ):
         """Test that dff sorts output by symbol and date."""
         result = dff(log_returns_data, y_log_returns_data, dollar_volume_data)
-        
+
         # Check sorting
         symbols = result["symbol"].to_list()
         dates = result["date"].to_list()
-        
+
         # Verify symbol order (AAPL should come before GOOGL)
         aapl_indices = [i for i, s in enumerate(symbols) if s == "AAPL"]
         googl_indices = [i for i, s in enumerate(symbols) if s == "GOOGL"]
-        
+
         assert max(aapl_indices) < min(googl_indices)
-        
+
         # Verify date order within each symbol
         aapl_dates = [dates[i] for i in aapl_indices]
         googl_dates = [dates[i] for i in googl_indices]
-        
+
         assert aapl_dates == sorted(aapl_dates)
         assert googl_dates == sorted(googl_dates)
 
     def test_dff_handles_partial_overlap(self, partial_overlap_data):
         """Test that dff handles cases where not all date-symbol pairs overlap."""
         log_returns, y_returns, dollar_vol = partial_overlap_data
-        
+
         result = dff(log_returns, y_returns, dollar_vol)
-        
+
         # Only date 2023-01-02 should be present (only overlap)
         assert len(result) == 1
         assert result["date"][0] == date(2023, 1, 2)
         assert result["symbol"][0] == "AAPL"
-        
+
         # Check that merged data is correct
         assert result["log_returns_d"][0] == 0.01  # From log_returns
-        assert result["y_log_returns"][0] == 0.03   # From y_returns  
+        assert result["y_log_returns"][0] == 0.03  # From y_returns
         assert result["dollar_volume"][0] == 157500.0  # From dollar_vol
 
     def test_dff_handles_empty_dataframes(self, empty_dataframes):
         """Test that dff handles empty input DataFrames."""
         empty_log_returns, empty_y_returns, empty_dollar_vol = empty_dataframes
-        
+
         result = dff(empty_log_returns, empty_y_returns, empty_dollar_vol)
-        
+
         # Should return empty DataFrame with correct structure
         assert isinstance(result, pl.DataFrame)
         assert len(result) == 0
-        
+
         expected_columns = [
             "date",
-            "symbol", 
+            "symbol",
             "log_returns_d",
             "y_log_returns",
             "dollar_volume",
@@ -1748,7 +1799,7 @@ class TestDffFunction:
             "close",
             "volume",
         ]
-        
+
         for col in expected_columns:
             assert col in result.columns
 
@@ -1757,7 +1808,7 @@ class TestDffFunction:
     ):
         """Test that dff returns a new DataFrame object."""
         result = dff(log_returns_data, y_log_returns_data, dollar_volume_data)
-        
+
         # Should be different objects
         assert result is not log_returns_data
         assert result is not y_log_returns_data
@@ -1769,7 +1820,7 @@ class TestDffFunction:
     ):
         """Test that dff only selects the expected columns, ignoring extras."""
         result = dff(log_returns_data, y_log_returns_data, dollar_volume_data)
-        
+
         # Extra columns should not be in result
         assert "other_col" not in result.columns  # From log_returns_data
         assert "extra_col" not in result.columns  # From y_log_returns_data
@@ -1784,7 +1835,7 @@ class TestDffFunction:
                 "log_returns_d": [None],
             }
         )
-        
+
         y_returns_single = pl.DataFrame(
             {
                 "date": [date(2023, 1, 1)],
@@ -1792,7 +1843,7 @@ class TestDffFunction:
                 "y_log_returns": [0.05],
             }
         )
-        
+
         dollar_vol_single = pl.DataFrame(
             {
                 "date": [date(2023, 1, 1)],
@@ -1805,9 +1856,9 @@ class TestDffFunction:
                 "volume": [1000],
             }
         )
-        
+
         result = dff(log_returns_single, y_returns_single, dollar_vol_single)
-        
+
         assert len(result) == 1
         assert result["symbol"][0] == "AAPL"
         assert result["log_returns_d"][0] is None
@@ -1819,33 +1870,42 @@ class TestDffFunction:
         log_returns_multi = pl.DataFrame(
             {
                 "date": [
-                    date(2023, 1, 1), date(2023, 1, 2), date(2023, 1, 3),
-                    date(2023, 1, 1), date(2023, 1, 2),
-                    date(2023, 1, 1)
+                    date(2023, 1, 1),
+                    date(2023, 1, 2),
+                    date(2023, 1, 3),
+                    date(2023, 1, 1),
+                    date(2023, 1, 2),
+                    date(2023, 1, 1),
                 ],
                 "symbol": ["AAPL", "AAPL", "AAPL", "GOOGL", "GOOGL", "MSFT"],
                 "log_returns_d": [None, 0.01, 0.02, None, 0.03, None],
             }
         )
-        
+
         y_returns_multi = pl.DataFrame(
             {
                 "date": [
-                    date(2023, 1, 1), date(2023, 1, 2),
-                    date(2023, 1, 1), date(2023, 1, 2), date(2023, 1, 3),
-                    date(2023, 1, 1), date(2023, 1, 2)
+                    date(2023, 1, 1),
+                    date(2023, 1, 2),
+                    date(2023, 1, 1),
+                    date(2023, 1, 2),
+                    date(2023, 1, 3),
+                    date(2023, 1, 1),
+                    date(2023, 1, 2),
                 ],
                 "symbol": ["AAPL", "AAPL", "GOOGL", "GOOGL", "GOOGL", "MSFT", "MSFT"],
                 "y_log_returns": [0.05, 0.03, 0.08, None, 0.09, 0.02, 0.04],
             }
         )
-        
+
         dollar_vol_multi = pl.DataFrame(
             {
                 "date": [
-                    date(2023, 1, 1), date(2023, 1, 2), date(2023, 1, 3),
                     date(2023, 1, 1),
-                    date(2023, 1, 2)
+                    date(2023, 1, 2),
+                    date(2023, 1, 3),
+                    date(2023, 1, 1),
+                    date(2023, 1, 2),
                 ],
                 "symbol": ["AAPL", "AAPL", "AAPL", "GOOGL", "MSFT"],
                 "dollar_volume": [100000.0, 157500.0, 122400.0, 400000.0, 300000.0],
@@ -1856,18 +1916,20 @@ class TestDffFunction:
                 "volume": [1000, 1500, 1200, 2000, 3000],
             }
         )
-        
+
         result = dff(log_returns_multi, y_returns_multi, dollar_vol_multi)
-        
+
         # Check that only overlapping date-symbol pairs are included
-        result_pairs = [(row["symbol"], row["date"]) for row in result.iter_rows(named=True)]
-        
+        result_pairs = [
+            (row["symbol"], row["date"]) for row in result.iter_rows(named=True)
+        ]
+
         expected_pairs = [
             ("AAPL", date(2023, 1, 1)),
-            ("AAPL", date(2023, 1, 2)), 
-            ("GOOGL", date(2023, 1, 1))
+            ("AAPL", date(2023, 1, 2)),
+            ("GOOGL", date(2023, 1, 1)),
         ]
-        
+
         assert len(result) == 3
         for pair in expected_pairs:
             assert pair in result_pairs
@@ -1877,7 +1939,7 @@ class TestDffFunction:
     ):
         """Test that dff preserves appropriate data types."""
         result = dff(log_returns_data, y_log_returns_data, dollar_volume_data)
-        
+
         # Check that numeric columns have appropriate types
         assert result["log_returns_d"].dtype in [pl.Float64, pl.Float32]
         assert result["y_log_returns"].dtype in [pl.Float64, pl.Float32]
@@ -1887,7 +1949,7 @@ class TestDffFunction:
         assert result["low"].dtype in [pl.Float64, pl.Float32]
         assert result["close"].dtype in [pl.Float64, pl.Float32]
         assert result["volume"].dtype in [pl.Int64, pl.Int32]
-        
+
         # Check that date and symbol columns have appropriate types
         assert result["date"].dtype == pl.Date
         assert result["symbol"].dtype == pl.Utf8
@@ -1901,7 +1963,7 @@ class TestDffFunction:
                 "log_returns_d": [None, 0.01],
             }
         )
-        
+
         y_returns_nulls = pl.DataFrame(
             {
                 "date": [date(2023, 1, 1), date(2023, 1, 2)],
@@ -1909,7 +1971,7 @@ class TestDffFunction:
                 "y_log_returns": [0.05, None],
             }
         )
-        
+
         dollar_vol_nulls = pl.DataFrame(
             {
                 "date": [date(2023, 1, 1), date(2023, 1, 2)],
@@ -1922,13 +1984,13 @@ class TestDffFunction:
                 "volume": [1000, 1500],
             }
         )
-        
+
         result = dff(log_returns_nulls, y_returns_nulls, dollar_vol_nulls)
-        
+
         # Check that nulls are preserved correctly
         assert result["log_returns_d"][0] is None  # First row log_returns_d
         assert result["y_log_returns"][1] is None  # Second row y_log_returns
-        
+
         # Check that non-null values are preserved
         assert result["log_returns_d"][1] == 0.01
         assert result["y_log_returns"][0] == 0.05

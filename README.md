@@ -196,7 +196,7 @@ uv run make verify
 
 ### Quick Start
 
-1. **Prepare your data**: Place ticker symbols in `/path/to/your/data/tickers.csv` with columns: `Symbol`, `Name`, `Country`, `IPO Year`, `Sector`, `Industry`
+1. **Prepare your data**: Place ticker symbols in `/path/to/your/data/tickers.csv` with columns: `Symbol`, `Name`, `Country`, `IPO Year`, `Sector`, `Industry`. You can get a tickers file in the [Nasdaq stock screener](https://www.nasdaq.com/market-activity/stocks/screener?page=1&rows_per_page=25).
 
 2. **Run data collection**:
 ```bash
@@ -205,13 +205,18 @@ export BASE_DATA_PATH="/path/to/your/data"
 
 # Run the batch collection pipeline
 uv run batch-collect run
+
+# If the number of tickers is above 100, run
+uv run batch-collect run --max-num-splits <number of tickers>
 ```
+Note: ingesting the full history of 500 tickers takes about 5 minutes with 4 cores, thanks to easy parallelization by Metaflow.
 
 3. **Generate features**:
 ```bash
 # Run feature engineering pipeline
 uv run build-features run
 ```
+Note: building the features for 500 tickers on 4 cores takes about 30 seconds thanks to fast vectorial operations in Polars.
 
 ### Pipeline Execution Examples
 
