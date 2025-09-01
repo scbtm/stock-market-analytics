@@ -69,6 +69,7 @@ venv.bak/
 # Temporary files
 *.tmp
 *.temp
+*/dev_nb.ipynb
 
 # Log files
 *.log
