@@ -61,8 +61,6 @@ class FeatureBuildingFlow(FlowSpec):
         except Exception as e:
             raise ValueError(f"Error loading stocks history file: {str(e)}") from e
 
-        self.next(self.build_features)
-
     @step
     def build_features(self) -> None:
         """

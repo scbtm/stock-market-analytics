@@ -5,6 +5,7 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "catboost>=1.2.8",
     "metaflow==2.18.1",
     "polars>=1.32.3",
     "pyarrow>=21.0.0",
@@ -34,3 +35,4 @@ dev = [
 stock-market-analytics = "stock_market_analytics.main:main"
 batch-collect = "stock_market_analytics.data_collection.batch_collection_flow:BatchCollectionFlow"
 build-features = "stock_market_analytics.feature_engineering.feature_building_flow:FeatureBuildingFlow"
+train-model = "stock_market_analytics.modeling.training_flow_cb:TrainingFlow"
