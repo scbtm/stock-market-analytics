@@ -33,3 +33,4 @@ dev = [
 [project.scripts]
 stock-market-analytics = "stock_market_analytics.main:main"
 batch-collect = "stock_market_analytics.data_collection.batch_collection_flow:BatchCollectionFlow"
+build-features = "stock_market_analytics.feature_engineering.feature_building_flow:FeatureBuildingFlow"
