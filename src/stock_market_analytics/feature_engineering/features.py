@@ -74,6 +74,17 @@ def pct_from_high_short(dff: pl.DataFrame, short_window: int) -> pl.DataFrame:
         .alias("pct_from_high_short")
     )
 
+def chronological_features(dff: pl.DataFrame) -> pl.DataFrame:
+    """
+    Extract chronological features from the date column.
+    """
+    return dff.with_columns(
+        pl.col("date").dt.year().alias("year"),
+        pl.col("date").dt.month().alias("month"),
+        pl.col("date").dt.weekday().alias("day_of_week"),
+        pl.col("date").dt.ordinal_day().alias("day_of_year")
+    )
+
 def df_features(
     dff: pl.DataFrame,
     kurtosis_long_short: pl.DataFrame,
@@ -83,7 +94,8 @@ def df_features(
     absolute_diff: pl.DataFrame,
     long_short_momentum: pl.DataFrame,
     pct_from_high_long: pl.DataFrame,
-    pct_from_high_short: pl.DataFrame
+    pct_from_high_short: pl.DataFrame,
+    chronological_features: pl.DataFrame
 ) -> pl.DataFrame:
 
     """
@@ -144,6 +156,15 @@ def df_features(
         pl.col('pct_from_high_short')
     )
 
+    chronological_features = chronological_features.select(
+        pl.col('symbol'),
+        pl.col('date'),
+        pl.col('year'),
+        pl.col('month'),
+        pl.col('day_of_week'),
+        pl.col('day_of_year')
+    )
+
     final_df = dff.join(
         kurtosis_long_short,
         on=['symbol', 'date'],
@@ -174,6 +195,10 @@ def df_features(
         how='inner'
     ).join(
         pct_from_high_short,
+        on=['symbol', 'date'],
+        how='inner'
+    ).join(
+        chronological_features,
         on=['symbol', 'date'],
         how='inner'
     )
