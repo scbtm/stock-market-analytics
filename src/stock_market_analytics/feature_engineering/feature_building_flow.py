@@ -80,7 +80,7 @@ class FeatureBuildingFlow(FlowSpec):
             max_lookback_date = self.data['date'].max() - pd.Timedelta(days=past_horizon)
             data = results['df_features'].filter(pl.col("date") >= max_lookback_date)
         else:
-            data = results['df_features'].filter(pl.col("date") >= self.data['date'].min())
+            data = results['df_features']
 
         self.data = data
 
