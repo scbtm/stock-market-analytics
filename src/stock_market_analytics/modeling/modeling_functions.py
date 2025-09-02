@@ -1,5 +1,10 @@
 import numpy as np
-from typing import Optional, Any
+import pandas as pd
+import plotly.express as px
+import plotly.graph_objects as go
+from typing import Optional, Any, Dict, List
+import optuna
+from optuna.study import Study
 
 def eval_multiquantile(
     y_true: np.ndarray,
@@ -89,5 +94,184 @@ def eval_multiquantile(
             metrics[f"pinball@{a:.2f}"] = float(pinballs[j])
 
     return loss, metrics
+
+# Configurable color palette for visualizations
+DEFAULT_PLOT_PALETTE = {
+    'primary': '#1f77b4',
+    'secondary': '#ff7f0e', 
+    'success': '#2ca02c',
+    'danger': '#d62728',
+    'warning': '#ff7f0e',
+    'info': '#17a2b8',
+    'light': '#f8f9fa',
+    'dark': '#343a40',
+    'gradient': ['#1f77b4', '#ff7f0e', '#2ca02c', '#d62728', '#9467bd', '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf']
+}
+
+def plot_optuna_parallel_coordinates(
+    study: Study,
+    palette: Dict[str, Any] = None,
+    title: str = "Optuna Study - Parallel Coordinates Plot",
+    show_best_n: Optional[int] = None,
+    width: int = 1000,
+    height: int = 600
+) -> go.Figure:
+    """
+    Creates a parallel coordinates plot to visualize optuna study metrics.
+    
+    Args:
+        study: Optuna study object with trials containing user_attrs['metrics']
+        palette: Color palette dictionary. If None, uses DEFAULT_PLOT_PALETTE
+        title: Title for the plot
+        show_best_n: If specified, only show the best N trials (by objective value)
+        width: Plot width in pixels
+        height: Plot height in pixels
+    
+    Returns:
+        Plotly figure object
+    
+    Example:
+        >>> fig = plot_optuna_parallel_coordinates(study)
+        >>> fig.show()
+    """
+    if palette is None:
+        palette = DEFAULT_PLOT_PALETTE
+    
+    # Extract data from trials
+    trials_data = []
+    
+    for trial in study.trials:
+        if trial.state != optuna.trial.TrialState.COMPLETE:
+            continue
+            
+        row = {
+            'trial_number': trial.number,
+            'objective_value': trial.value
+        }
+        
+        # Add hyperparameters
+        # row.update(trial.params)
+        
+        # Add metrics from user_attrs if available
+        if hasattr(trial, 'user_attrs') and 'metrics' in trial.user_attrs:
+            metrics = trial.user_attrs['metrics']
+            row.update(metrics)
+        
+        trials_data.append(row)
+    
+    if not trials_data:
+        raise ValueError("No completed trials found in the study")
+    
+    df = pd.DataFrame(trials_data)
+    
+    # Filter to best N trials if specified
+    if show_best_n is not None:
+        df = df.nsmallest(show_best_n, 'objective_value')
+    
+    # Separate numeric columns for parallel coordinates
+    numeric_cols = df.select_dtypes(include=[np.number]).columns.tolist()
+    
+    # Remove trial_number from dimensions (keep for coloring)
+    plot_dimensions = [col for col in numeric_cols if col != 'trial_number']
+    
+    # Create parallel coordinates plot
+    fig = go.Figure(data=
+        go.Parcoords(
+            line=dict(
+                color=df['objective_value'],
+                colorscale='Viridis',
+                showscale=True,
+                colorbar=dict(title="Objective Value")
+            ),
+            dimensions=[
+                dict(
+                    range=[df[col].min(), df[col].max()],
+                    label=col.replace('_', ' ').title(),
+                    values=df[col]
+                ) for col in plot_dimensions
+            ]
+        )
+    )
+    
+    fig.update_layout(
+        title=dict(
+            text=title,
+            font=dict(size=16, color=palette['dark'])
+        ),
+        width=width,
+        height=height,
+        paper_bgcolor='white',
+        plot_bgcolor='white',
+        font=dict(color=palette['dark'])
+    )
+    
+    return fig
+
+
+def plot_optuna_metrics_distribution(
+    study: Study,
+    metric_name: str = 'loss',
+    palette: Dict[str, Any] = None,
+    title: str = None,
+    width: int = 800,
+    height: int = 400
+) -> go.Figure:
+    """
+    Creates a histogram showing the distribution of a specific metric across trials.
+    
+    Args:
+        study: Optuna study object
+        metric_name: Name of the metric to visualize from user_attrs['metrics']
+        palette: Color palette dictionary. If None, uses DEFAULT_PLOT_PALETTE
+        title: Title for the plot. If None, auto-generated
+        width: Plot width in pixels
+        height: Plot height in pixels
+    
+    Returns:
+        Plotly figure object
+    """
+    if palette is None:
+        palette = DEFAULT_PLOT_PALETTE
+    
+    if title is None:
+        title = f"Distribution of {metric_name.replace('_', ' ').title()}"
+    
+    # Extract metric values
+    metric_values = []
+    for trial in study.trials:
+        if (trial.state == optuna.trial.TrialState.COMPLETE and 
+            hasattr(trial, 'user_attrs') and 
+            'metrics' in trial.user_attrs and
+            metric_name in trial.user_attrs['metrics']):
+            metric_values.append(trial.user_attrs['metrics'][metric_name])
+    
+    if not metric_values:
+        raise ValueError(f"No values found for metric '{metric_name}' in completed trials")
+    
+    fig = go.Figure(data=[
+        go.Histogram(
+            x=metric_values,
+            nbinsx=20,
+            marker_color=palette['primary'],
+            opacity=0.7
+        )
+    ])
+    
+    fig.update_layout(
+        title=dict(
+            text=title,
+            font=dict(size=16, color=palette['dark'])
+        ),
+        xaxis_title=metric_name.replace('_', ' ').title(),
+        yaxis_title='Count',
+        width=width,
+        height=height,
+        paper_bgcolor='white',
+        plot_bgcolor='white',
+        font=dict(color=palette['dark']),
+        showlegend=False
+    )
+    
+    return fig
 
 
