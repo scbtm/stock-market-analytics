@@ -76,9 +76,9 @@ def pools(
     xvalidation = validation[features]
     xtest = test[features]
 
-    train_pool = Pool(data=xtrain, label=train["y_log_returns"])
-    validation_pool = Pool(data=xvalidation, label=validation["y_log_returns"])
-    test_pool = Pool(data=xtest, label=test["y_log_returns"])
+    train_pool = Pool(data=xtrain, label=train["y_log_returns"], feature_names=features)
+    validation_pool = Pool(data=xvalidation, label=validation["y_log_returns"], feature_names=features)
+    test_pool = Pool(data=xtest, label=test["y_log_returns"], feature_names=features)
 
     return {
         "train_pool": train_pool,

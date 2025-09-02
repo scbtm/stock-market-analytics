@@ -1,0 +1,201 @@
+import os
+from pathlib import Path
+
+import pandas as pd
+from hamilton import driver
+from metaflow import FlowSpec, step
+
+from stock_market_analytics.modeling import processing_functions
+
+from stock_market_analytics.modeling.modeling_functions import eval_multiquantile
+
+import optuna
+
+from optuna import Trial
+
+from typing import Any
+from catboost import CatBoostRegressor, Pool
+
+
+# Constants
+FEATURES_FILE = "stock_history_features.parquet"
+QUANTILES = [0.1, 0.25, 0.5, 0.75, 0.9]
+TIMEOUT_MINS = 10
+N_TRIALS = 10
+FEATURES = [
+    'dollar_volume',
+    'long_kurtosis',
+    'short_kurtosis',
+    'long_skewness',
+    'short_skewness',
+    'long_mean',
+    'short_mean',
+    'mean_diff',
+    'long_diff',
+    'short_diff',
+    'long_short_momentum',
+    'pct_from_high_long',
+    'pct_from_high_short',
+    'year',
+    'month',
+    'day_of_week',
+    'day_of_year'
+]
+
+class TuningFlow(FlowSpec):
+    """
+    A Metaflow flow to train a CatBoost model for stock market analytics.
+    """
+
+    @step
+    def start(self) -> None:
+        """
+        This is the entry point for the Metaflow pipeline. It validates the
+        environment and begins the feature engineering process.
+        """
+        print("🚀 Starting Feature Engineering Flow...")
+
+        # Validate required environment variables
+        if not os.environ.get("BASE_DATA_PATH"):
+            raise ValueError("BASE_DATA_PATH environment variable is required")
+
+        print(f"📁 Data directory: {os.environ['BASE_DATA_PATH']}")
+        self.next(self.load_inputs)
+
+    @step
+    def load_inputs(self) -> None:
+        """
+        Load input data for feature engineering.
+        """
+        base_data_path = Path(os.environ["BASE_DATA_PATH"])
+        self.data = self._load_features(base_data_path)
+        self.next(self.hyperparameter_tuning)
+
+    def _load_features(self, base_data_path: Path) -> pd.DataFrame:
+        """Load and validate stock data from Parquet file."""
+        features_path = base_data_path / FEATURES_FILE
+
+        if not features_path.exists():
+            raise FileNotFoundError(
+                f"Features file not found at {features_path}. "
+                "Features data must be provided."
+            )
+
+        try:
+            return pd.read_parquet(features_path)
+        except Exception as e:
+            raise ValueError(f"Error loading features file: {str(e)}") from e
+
+    @step
+    def hyperparameter_tuning(self) -> None:
+
+        datasets = self._prepare_data()
+
+        pools = datasets['pools']
+        self.metadata = datasets['metadata']
+
+        objective_fn = self._get_objective_fn()
+
+        study = optuna.create_study(
+            direction="minimize",
+            sampler=optuna.samplers.TPESampler(seed=1),
+            study_name="catboost_hyperparameter_optimization"
+        )
+        study.optimize(
+            lambda trial: objective_fn(trial, pools),
+            n_trials=N_TRIALS,
+            timeout=TIMEOUT_MINS*60, #seconds
+            n_jobs=-1
+        )
+
+        self.study = study
+
+        self.next(self.end)
+
+
+    def _prepare_data(self) -> tuple[dict[str, Pool], dict[str, Any]]:
+        """
+        Clean and preprocess the loaded feature data.
+        """
+        print("🧹 Preparing Feature Data...")
+        # We only need to drop null values, since the features are already clean
+        df = self.data.dropna()
+
+        dr = driver.Builder().with_modules(processing_functions).build()
+
+        datasets = dr.execute(
+            final_vars=[
+                "pools",
+                "metadata"
+            ],
+            inputs={"df": df, "time_span": 180, "features": FEATURES},
+        )
+
+        return datasets
+
+    def _get_objective_fn(self) -> Any:
+        """
+        Get the objective function for model optimization.
+        """
+        def objective_fn(trial: Trial, pools: dict[str, Pool]) -> float:
+            train_pool = pools['train_pool']
+            val_pool = pools['validation_pool']
+
+            #Define hyperparameters to tune
+            params = {}
+
+            alpha_str = ",".join([str(q) for q in QUANTILES])
+
+            params['loss_function'] = f"MultiQuantile:alpha={alpha_str}"
+
+            params['random_state'] = 1
+            params['learning_rate'] = trial.suggest_float('learning_rate', 0.01, 0.3)
+            params['depth'] = trial.suggest_int('depth', 4, 10)
+            params['l2_leaf_reg'] = trial.suggest_int('l2_leaf_reg', 0, 10)
+            params['grow_policy'] = trial.suggest_categorical('grow_policy', ['SymmetricTree', 'Depthwise', 'Lossguide'])
+            params['num_boost_round'] = trial.suggest_int('num_boost_round', 250, 2_000)
+
+            params['bootstrap_type'] = trial.suggest_categorical('bootstrap_type', ['Bayesian', 'Bernoulli', 'MVS', 'No'])
+
+            if params['bootstrap_type'] == 'Bayesian':
+                params['bagging_temperature'] = trial.suggest_float('bagging_temperature', 0, 10)
+
+            if (params['bootstrap_type'] == 'Bernoulli') | (params['bootstrap_type'] == 'MVS'):
+                params['subsample'] = trial.suggest_float('subsample', 0.1, 1)
+
+            params['verbose'] = False
+
+            early_stopping_rounds = int(params['num_boost_round']*0.3)
+
+            # Initialize Catboost regressor with current hyperparameters
+            model = CatBoostRegressor(**params)
+            # Train the regressor
+            model.fit(train_pool, eval_set=val_pool, early_stopping_rounds=early_stopping_rounds, verbose=False, plot=False)
+
+            #Evaluation metrics
+            preds = model.predict(val_pool)
+            ytrue = val_pool.get_label()
+
+            loss, _ = eval_multiquantile(
+                y_true = ytrue,
+                q_pred = preds,
+                quantiles = QUANTILES,
+                interval = (0.1, 0.9)
+            )
+
+            return loss
+
+        return objective_fn
+
+    @step
+    def end(self) -> None:
+        """
+        This is the final step of the Metaflow pipeline. It can be used to
+        perform any final actions or cleanup.
+        """
+        print("✅ Feature Engineering Flow completed.")
+        print(f"📊 Metadata: {self.metadata}")
+        print(f"🏆 Best trial: {self.study.best_trial.params}")
+
+if __name__ == '__main__':
+    TuningFlow()

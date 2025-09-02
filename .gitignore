@@ -71,6 +71,7 @@ venv.bak/
 *.tmp
 *.temp
 */dev_nb.ipynb
+catboost_info/
 
 # Log files
 *.log
