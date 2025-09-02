@@ -96,3 +96,19 @@ def pools(
         "validation_pool": validation_pool,
         "test_pool": test_pool,
     }
+
+def dataset(
+    train: pd.DataFrame,
+    validation: pd.DataFrame,
+    test: pd.DataFrame,
+) -> pd.DataFrame:
+    """
+    Build a single dataframe with a fold column to indicate the data split.
+    """
+    train["fold"] = "train"
+    validation["fold"] = "validation"
+    test["fold"] = "test"
+
+    combined = pd.concat([train, validation, test], axis=0)
+
+    return combined

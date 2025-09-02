@@ -23,6 +23,25 @@ FEATURES = [
     "day_of_year",
 ]
 
+# Starter params. Some of the params might be modified during training flow.
+alpha_str = ",".join([str(q) for q in QUANTILES])
+        
+PARAMS = {
+    "loss_function": f"MultiQuantile:alpha={alpha_str}",
+    "num_boost_round": 1_000,
+    "learning_rate": 0.05,
+    "depth": 6,
+    "l2_leaf_reg": 3,
+    "grow_policy": "SymmetricTree",
+    "border_count": 32,
+    "bootstrap_type": "Bayesian",
+    "bagging_temperature": 1.0,
+    "min_data_in_leaf": 100,
+    "colsample_bylevel": 0.7,
+    "random_state": 1,
+    "verbose": False,
+}
+
 modeling_config = {
     "FEATURES_FILE": FEATURES_FILE,
     "QUANTILES": QUANTILES,
@@ -30,4 +49,5 @@ modeling_config = {
     "N_TRIALS": N_TRIALS,
     "STUDY_NAME": STUDY_NAME,
     "FEATURES": FEATURES,
+    "PARAMS": PARAMS,
 }

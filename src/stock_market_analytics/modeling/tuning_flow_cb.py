@@ -28,16 +28,16 @@ FEATURES = modeling_config["FEATURES"]
 
 class TuningFlow(FlowSpec):
     """
-    A Metaflow flow to train a CatBoost model for stock market analytics.
+    A Metaflow flow to tune a CatBoost model hyperparameters for stock market analytics.
     """
 
     @step
     def start(self) -> None:
         """
         This is the entry point for the Metaflow pipeline. It validates the
-        environment and begins the feature engineering process.
+        environment and begins the tuning process.
         """
-        print("🚀 Starting Feature Engineering Flow...")
+        print("🚀 Starting Tuning Flow...")
 
         # Validate required environment variables
         if not os.environ.get("BASE_DATA_PATH"):
@@ -49,7 +49,7 @@ class TuningFlow(FlowSpec):
     @step
     def load_inputs(self) -> None:
         """
-        Load input data for feature engineering.
+        Load input data for data processing.
         """
         base_data_path = Path(os.environ["BASE_DATA_PATH"])
         self.data = self._load_features(base_data_path)
