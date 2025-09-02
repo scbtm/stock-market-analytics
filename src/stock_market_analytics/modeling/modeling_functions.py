@@ -1,8 +1,7 @@
 import numpy as np
 import pandas as pd
-import plotly.express as px
 import plotly.graph_objects as go
-from typing import Optional, Any, Dict, List
+from typing import Optional, Any, Dict
 import optuna
 from optuna.study import Study
 
@@ -172,9 +171,27 @@ def plot_optuna_parallel_coordinates(
     numeric_cols = df.select_dtypes(include=[np.number]).columns.tolist()
     
     # Remove trial_number from dimensions (keep for coloring)
-    plot_dimensions = [col for col in numeric_cols if col != 'trial_number']
+    plot_dimensions = [col for col in numeric_cols if not col in ['trial_number', 'objective_value']]
     
     # Create parallel coordinates plot
+    # Add trial_number as the first dimension for easy identification
+    dimensions = [
+        dict(
+            range=[df['trial_number'].min(), df['trial_number'].max()],
+            label='Trial',
+            values=df['trial_number']
+        )
+    ]
+    
+    # Add other dimensions
+    dimensions.extend([
+        dict(
+            range=[df[col].min(), df[col].max()],
+            label=col.replace('_', ' ').title(),
+            values=df[col]
+        ) for col in plot_dimensions
+    ])
+    
     fig = go.Figure(data=
         go.Parcoords(
             line=dict(
@@ -183,13 +200,10 @@ def plot_optuna_parallel_coordinates(
                 showscale=True,
                 colorbar=dict(title="Objective Value")
             ),
-            dimensions=[
-                dict(
-                    range=[df[col].min(), df[col].max()],
-                    label=col.replace('_', ' ').title(),
-                    values=df[col]
-                ) for col in plot_dimensions
-            ]
+            dimensions=dimensions,
+            # Enable interactive features
+            labelfont=dict(size=12, color=palette['dark']),
+            tickfont=dict(size=10, color=palette['dark'])
         )
     )
     
@@ -202,7 +216,9 @@ def plot_optuna_parallel_coordinates(
         height=height,
         paper_bgcolor='white',
         plot_bgcolor='white',
-        font=dict(color=palette['dark'])
+        font=dict(color=palette['dark']),
+        # Enable better interactivity
+        hovermode='closest'
     )
     
     return fig
