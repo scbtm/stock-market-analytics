@@ -11,26 +11,19 @@ from stock_market_analytics.data_collection import (
     YFinanceCollector,
 )
 
+from stock_market_analytics.data_collection.data_config import data_config
+
 # Constants
-TICKERS_FILE = "tickers.csv"
-METADATA_FILE = "metadata.csv"
-STOCKS_HISTORY_FILE = "stocks_history.parquet"
+TICKERS_FILE = data_config["TICKERS_FILE"]
+METADATA_FILE = data_config["METADATA_FILE"]
+STOCKS_HISTORY_FILE = data_config["STOCKS_HISTORY_FILE"]
 
 # Required columns for tickers file
-REQUIRED_TICKER_COLUMNS = [
-    "Symbol",
-    "Name",
-    "Country",
-    "IPO Year",
-    "Sector",
-    "Industry",
-]
-TICKER_COLUMN_MAPPING = {
-    col: col.replace(" ", "_").lower() for col in REQUIRED_TICKER_COLUMNS
-}
+REQUIRED_TICKER_COLUMNS = data_config["REQUIRED_TICKER_COLUMNS"]
+TICKER_COLUMN_MAPPING = data_config["TICKER_COLUMN_MAPPING"]
 
 # Required columns for metadata file
-REQUIRED_METADATA_COLUMNS = ["symbol", "last_ingestion", "max_date_recorded", "status"]
+REQUIRED_METADATA_COLUMNS = data_config["REQUIRED_METADATA_COLUMNS"]
 
 
 class BatchCollectionFlow(FlowSpec):
@@ -98,7 +91,7 @@ class BatchCollectionFlow(FlowSpec):
 
     def _load_tickers(self, base_data_path: Path) -> list[dict[str, Any]]:
         """Load and validate ticker symbols from CSV file."""
-        tickers_path = base_data_path / TICKERS_FILE
+        tickers_path = base_data_path / TICKERS_FILE # type: ignore
 
         if not tickers_path.exists():
             raise FileNotFoundError(
@@ -117,7 +110,7 @@ class BatchCollectionFlow(FlowSpec):
 
     def _load_metadata(self, base_data_path: Path) -> list[dict[str, Any]]:
         """Load and validate existing metadata from CSV file."""
-        metadata_path = base_data_path / METADATA_FILE
+        metadata_path = base_data_path / METADATA_FILE # type: ignore
 
         if not metadata_path.exists():
             return []
@@ -315,7 +308,7 @@ class BatchCollectionFlow(FlowSpec):
             print("⚠️ No metadata updates to process")
             return
 
-        metadata_path = base_data_path / METADATA_FILE
+        metadata_path = base_data_path / METADATA_FILE # type: ignore
         new_metadata_df = pd.DataFrame(metadata_updates)
 
         if metadata_path.exists():
@@ -346,7 +339,7 @@ class BatchCollectionFlow(FlowSpec):
             print("⚠️ No new data to add to historical dataset")
             return
 
-        stocks_history_path = base_data_path / STOCKS_HISTORY_FILE
+        stocks_history_path = base_data_path / STOCKS_HISTORY_FILE # type: ignore
 
         # Combine all new data
         new_data = pl.concat(collected_data)

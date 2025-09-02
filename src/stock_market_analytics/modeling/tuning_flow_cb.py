@@ -12,6 +12,8 @@ from stock_market_analytics.modeling import processing_functions
 
 from stock_market_analytics.modeling.modeling_functions import eval_multiquantile
 
+from stock_market_analytics.modeling.modeling_config import modeling_config
+
 import optuna
 
 from optuna import Trial
@@ -21,30 +23,12 @@ from catboost import CatBoostRegressor, Pool
 
 
 # Constants
-FEATURES_FILE = "stock_history_features.parquet"
-QUANTILES = [0.1, 0.25, 0.5, 0.75, 0.9]
-TIMEOUT_MINS = 10
-N_TRIALS = 200
-STUDY_NAME = "catboost_hyperparameter_optimization_dummy"
-FEATURES = [
-    'dollar_volume',
-    'long_kurtosis',
-    'short_kurtosis',
-    'long_skewness',
-    'short_skewness',
-    'long_mean',
-    'short_mean',
-    'mean_diff',
-    'long_diff',
-    'short_diff',
-    'long_short_momentum',
-    'pct_from_high_long',
-    'pct_from_high_short',
-    'year',
-    'month',
-    'day_of_week',
-    'day_of_year'
-]
+FEATURES_FILE = modeling_config["FEATURES_FILE"]
+QUANTILES = modeling_config["QUANTILES"]
+TIMEOUT_MINS = modeling_config["TIMEOUT_MINS"]
+N_TRIALS = modeling_config["N_TRIALS"]
+STUDY_NAME = modeling_config["STUDY_NAME"]
+FEATURES = modeling_config["FEATURES"]
 
 class TuningFlow(FlowSpec):
     """
@@ -77,7 +61,7 @@ class TuningFlow(FlowSpec):
 
     def _load_features(self, base_data_path: Path) -> pd.DataFrame:
         """Load and validate stock data from Parquet file."""
-        features_path = base_data_path / FEATURES_FILE
+        features_path = base_data_path / FEATURES_FILE # type: ignore
 
         if not features_path.exists():
             raise FileNotFoundError(
