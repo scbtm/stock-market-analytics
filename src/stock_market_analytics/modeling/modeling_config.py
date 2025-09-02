@@ -4,30 +4,30 @@ TIMEOUT_MINS = 10
 N_TRIALS = 200
 STUDY_NAME = "catboost_hyperparameter_optimization_dummy"
 FEATURES = [
-    'dollar_volume',
-    'long_kurtosis',
-    'short_kurtosis',
-    'long_skewness',
-    'short_skewness',
-    'long_mean',
-    'short_mean',
-    'mean_diff',
-    'long_diff',
-    'short_diff',
-    'long_short_momentum',
-    'pct_from_high_long',
-    'pct_from_high_short',
-    'year',
-    'month',
-    'day_of_week',
-    'day_of_year'
+    "dollar_volume",
+    "long_kurtosis",
+    "short_kurtosis",
+    "long_skewness",
+    "short_skewness",
+    "long_mean",
+    "short_mean",
+    "mean_diff",
+    "long_diff",
+    "short_diff",
+    "long_short_momentum",
+    "pct_from_high_long",
+    "pct_from_high_short",
+    "year",
+    "month",
+    "day_of_week",
+    "day_of_year",
 ]
 
-modeling_config = dict({
+modeling_config = {
     "FEATURES_FILE": FEATURES_FILE,
     "QUANTILES": QUANTILES,
     "TIMEOUT_MINS": TIMEOUT_MINS,
     "N_TRIALS": N_TRIALS,
     "STUDY_NAME": STUDY_NAME,
-    "FEATURES": FEATURES
-})
+    "FEATURES": FEATURES,
+}

@@ -10,7 +10,6 @@ from stock_market_analytics.data_collection import (
     ContinuousTimelineProcessor,
     YFinanceCollector,
 )
-
 from stock_market_analytics.data_collection.data_config import data_config
 
 # Constants
@@ -91,7 +90,7 @@ class BatchCollectionFlow(FlowSpec):
 
     def _load_tickers(self, base_data_path: Path) -> list[dict[str, Any]]:
         """Load and validate ticker symbols from CSV file."""
-        tickers_path = base_data_path / TICKERS_FILE # type: ignore
+        tickers_path = base_data_path / TICKERS_FILE  # type: ignore
 
         if not tickers_path.exists():
             raise FileNotFoundError(
@@ -103,14 +102,14 @@ class BatchCollectionFlow(FlowSpec):
             tickers_df = pd.read_csv(tickers_path, usecols=REQUIRED_TICKER_COLUMNS)
             tickers_df = tickers_df.rename(columns=TICKER_COLUMN_MAPPING)
 
-            return tickers_df.to_dict(orient="records") #type: ignore
+            return tickers_df.to_dict(orient="records")  # type: ignore
 
         except Exception as e:
             raise ValueError(f"Error loading tickers file: {str(e)}") from e
 
     def _load_metadata(self, base_data_path: Path) -> list[dict[str, Any]]:
         """Load and validate existing metadata from CSV file."""
-        metadata_path = base_data_path / METADATA_FILE # type: ignore
+        metadata_path = base_data_path / METADATA_FILE  # type: ignore
 
         if not metadata_path.exists():
             return []
@@ -308,7 +307,7 @@ class BatchCollectionFlow(FlowSpec):
             print("⚠️ No metadata updates to process")
             return
 
-        metadata_path = base_data_path / METADATA_FILE # type: ignore
+        metadata_path = base_data_path / METADATA_FILE  # type: ignore
         new_metadata_df = pd.DataFrame(metadata_updates)
 
         if metadata_path.exists():
@@ -339,7 +338,7 @@ class BatchCollectionFlow(FlowSpec):
             print("⚠️ No new data to add to historical dataset")
             return
 
-        stocks_history_path = base_data_path / STOCKS_HISTORY_FILE # type: ignore
+        stocks_history_path = base_data_path / STOCKS_HISTORY_FILE  # type: ignore
 
         # Combine all new data
         new_data = pl.concat(collected_data)
