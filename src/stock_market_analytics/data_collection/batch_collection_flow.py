@@ -110,7 +110,7 @@ class BatchCollectionFlow(FlowSpec):
             tickers_df = pd.read_csv(tickers_path, usecols=REQUIRED_TICKER_COLUMNS)
             tickers_df = tickers_df.rename(columns=TICKER_COLUMN_MAPPING)
 
-            return tickers_df.to_dict(orient="records")
+            return tickers_df.to_dict(orient="records") #type: ignore
 
         except Exception as e:
             raise ValueError(f"Error loading tickers file: {str(e)}") from e
@@ -141,7 +141,7 @@ class BatchCollectionFlow(FlowSpec):
                 metadata_df["max_date_recorded"], errors="coerce"
             )
 
-            return metadata_df.to_dict(orient="records")
+            return metadata_df.to_dict(orient="records")  # type: ignore
 
         except Exception as e:
             raise ValueError(f"Error loading metadata file: {str(e)}") from e

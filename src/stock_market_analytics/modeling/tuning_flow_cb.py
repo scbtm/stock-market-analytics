@@ -24,7 +24,7 @@ from catboost import CatBoostRegressor, Pool
 FEATURES_FILE = "stock_history_features.parquet"
 QUANTILES = [0.1, 0.25, 0.5, 0.75, 0.9]
 TIMEOUT_MINS = 10
-N_TRIALS = 2
+N_TRIALS = 200
 STUDY_NAME = "catboost_hyperparameter_optimization_dummy"
 FEATURES = [
     'dollar_volume',
@@ -148,31 +148,52 @@ class TuningFlow(FlowSpec):
             train_pool = pools['train_pool']
             val_pool = pools['validation_pool']
 
-            #Define hyperparameters to tune
+            # Define hyperparameters optimized for stock return prediction with large dataset
             params = {}
 
             alpha_str = ",".join([str(q) for q in QUANTILES])
 
             params['loss_function'] = f"MultiQuantile:alpha={alpha_str}"
-
             params['random_state'] = 1
-            params['learning_rate'] = trial.suggest_float('learning_rate', 0.01, 0.3)
-            params['depth'] = trial.suggest_int('depth', 4, 10)
-            params['l2_leaf_reg'] = trial.suggest_int('l2_leaf_reg', 0, 10)
-            params['grow_policy'] = trial.suggest_categorical('grow_policy', ['SymmetricTree', 'Depthwise', 'Lossguide'])
-            params['num_boost_round'] = trial.suggest_int('num_boost_round', 250, 2_000)
-
-            params['bootstrap_type'] = trial.suggest_categorical('bootstrap_type', ['Bayesian', 'Bernoulli', 'MVS', 'No'])
-
+            
+            # Speed and performance optimizations for large dataset
+            # Higher learning rates for faster convergence (stock data has weak signals, avoid too slow learning)
+            params['learning_rate'] = trial.suggest_float('learning_rate', 0.05, 0.25)
+            
+            # Shallower trees to prevent overfitting on noisy financial data and speed up training
+            params['depth'] = trial.suggest_int('depth', 4, 7)
+            
+            # Stronger L2 regularization for noisy financial data
+            params['l2_leaf_reg'] = trial.suggest_int('l2_leaf_reg', 1, 15)
+            
+            # Remove slower grow policies, keep faster ones
+            params['grow_policy'] = trial.suggest_categorical('grow_policy', ['SymmetricTree', 'Depthwise'])
+            
+            # Keep num_boost_round fixed for early stopping
+            params['num_boost_round'] = 1_000
+            
+            # Optimize bootstrap types for large datasets (removed MVS which can be slower)
+            params['bootstrap_type'] = trial.suggest_categorical('bootstrap_type', ['Bayesian', 'Bernoulli'])
+            
             if params['bootstrap_type'] == 'Bayesian':
-                params['bagging_temperature'] = trial.suggest_float('bagging_temperature', 0, 10)
+                params['bagging_temperature'] = trial.suggest_float('bagging_temperature', 0.5, 8)
 
-            if (params['bootstrap_type'] == 'Bernoulli') | (params['bootstrap_type'] == 'MVS'):
-                params['subsample'] = trial.suggest_float('subsample', 0.1, 1)
-
+            elif params['bootstrap_type'] == 'Bernoulli':
+                params['subsample'] = trial.suggest_float('subsample', 0.6, 0.95)
+            
+            # Add column sampling for better generalization and speed
+            params['colsample_bylevel'] = trial.suggest_float('colsample_bylevel', 0.6, 1.0)
+            
+            # Optimize for large datasets
+            params['border_count'] = trial.suggest_int('border_count', 128, 254)  # Higher for large datasets
+            
+            # Add min_data_in_leaf for regularization on large datasets
+            params['min_data_in_leaf'] = 100
+            
             params['verbose'] = False
 
-            early_stopping_rounds = int(params['num_boost_round']*0.3)
+            # More aggressive early stopping for faster tuning
+            early_stopping_rounds = int(params['num_boost_round']*0.08)  # Reduced from 0.1 to 0.08
 
             # Initialize Catboost regressor with current hyperparameters
             model = CatBoostRegressor(**params)
@@ -203,8 +224,7 @@ class TuningFlow(FlowSpec):
         perform any final actions or cleanup.
         """
         print("✅ Feature Engineering Flow completed.")
-        print(f"🏆 Best trial: {self.study.best_trial}")
-        print(f"📊 Study metadata: {self.study.user_attrs}")
+        print(f"🏆 Best trial: {self.study.best_trial.value}")
 
 if __name__ == '__main__':
     TuningFlow()
