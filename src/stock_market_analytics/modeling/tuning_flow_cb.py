@@ -4,6 +4,9 @@ from pathlib import Path
 import pandas as pd
 from hamilton import driver
 from metaflow import FlowSpec, step
+from wandb.integration.metaflow import wandb_log
+import wandb
+wandb.login(key = os.environ.get("WANDB_KEY"))
 
 from stock_market_analytics.modeling import processing_functions
 
@@ -21,7 +24,8 @@ from catboost import CatBoostRegressor, Pool
 FEATURES_FILE = "stock_history_features.parquet"
 QUANTILES = [0.1, 0.25, 0.5, 0.75, 0.9]
 TIMEOUT_MINS = 10
-N_TRIALS = 10
+N_TRIALS = 2
+STUDY_NAME = "catboost_hyperparameter_optimization_dummy"
 FEATURES = [
     'dollar_volume',
     'long_kurtosis',
@@ -87,19 +91,20 @@ class TuningFlow(FlowSpec):
             raise ValueError(f"Error loading features file: {str(e)}") from e
 
     @step
+    @wandb_log(datasets=False, models=False, others = True, settings=wandb.Settings(project="stock-market-analytics"))
     def hyperparameter_tuning(self) -> None:
 
         datasets = self._prepare_data()
 
         pools = datasets['pools']
-        self.metadata = datasets['metadata']
+        metadata = datasets['metadata']
 
         objective_fn = self._get_objective_fn()
 
         study = optuna.create_study(
             direction="minimize",
             sampler=optuna.samplers.TPESampler(seed=1),
-            study_name="catboost_hyperparameter_optimization"
+            study_name=STUDY_NAME
         )
         study.optimize(
             lambda trial: objective_fn(trial, pools),
@@ -107,6 +112,8 @@ class TuningFlow(FlowSpec):
             timeout=TIMEOUT_MINS*60, #seconds
             n_jobs=-1
         )
+
+        study.set_user_attr("metadata", metadata)
 
         self.study = study
 
@@ -176,12 +183,14 @@ class TuningFlow(FlowSpec):
             preds = model.predict(val_pool)
             ytrue = val_pool.get_label()
 
-            loss, _ = eval_multiquantile(
+            loss, metrics = eval_multiquantile(
                 y_true = ytrue,
                 q_pred = preds,
                 quantiles = QUANTILES,
                 interval = (0.1, 0.9)
             )
+
+            trial.set_user_attr("metrics", metrics)
 
             return loss
 
@@ -194,8 +203,8 @@ class TuningFlow(FlowSpec):
         perform any final actions or cleanup.
         """
         print("✅ Feature Engineering Flow completed.")
-        print(f"📊 Metadata: {self.metadata}")
-        print(f"🏆 Best trial: {self.study.best_trial.params}")
+        print(f"🏆 Best trial: {self.study.best_trial}")
+        print(f"📊 Study metadata: {self.study.user_attrs}")
 
 if __name__ == '__main__':
     TuningFlow()
