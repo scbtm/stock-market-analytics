@@ -4,21 +4,25 @@ TIMEOUT_MINS = 10
 N_TRIALS = 200
 STUDY_NAME = "catboost_hyperparameter_optimization_dummy"
 FEATURES = [
-    "dollar_volume",
+    # "dollar_volume",
     "amihud_illiq",
-    #"long_kurtosis",
-    #"short_kurtosis",
-    #"long_skewness",
-    #"short_skewness",
+    # "long_kurtosis",
+    # "short_kurtosis",
+    # "long_skewness",
+    # "short_skewness",
+    "kurtosis_diff",
+    "skewness_diff",
     "long_mean",
     "short_mean",
     "mean_diff",
     "long_diff",
     "short_diff",
+    "rsi",
     "long_short_momentum",
     "risk_adj_momentum",
     "pct_from_high_long",
     "pct_from_high_short",
+    "iqr_vol",
     #"year",
     "month",
     "day_of_week",
@@ -32,14 +36,14 @@ PARAMS = {
     "loss_function": f"MultiQuantile:alpha={alpha_str}",
     "num_boost_round": 1_000,
     "learning_rate": 0.01,
-    "depth": 4,
+    "depth": 3,
     "l2_leaf_reg": 10,
     "grow_policy": "SymmetricTree",
-    "border_count": 32,
+    "border_count": 8,
     "bootstrap_type": "Bayesian",
-    "bagging_temperature": 0.5,
-    "min_data_in_leaf": 200,
-    "colsample_bylevel": 0.7,
+    "bagging_temperature": 0.8,
+    # "min_data_in_leaf": 200,
+    # "colsample_bylevel": 0.7,
     "random_state": 1,
     "verbose": False,
 }
@@ -48,6 +52,8 @@ TARGET_COVERAGE = 0.8
 LOW, MID, HIGH = 0, 2, 4  # indices in Q for 0.10, 0.50, 0.90
 
 TARGET = "y_log_returns"
+
+TIME_SPAN = 70
 
 
 modeling_config = {
@@ -63,4 +69,5 @@ modeling_config = {
     "MID": MID,
     "HIGH": HIGH,
     "TARGET": TARGET,
+    "TIME_SPAN": TIME_SPAN,
 }

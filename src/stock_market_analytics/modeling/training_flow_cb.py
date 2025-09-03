@@ -31,6 +31,7 @@ PARAMS = modeling_config["PARAMS"]
 TARGET_COVERAGE = modeling_config["TARGET_COVERAGE"]
 LOW, MID, HIGH = modeling_config["LOW"], modeling_config["MID"], modeling_config["HIGH"]
 TARGET = modeling_config["TARGET"]
+TIME_SPAN = modeling_config["TIME_SPAN"]  # days
 
 class TrainingFlow(FlowSpec):
     """
@@ -41,9 +42,9 @@ class TrainingFlow(FlowSpec):
     def start(self) -> None:
         """
         This is the entry point for the Metaflow pipeline. It validates the
-        environment and begins the feature engineering process.
+        environment and begins the model training process.
         """
-        print("🚀 Starting Feature Engineering Flow...")
+        print("🚀 Starting model training Flow...")
 
         # Validate required environment variables
         if not os.environ.get("BASE_DATA_PATH"):
@@ -55,7 +56,7 @@ class TrainingFlow(FlowSpec):
     @step
     def load_inputs(self) -> None:
         """
-        Load input data for feature engineering.
+        Load input data for model training.
         """
         base_data_path = Path(os.environ["BASE_DATA_PATH"])
         self.data = self._load_features(base_data_path)
@@ -138,7 +139,7 @@ class TrainingFlow(FlowSpec):
 
         data = dr.execute(
             final_vars=["pools", "metadata", "dataset"],
-            inputs={"df": df, "time_span": 180, "features": FEATURES},
+            inputs={"df": df, "time_span": TIME_SPAN, "features": FEATURES},
         )
 
         return data
@@ -217,8 +218,8 @@ class TrainingFlow(FlowSpec):
         perform any final actions or cleanup.
         """
         print("✅ Training Flow completed.")
-        print(f"🛠️ Model parameters: {self.training_metrics}")
-        print(f"📊 Evaluation metrics: {self.final_metrics}")
+        print(f"🛠️ Training Metrics: {self.training_metrics}")
+        print(f"📊 Evaluation Metrics: {self.final_metrics}")
 
 if __name__ == "__main__":
     TrainingFlow()
