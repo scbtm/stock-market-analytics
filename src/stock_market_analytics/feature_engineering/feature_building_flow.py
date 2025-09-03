@@ -61,8 +61,6 @@ class FeatureBuildingFlow(FlowSpec):
         except Exception as e:
             raise ValueError(f"Error loading stocks history file: {str(e)}") from e
 
-        self.next(self.build_features)
-
     @step
     def build_features(self) -> None:
         """
@@ -80,7 +78,7 @@ class FeatureBuildingFlow(FlowSpec):
         if past_horizon > 0:
             max_lookback_date = self.data["date"].max() - pd.Timedelta(
                 days=past_horizon
-            ) #type: ignore
+            )  # type: ignore
             data = results["df_features"].filter(pl.col("date") >= max_lookback_date)
         else:
             data = results["df_features"]

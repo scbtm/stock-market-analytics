@@ -5,11 +5,16 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
+    "catboost>=1.2.8",
     "metaflow==2.18.1",
+    "nbformat>=5.10.4",
+    "optuna>=4.5.0",
+    "plum-dispatch<3.0.0",
     "polars>=1.32.3",
     "pyarrow>=21.0.0",
     "pydantic>=2.11.7",
     "sf-hamilton[visualization]>=1.88.0",
+    "wandb>=0.21.3",
     "yfinance>=0.2.65",
 ]
 [[project.authors]]
@@ -34,3 +39,5 @@ dev = [
 stock-market-analytics = "stock_market_analytics.main:main"
 batch-collect = "stock_market_analytics.data_collection.batch_collection_flow:BatchCollectionFlow"
 build-features = "stock_market_analytics.feature_engineering.feature_building_flow:FeatureBuildingFlow"
+tune-model = "stock_market_analytics.modeling.tuning_flow_cb:TuningFlow"
+train-model = "stock_market_analytics.modeling.training_flow_cb:TrainingFlow"

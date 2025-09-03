@@ -21,4 +21,4 @@ security-check:
 	uv sync --all-groups
 	uv run --with pip-audit pip-audit --local --skip-editable -v
 
-verify: format lint typecheck test security-check
+verify: format typecheck test security-check lint
