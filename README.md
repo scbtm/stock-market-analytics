@@ -19,7 +19,8 @@ The platform focuses on creating reliable, maintainable, and scalable infrastruc
 📁 stock-market-analytics/
 ├── src/stock_market_analytics/     # Core application code
 │   ├── data_collection/            # Data ingestion pipeline
-│   └── feature_engineering/       # Feature computation pipeline
+│   ├── feature_engineering/       # Feature computation pipeline
+│   └── modeling/                   # ML model training and evaluation
 ├── tests/                          # Comprehensive test suite
 ├── Makefile                       # Development workflow automation
 └── pyproject.toml                  # Dependencies and entry points
@@ -43,6 +44,8 @@ The project follows a modular architecture with **Metaflow workflows as primary 
 [project.scripts]
 batch-collect = "stock_market_analytics.data_collection.batch_collection_flow:BatchCollectionFlow"
 build-features = "stock_market_analytics.feature_engineering.feature_building_flow:FeatureBuildingFlow"
+tune-model = "stock_market_analytics.modeling.tuning_flow_cb:TuningFlow"
+train-model = "stock_market_analytics.modeling.training_flow_cb:TrainingFlow"
 ```
 
 This design enables direct execution of complex workflows:
@@ -52,6 +55,12 @@ uv run batch-collect run
 
 # Execute feature engineering pipeline  
 uv run build-features run
+
+# Run hyperparameter tuning pipeline
+uv run tune-model run
+
+# Execute model training pipeline
+uv run train-model run
 ```
 
 ### Data Collection Module
@@ -107,6 +116,285 @@ The Hamilton framework automatically generates this dependency graph showing the
 - **Parallel Processing**: Independent feature computations that can run concurrently  
 - **Configuration Points**: Input parameters that control window sizes and feature selection
 - **Dependency Management**: Automatic resolution of feature dependencies and execution order
+
+### Adding New Features
+
+The feature engineering pipeline uses Hamilton for functional, dependency-driven feature computation. To add a new feature, follow these steps:
+
+#### Step 1: Add Feature Function to `features.py`
+
+Create a new function in `src/stock_market_analytics/feature_engineering/features.py`:
+
+```python
+def my_new_feature(dff: pl.DataFrame, window_size: int) -> pl.DataFrame:
+    """
+    Description of your new feature.
+    """
+    return dff.with_columns(
+        # Your feature computation here - use .over("symbol") to ensure no data leakage
+        pl.col("log_returns_d")
+        .rolling_std(window_size)
+        .over("symbol")
+        .shift(1)  # Optional: shift by 1 to avoid lookahead bias (depends on time of inference; current setup avoids lookahead without shifting, but it can be added to be extra-safe)
+        .alias("my_new_feature")
+    )
+```
+
+**Key Requirements**:
+- Function name becomes the Hamilton node name (must be unique)
+- Return a DataFrame with `symbol`, `date`, and your new feature columns
+- Use `.over("symbol")` for all rolling operations to prevent cross-symbol contamination
+- Use `.shift(1)` to avoid lookahead bias in predictions
+- Include proper type hints
+
+#### Step 2: Update `df_features` Function
+
+Add your new feature as a parameter and include it in the join chain:
+
+```python
+def df_features(
+    dff: pl.DataFrame,
+    # ... existing parameters ...
+    my_new_feature: pl.DataFrame,  # Add your feature here
+) -> pl.DataFrame:
+    # ... existing code ...
+    
+    # Select only the columns you need
+    my_new_feature = my_new_feature.select(
+        pl.col("symbol"), 
+        pl.col("date"), 
+        pl.col("my_new_feature")
+    )
+    
+    # Add to the join chain
+    final_df = (
+        dff.join(amihud_illiq, on=["symbol", "date"], how="inner")
+        # ... existing joins ...
+        .join(my_new_feature, on=["symbol", "date"], how="inner")  # Add here
+    )
+```
+
+#### Step 3: Add Feature to Model Configuration
+
+Add your new feature to the `FEATURES` list in `src/stock_market_analytics/modeling/modeling_config.py`:
+
+```python
+FEATURES = [
+    # ... existing features ...
+    "my_new_feature",  # Add your feature name here
+]
+```
+
+#### Step 4: Update Feature Parameters (Optional)
+
+If your feature needs configurable parameters, add them to `src/stock_market_analytics/feature_engineering/features_config.py`:
+
+```python
+features_config["my_window_size"] = 30
+```
+
+#### Why This Structure?
+
+This multi-step process exists for good reasons:
+
+1. **Hamilton Requirements**: Function names must be unique and represent outputs
+2. **Data Integrity**: DataFrame returns preserve symbol/date relationships
+3. **No Data Leakage**: `.over("symbol")` ensures computations stay within symbols
+4. **Explicit Dependencies**: Hamilton automatically tracks which features depend on which inputs
+5. **Testing**: Each feature function can be tested independently
+6. **Performance**: Hamilton optimizes the computation graph and enables parallel execution
+
+#### Hamilton Visualization
+
+After adding features, you can visualize the dependency graph. **Note**: Requires graphviz system package to be installed.
+
+```bash
+# Generate visualization of the complete feature pipeline
+uv run python -c "
+from hamilton import driver
+from stock_market_analytics.feature_engineering import features, preprocessing
+dr = driver.Builder().with_modules(features, preprocessing).build()
+dr.visualize_execution(['df_features'], './features_graph.png', bypass_validation=True)
+print('Hamilton dependency graph saved to: ./features_graph.png')
+"
+```
+
+**Troubleshooting Visualization Issues**:
+- If you get `ExecutableNotFound: failed to execute PosixPath('dot')`, install graphviz:
+  ```bash
+  sudo apt update && sudo apt install -y graphviz  # Ubuntu/Debian
+  brew install graphviz                            # macOS
+  ```
+- Use `bypass_validation=True` to generate the graph without providing input data
+- The generated diagram shows all feature dependencies and parallel processing opportunities
+
+#### Updating the Official Feature Diagram
+
+To regenerate the official Hamilton dependency graph shown in this README:
+
+```bash
+# Regenerate the official features_diagram.png
+uv run python -c "
+from hamilton import driver
+from stock_market_analytics.feature_engineering import features, preprocessing
+import os
+
+# Create Hamilton driver
+dr = driver.Builder().with_modules(features, preprocessing).build()
+
+# Generate the visualization (overwrites existing diagram)
+output_path = 'src/stock_market_analytics/feature_engineering/features_diagram.png'
+dr.visualize_execution(['df_features'], output_path, bypass_validation=True)
+
+print(f'Hamilton dependency graph updated: {output_path}')
+print(f'File exists: {os.path.exists(output_path)}')
+"
+```
+
+This command:
+- Overwrites the existing `features_diagram.png` file
+- Uses `bypass_validation=True` to avoid needing input data
+- Updates the diagram referenced in this README
+- Should be run after adding new features to keep documentation current
+
+### Machine Learning Module
+
+**Location**: `src/stock_market_analytics/modeling/`
+
+The modeling module implements production-ready machine learning workflows for quantile regression on stock market data, featuring automated hyperparameter optimization and conformal prediction.
+
+#### Framework & Architecture
+
+The module leverages several enterprise-grade frameworks:
+
+1. **CatBoost**: Gradient boosting framework optimized for:
+   - **Multi-quantile regression**: Predicts uncertainty intervals (10th, 25th, 50th, 75th, 90th percentiles)
+   - **Large datasets**: Efficient training on time series with hundreds of symbols
+
+2. **Optuna**: Hyperparameter optimization with:
+   - **TPE Sampler**: Tree-structured Parzen Estimator for intelligent search
+   - **Multi-objective**: Optimizes pinball loss while preventing overfitting
+   - **Parallel execution**: Concurrent trial evaluation for faster tuning
+
+3. **Conformal Prediction**: Provides statistical guarantees:
+   - **Coverage guarantee**: Ensures prediction intervals contain true values with specified probability
+   - **Distribution-free**: Works regardless of underlying data distribution
+   - **Post-hoc calibration**: Adjusts model predictions without retraining
+
+4. **W&B Integration**: Experiment tracking and monitoring:
+   - **Automated logging**: Tracks hyperparameters, metrics, and artifacts
+   - **Model versioning**: Maintains history of model iterations
+   - **Visualization**: Rich dashboards for experiment comparison
+
+#### Design Patterns & Components
+
+**Configuration-Driven Design**:
+```python
+# modeling_config.py - Central configuration
+FEATURES = ["amihud_illiq", "rsi", "momentum", ...]  # Selected features
+QUANTILES = [0.1, 0.25, 0.5, 0.75, 0.9]            # Prediction quantiles
+PARAMS = {...}                                       # Base model parameters
+```
+
+**Hamilton Integration**: 
+- **Data Processing**: Uses Hamilton for reproducible data splitting and preprocessing
+- **Dependency Tracking**: Automatic resolution of data dependencies
+- **Type Safety**: Full type checking throughout the pipeline
+
+**Evaluation Framework**:
+- **Multi-quantile metrics**: Pinball loss, coverage, interval width
+- **Validation**: Time-aware splits preventing lookahead bias  
+- **Conformal calibration**: Adjusts prediction intervals for target coverage
+
+#### Key Workflows
+
+##### 1. Hyperparameter Tuning (`tune-model`)
+
+Automated optimization of CatBoost hyperparameters:
+
+```bash
+# Run hyperparameter optimization
+export BASE_DATA_PATH="/path/to/your/data"
+export WANDB_KEY="your_wandb_key"
+uv run tune-model run
+```
+
+**Optimization Strategy**:
+- **Search space**: 15+ hyperparameters optimized for financial data
+- **Objective**: Minimize pinball loss across all quantiles
+- **Regularization**: Stronger penalties for noisy financial signals
+- **Early stopping**: Prevents overfitting and speeds up tuning
+
+##### 2. Model Training (`train-model`)
+
+Trains final model with optimized hyperparameters:
+
+```bash
+# Train model with best hyperparameters  
+export BASE_DATA_PATH="/path/to/your/data"
+export WANDB_KEY="your_wandb_key"
+uv run train-model run
+```
+
+**Training Process**:
+1. **Data Loading**: Loads engineered features from parquet
+2. **Splitting**: Time-aware train/validation/test splits
+3. **Training**: Multi-quantile CatBoost with early stopping
+4. **Calibration**: Conformal adjustment on validation set
+5. **Evaluation**: Coverage and width metrics on test set
+6. **Logging**: Results tracked in W&B for reproducibility
+
+**Conformal Prediction Workflow**:
+```python
+# Get base model predictions (10th, 90th percentiles)
+qlo_cal, qhi_cal = model.predict_quantiles(X_calibration)
+
+# Compute conformal adjustment
+qconf = conformal_adjustment(qlo_cal, qhi_cal, y_calibration, alpha=0.2)
+
+# Apply to test predictions for 80% coverage guarantee
+lo_adjusted, hi_adjusted = apply_conformal(qlo_test, qhi_test, qconf)
+```
+
+#### Evaluation Metrics
+
+**Multi-quantile Performance**:
+- **Pinball Loss**: Proper scoring rule for quantile predictions
+- **Calibration Error**: Measures quantile prediction accuracy
+- **Crossing Penalty**: Ensures monotonic quantile ordering
+
+**Interval Quality**:
+- **Coverage**: Percentage of true values within prediction intervals
+- **Mean Width**: Average interval width (efficiency measure)
+
+**Example Output**:
+```
+Training Metrics: {
+  'loss': 0.0234,
+  'pinball_mean': 0.0198,
+  'coverage_10_90': 0.847,
+  'calibration_error_mean': 0.012
+}
+
+Evaluation Metrics: {
+  'coverage': 0.801,        # Close to target 80%
+  'mean_width': 0.156,      # Tight intervals
+  'pinball_loss': 0.0201    # Low prediction error
+}
+```
+
+#### Environment Requirements
+
+**Required Environment Variables**:
+- `BASE_DATA_PATH`: Path to directory containing `stock_history_features.parquet`
+- `WANDB_KEY`: Weights & Biases API key for experiment tracking
+
+**Dependencies**:
+- **CatBoost**: Multi-quantile regression model
+- **Optuna**: Hyperparameter optimization
+- **Hamilton**: Data processing pipeline  
+- **W&B**: Experiment tracking and visualization
+- **Metaflow**: Pipeline orchestration and versioning
 
 
 ## CI/CD Pipeline
@@ -165,7 +453,7 @@ This project uses [uv](https://github.com/astral-sh/uv) for modern Python depend
 
 - **Python 3.12+**: Required for modern type hints and performance optimizations
 - **uv**: Fast Python package installer and resolver
-- **graphviz**: Required for Hamilton pipeline visualization
+- **graphviz**: Required for Hamilton pipeline visualization (system dependency)
 
 ### Quick Setup
 
@@ -180,9 +468,12 @@ curl -LsSf https://astral.sh/uv/install.sh | sh
 # Install all dependencies (including development tools)
 uv sync
 
-# Install system dependencies for visualizations
-sudo apt install graphviz  # On Ubuntu/Debian
-# brew install graphviz    # On macOS
+# Install system dependencies for Hamilton visualizations
+sudo apt update && sudo apt install -y graphviz  # On Ubuntu/Debian
+# brew install graphviz                          # On macOS
+
+# Note: If you encounter "ExecutableNotFound: failed to execute PosixPath('dot')" error,
+# it means graphviz system package is not installed or not in PATH
 ```
 
 ### Verification
@@ -217,6 +508,19 @@ Note: ingesting the full history of 500 tickers takes about 5 minutes with 4 cor
 uv run build-features run
 ```
 Note: building the features for 500 tickers on 4 cores takes about 30 seconds thanks to fast vectorial operations in Polars.
+
+4. **Train ML model**:
+```bash
+# Set up Weights & Biases for experiment tracking
+export WANDB_KEY="your_wandb_api_key"
+
+# Run hyperparameter optimization (optional, for best performance)
+uv run tune-model run
+
+# Train the final model
+uv run train-model run
+```
+Note: Hyperparameter tuning takes 10-30 minutes depending on the number of trials. Model training completes in under 5 minutes and includes conformal calibration for uncertainty quantification.
 
 ### Pipeline Execution Examples
 
@@ -253,6 +557,39 @@ The feature pipeline will:
 - Calculate technical indicators and momentum features
 - Generate time series features with proper validation
 - Output feature matrix to `data/stock_history_features.parquet`
+
+#### Machine Learning Pipeline
+
+```bash
+# Set up environment for ML training
+export BASE_DATA_PATH="/path/to/your/data"
+export WANDB_KEY="your_wandb_api_key"
+
+# Optional: Run hyperparameter optimization
+uv run tune-model run
+
+# Train final model with best hyperparameters
+uv run train-model run
+```
+
+The ML pipeline will:
+- **Hyperparameter Tuning** (optional):
+  - Optimize 15+ CatBoost parameters using Optuna
+  - Minimize pinball loss across multiple quantiles
+  - Use TPE sampler for efficient search
+  - Log all trials to Weights & Biases
+- **Model Training**:
+  - Load engineered features from parquet
+  - Split data chronologically (train/validation/test)
+  - Train multi-quantile CatBoost regressor
+  - Apply conformal prediction calibration
+  - Evaluate coverage and prediction quality
+  - Save trained model and metrics to W&B
+
+**Expected Results**:
+- **Coverage**: ~80% of true values within prediction intervals
+- **Pinball Loss**: ~0.02 (optimized quantile prediction error)
+- **Training Time**: <5 minutes for model training, 10-30 minutes for tuning
 
 ### Development Workflow
 
@@ -333,7 +670,7 @@ This project maintains high code quality standards:
 
 Key design principles driving this implementation:
 
-- **Modularity**: Clear separation between data collection, feature engineering, and future ML modules
+- **Modularity**: Clear separation between data collection, feature engineering, and ML modeling modules
 - **Testability**: Pure functions and dependency injection enable comprehensive testing
 - **Scalability**: Metaflow provides seamless local-to-cloud scaling
 - **Maintainability**: Strong typing, comprehensive documentation, and automated quality checks
