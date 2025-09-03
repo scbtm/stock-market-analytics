@@ -42,6 +42,12 @@ PARAMS = {
     "verbose": False,
 }
 
+TARGET_COVERAGE = 0.8
+LOW, MID, HIGH = 0, 2, 4  # indices in Q for 0.10, 0.50, 0.90
+
+TARGET = "y_log_returns"
+
+
 modeling_config = {
     "FEATURES_FILE": FEATURES_FILE,
     "QUANTILES": QUANTILES,
@@ -50,4 +56,9 @@ modeling_config = {
     "STUDY_NAME": STUDY_NAME,
     "FEATURES": FEATURES,
     "PARAMS": PARAMS,
+    "TARGET_COVERAGE": TARGET_COVERAGE,
+    "LOW": LOW,
+    "MID": MID,
+    "HIGH": HIGH,
+    "TARGET": TARGET,
 }

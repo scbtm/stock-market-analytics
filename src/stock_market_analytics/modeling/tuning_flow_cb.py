@@ -219,7 +219,7 @@ class TuningFlow(FlowSpec):
         This is the final step of the Metaflow pipeline. It can be used to
         perform any final actions or cleanup.
         """
-        print("✅ Feature Engineering Flow completed.")
+        print("✅ Tuning Flow completed.")
         print(f"🏆 Best trial: {self.study.best_trial.value}")
 
 

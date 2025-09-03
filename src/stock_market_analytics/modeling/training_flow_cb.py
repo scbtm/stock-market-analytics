@@ -10,7 +10,15 @@ from metaflow import FlowSpec, step
 import wandb
 from stock_market_analytics.modeling import processing_functions
 from stock_market_analytics.modeling.modeling_config import modeling_config
-from stock_market_analytics.modeling.modeling_functions import eval_multiquantile
+from stock_market_analytics.modeling.modeling_functions import (
+    eval_multiquantile,
+    predict_quantiles,
+    conformal_adjustment,
+    apply_conformal,
+    mean_width,
+    pinball_loss,
+    coverage
+)
 from wandb.integration.metaflow import wandb_log
 
 wandb.login(key=os.environ.get("WANDB_KEY"))
@@ -20,7 +28,9 @@ FEATURES_FILE = modeling_config["FEATURES_FILE"]
 QUANTILES = modeling_config["QUANTILES"]
 FEATURES = modeling_config["FEATURES"]
 PARAMS = modeling_config["PARAMS"]
-
+TARGET_COVERAGE = modeling_config["TARGET_COVERAGE"]
+LOW, MID, HIGH = modeling_config["LOW"], modeling_config["MID"], modeling_config["HIGH"]
+TARGET = modeling_config["TARGET"]
 
 class TrainingFlow(FlowSpec):
     """
@@ -49,7 +59,7 @@ class TrainingFlow(FlowSpec):
         """
         base_data_path = Path(os.environ["BASE_DATA_PATH"])
         self.data = self._load_features(base_data_path)
-        self.next(self.training_stage_1)
+        self.next(self.training_model)
 
     def _load_features(self, base_data_path: Path) -> pd.DataFrame:
         """Load and validate stock data from Parquet file."""
@@ -67,13 +77,7 @@ class TrainingFlow(FlowSpec):
             raise ValueError(f"Error loading features file: {str(e)}") from e
         
     @step
-    @wandb_log(
-        datasets=True,
-        models=True,
-        others=True,
-        settings=wandb.Settings(project="stock-market-analytics"),
-    )
-    def training_stage_1(self) -> None:
+    def training_model(self) -> None:
         data = self._prepare_data()
 
         pools = data["pools"]
@@ -91,7 +95,7 @@ class TrainingFlow(FlowSpec):
             pools["train_pool"],
             eval_set=pools["validation_pool"],
             early_stopping_rounds=early_stopping_rounds,
-            verbose=False,
+            verbose=int(early_stopping_rounds/2),
             plot=False,
         )
 
@@ -103,6 +107,7 @@ class TrainingFlow(FlowSpec):
 
         # Evaluation metrics
         preds = model.predict(pools["validation_pool"])
+        preds = predict_quantiles(model, pools["validation_pool"])
         ytrue = pools["validation_pool"].get_label()
 
         print(f"Preds shape: {preds.shape}")
@@ -112,14 +117,17 @@ class TrainingFlow(FlowSpec):
                 y_true=ytrue, q_pred=preds, quantiles=QUANTILES, interval=(0.1, 0.9)
             )
 
-        # Log information
-        self.loss = loss
-        self.metrics = metrics
-        self.params = params
-        self.model = model
-        self.dataset = dataset
+        # Pass information to next step
+        calibration_info = {
+            "loss": loss,
+            "metrics": metrics,
+            "params": params,
+            "model": model,
+            "dataset": dataset,
+        }
 
-        self.next(self.end)
+        self.calibration_info = calibration_info
+        self.next(self.calibrate_model)
 
     def _prepare_data(self) -> tuple[dict[str, Pool], dict[str, Any]]:
         """
@@ -137,6 +145,72 @@ class TrainingFlow(FlowSpec):
         )
 
         return data
+    
+    @step
+    @wandb_log(
+        datasets=True,
+        models=True,
+        others=True,
+        settings=wandb.Settings(project="stock-market-analytics"),
+        )
+    def calibrate_model(self) -> None:
+        """
+        Perform conformal adjustment on the trained model.
+        """
+
+        calibration_info = self.calibration_info
+
+        model = calibration_info["model"]
+
+        params = calibration_info["params"]
+
+        dataset = calibration_info["dataset"]
+
+        dcal = dataset[dataset['fold'] == 'validation'].copy()
+        dtest = dataset[dataset['fold'] == 'test'].copy()
+
+        xcal = dcal[FEATURES]
+        xtest = dtest[FEATURES]
+
+        ycal = dcal[TARGET].values
+        ytest = dtest[TARGET].values
+
+        # Predict quantiles
+        q_cal = predict_quantiles(model, xcal)
+        q_tst = predict_quantiles(model, xtest)
+
+        # Pull specific lower/upper for CQR (here 10% / 90%)
+        qlo_cal, qhi_cal = q_cal[:, LOW], q_cal[:, HIGH]
+        qlo_tst, qhi_tst = q_tst[:, LOW], q_tst[:, HIGH]
+
+        # Conformal adjustment on calibration slice
+        qconf = conformal_adjustment(qlo_cal, qhi_cal, ycal, alpha=1 - TARGET_COVERAGE)
+
+        # Apply to test
+        lo_cqr, hi_cqr = apply_conformal(qlo_tst, qhi_tst, qconf)
+        med_pred = q_tst[:, MID]
+
+        # Metrics
+        cov   = coverage(ytest, lo_cqr, hi_cqr)
+        width = mean_width(lo_cqr, hi_cqr)
+        pin50 = pinball_loss(ytest, med_pred, alpha=0.5)
+
+        final_metrics = {
+            "coverage": [cov],
+            "mean_width": [width],
+            "pinball_loss": [pin50],
+        }
+
+        training_metrics = calibration_info["metrics"]
+
+        # Log results to wandb
+        self.params = params
+        self.model = model
+        self.training_metrics = training_metrics
+        self.development_data = dataset
+        self.final_metrics = final_metrics
+
+        self.next(self.end)
 
 
     @step
@@ -145,12 +219,9 @@ class TrainingFlow(FlowSpec):
         This is the final step of the Metaflow pipeline. It can be used to
         perform any final actions or cleanup.
         """
-        print("✅ Feature Engineering Flow completed.")
-        print(f"🏆 Best trial: {self.loss}")
-        print(f"📊 Evaluation metrics: {self.metrics}")
-        print(f"🛠️ Model parameters: {self.params}")
-        print(f"🗂️ Model object: {self.model}")
-
+        print("✅ Training Flow completed.")
+        print(f"🛠️ Model parameters: {self.training_metrics}")
+        print(f"📊 Evaluation metrics: {self.final_metrics}")
 
 if __name__ == "__main__":
     TrainingFlow()

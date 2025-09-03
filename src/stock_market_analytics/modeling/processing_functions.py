@@ -2,6 +2,9 @@ import pandas as pd
 from catboost import Pool
 from hamilton.function_modifiers import extract_fields
 
+from stock_market_analytics.modeling.modeling_config import modeling_config
+
+TARGET = modeling_config["TARGET"]
 
 @extract_fields(
     dict({"train": pd.DataFrame, "validation": pd.DataFrame, "test": pd.DataFrame})
@@ -85,11 +88,11 @@ def pools(
     xvalidation = validation[features]
     xtest = test[features]
 
-    train_pool = Pool(data=xtrain, label=train["y_log_returns"], feature_names=features)
+    train_pool = Pool(data=xtrain, label=train[TARGET], feature_names=features)
     validation_pool = Pool(
-        data=xvalidation, label=validation["y_log_returns"], feature_names=features
+        data=xvalidation, label=validation[TARGET], feature_names=features
     )
-    test_pool = Pool(data=xtest, label=test["y_log_returns"], feature_names=features)
+    test_pool = Pool(data=xtest, label=test[TARGET], feature_names=features)
 
     return {
         "train_pool": train_pool,
