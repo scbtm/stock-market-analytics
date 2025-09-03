@@ -110,9 +110,6 @@ class TrainingFlow(FlowSpec):
         preds = predict_quantiles(model, pools["validation_pool"])
         ytrue = pools["validation_pool"].get_label()
 
-        print(f"Preds shape: {preds.shape}")
-        print(f"Ytrue shape: {ytrue.shape}")
-
         loss, metrics = eval_multiquantile(
                 y_true=ytrue, q_pred=preds, quantiles=QUANTILES, interval=(0.1, 0.9)
             )

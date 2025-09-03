@@ -1,6 +1,16 @@
 import polars as pl
 
 
+def amihud_illiq(dff: pl.DataFrame, short_window: int = 21) -> pl.DataFrame:
+    """
+    Amihud illiquidity: E[ |r| / $volume ] over a rolling window. Higher => less liquid.
+    """
+    return dff.with_columns(
+        (pl.col("log_returns_d").abs() / (pl.col("dollar_volume") + 1e-12))
+        .rolling_mean(short_window).over("symbol").shift(1)
+        .alias("amihud_illiq")
+    )
+
 def kurtosis_long_short(
     dff: pl.DataFrame, long_window: int, short_window: int
 ) -> pl.DataFrame:
@@ -111,6 +121,24 @@ def long_short_momentum(
         ).alias("long_short_momentum")
     )
 
+def long_vol(dff: pl.DataFrame, long_window: int) -> pl.DataFrame:
+    """
+    Compute the long volatility for each symbol.
+    """
+
+    return dff.with_columns(
+        (pl.col("log_returns_d").rolling_std(window_size=long_window).over("symbol")).alias("long_vol")
+    )
+
+def risk_adj_momentum(long_vol: pl.DataFrame, long_short_momentum: pl.DataFrame) -> pl.DataFrame:
+    lsm = long_short_momentum.select(pl.col("symbol"), pl.col("date"), pl.col("long_short_momentum"))
+    lsv = long_vol.select(pl.col("symbol"), pl.col("date"), pl.col("long_vol"))
+    aux_df = lsm.join(lsv, on=["symbol", "date"])
+    aux_df = aux_df.sort(["symbol", "date"])
+    return aux_df.with_columns(
+        (pl.col("long_short_momentum") / pl.col("long_vol")).alias("risk_adj_momentum")
+    )
+
 
 def pct_from_high_long(dff: pl.DataFrame, long_window: int) -> pl.DataFrame:
     """
@@ -150,12 +178,14 @@ def chronological_features(dff: pl.DataFrame) -> pl.DataFrame:
 
 def df_features(
     dff: pl.DataFrame,
+    amihud_illiq: pl.DataFrame,
     kurtosis_long_short: pl.DataFrame,
     skewness_long_short: pl.DataFrame,
     mean_long_short: pl.DataFrame,
     mean_diff: pl.DataFrame,
     absolute_diff: pl.DataFrame,
     long_short_momentum: pl.DataFrame,
+    risk_adj_momentum: pl.DataFrame,
     pct_from_high_long: pl.DataFrame,
     pct_from_high_short: pl.DataFrame,
     chronological_features: pl.DataFrame,
@@ -168,6 +198,12 @@ def df_features(
         pl.col("date"),
         pl.col("y_log_returns"),
         pl.col("dollar_volume"),
+    )
+
+    amihud_illiq = amihud_illiq.select(
+        pl.col("symbol"),
+        pl.col("date"),
+        pl.col("amihud_illiq"),
     )
 
     kurtosis_long_short = kurtosis_long_short.select(
@@ -194,6 +230,10 @@ def df_features(
         pl.col("symbol"), pl.col("date"), pl.col("long_short_momentum")
     )
 
+    risk_adj_momentum = risk_adj_momentum.select(
+        pl.col("symbol"), pl.col("date"), pl.col("risk_adj_momentum")
+    )
+
     pct_from_high_long = pct_from_high_long.select(
         pl.col("symbol"), pl.col("date"), pl.col("pct_from_high_long")
     )
@@ -212,12 +252,14 @@ def df_features(
     )
 
     final_df = (
-        dff.join(kurtosis_long_short, on=["symbol", "date"], how="inner")
+        dff.join(amihud_illiq, on=["symbol", "date"], how="inner")
+        .join(kurtosis_long_short, on=["symbol", "date"], how="inner")
         .join(skewness_long_short, on=["symbol", "date"], how="inner")
         .join(mean_long_short, on=["symbol", "date"], how="inner")
         .join(mean_diff, on=["symbol", "date"], how="inner")
         .join(absolute_diff, on=["symbol", "date"], how="inner")
         .join(long_short_momentum, on=["symbol", "date"], how="inner")
+        .join(risk_adj_momentum, on=["symbol", "date"], how="inner")
         .join(pct_from_high_long, on=["symbol", "date"], how="inner")
         .join(pct_from_high_short, on=["symbol", "date"], how="inner")
         .join(chronological_features, on=["symbol", "date"], how="inner")
