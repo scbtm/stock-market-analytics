@@ -46,6 +46,7 @@ PARAMS = {
     # "colsample_bylevel": 0.7,
     "random_state": 1,
     "verbose": False,
+    "use_best_model": True
 }
 
 TARGET_COVERAGE = 0.8

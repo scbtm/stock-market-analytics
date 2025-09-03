@@ -19,6 +19,7 @@ from stock_market_analytics.modeling.modeling_functions import (
     pinball_loss,
     coverage
 )
+from stock_market_analytics.modeling.baseline_predictor import BaselinePredictor
 from wandb.integration.metaflow import wandb_log
 
 wandb.login(key=os.environ.get("WANDB_KEY"))
@@ -107,7 +108,6 @@ class TrainingFlow(FlowSpec):
         })
 
         # Evaluation metrics
-        preds = model.predict(pools["validation_pool"])
         preds = predict_quantiles(model, pools["validation_pool"])
         ytrue = pools["validation_pool"].get_label()
 
@@ -125,7 +125,7 @@ class TrainingFlow(FlowSpec):
         }
 
         self.calibration_info = calibration_info
-        self.next(self.calibrate_model)
+        self.next(self.evaluate_baselines)
 
     def _prepare_data(self) -> tuple[dict[str, Pool], dict[str, Any]]:
         """
@@ -143,6 +143,56 @@ class TrainingFlow(FlowSpec):
         )
 
         return data
+    
+    @step
+    def evaluate_baselines(self) -> None:
+        """
+        Evaluate baseline predictors for comparison with the trained model.
+        """
+        print("📊 Evaluating baseline predictors...")
+        
+        # Use the same _prepare_data method to get properly constructed pools
+        data = self._prepare_data()
+        pools = data["pools"]
+        
+        train_pool = pools["train_pool"]
+        val_pool = pools["validation_pool"]
+        
+        # Define baseline strategies to evaluate
+        baseline_strategies = [
+            "historical_quantiles",
+            "random_walk", 
+            "random_noise",
+            "seasonal_naive"
+        ]
+        
+        baseline_results = {}
+        
+        for strategy in baseline_strategies:
+            print(f"  Evaluating {strategy} baseline...")
+            
+            # Create and fit baseline predictor
+            baseline = BaselinePredictor(strategy=strategy, random_state=42)
+            baseline.fit(train_pool)
+            
+            # Predict on validation set
+            baseline_preds = baseline.predict(val_pool)
+            ytrue = val_pool.get_label()
+            
+            # Evaluate using same metrics as trained model
+            loss, metrics = eval_multiquantile(
+                y_true=ytrue, q_pred=baseline_preds, quantiles=QUANTILES, interval=(0.1, 0.9)
+            )
+            
+            baseline_results[f"baseline_{strategy}"] = {
+                "loss": loss,
+                "metrics": metrics,
+                "model": baseline
+            }
+        
+        # Store baseline results for comparison
+        self.baseline_results = baseline_results
+        self.next(self.calibrate_model)
     
     @step
     @wandb_log(
@@ -201,12 +251,69 @@ class TrainingFlow(FlowSpec):
 
         training_metrics = calibration_info["metrics"]
 
+        # Evaluate baselines on test set for final comparison
+        print("📊 Evaluating baselines on test set...")
+        baseline_test_results = {}
+        
+        xtest = dtest[FEATURES]
+        
+        for strategy_name, baseline_info in self.baseline_results.items():
+            baseline_model = baseline_info["model"]
+            
+            # Predict quantiles on test set
+            q_tst_baseline = baseline_model.predict(xtest)
+            
+            # Pull specific lower/upper for CQR (here 10% / 90%)
+            qlo_tst_baseline, qhi_tst_baseline = q_tst_baseline[:, LOW], q_tst_baseline[:, HIGH]
+            
+            # Apply conformal adjustment (using same qconf from trained model)
+            lo_cqr_baseline, hi_cqr_baseline = apply_conformal(qlo_tst_baseline, qhi_tst_baseline, qconf)
+            med_pred_baseline = q_tst_baseline[:, MID]
+            
+            # Metrics
+            cov_baseline = coverage(ytest, lo_cqr_baseline, hi_cqr_baseline)
+            width_baseline = mean_width(lo_cqr_baseline, hi_cqr_baseline)
+            pin50_baseline = pinball_loss(ytest, med_pred_baseline, alpha=0.5)
+            
+            baseline_test_results[strategy_name] = {
+                "coverage": cov_baseline,
+                "mean_width": width_baseline,
+                "pinball_loss": pin50_baseline,
+            }
+        
+        # Create comparative metrics
+        comparative_metrics = {}
+        trained_model_metrics = final_metrics
+        
+        for strategy_name, baseline_metrics in baseline_test_results.items():
+            for metric_name in ["coverage", "mean_width", "pinball_loss"]:
+                trained_value = trained_model_metrics[metric_name][0]
+                baseline_value = baseline_metrics[metric_name]
+                
+                # Calculate improvement (positive means trained model is better)
+                if metric_name == "coverage":
+                    # For coverage, closer to target coverage is better
+                    trained_diff = abs(trained_value - TARGET_COVERAGE)
+                    baseline_diff = abs(baseline_value - TARGET_COVERAGE) 
+                    improvement = baseline_diff - trained_diff  # positive means trained is closer
+                elif metric_name == "mean_width":
+                    # For width, smaller is better
+                    improvement = baseline_value - trained_value  # positive means trained is narrower
+                else:  # pinball_loss
+                    # For pinball loss, smaller is better
+                    improvement = baseline_value - trained_value  # positive means trained is lower
+                
+                comparative_metrics[f"{strategy_name}_{metric_name}_improvement"] = improvement
+                comparative_metrics[f"{strategy_name}_{metric_name}"] = baseline_value
+        
         # Log results to wandb
         self.params = params
         self.model = model
         self.training_metrics = training_metrics
         self.development_data = dataset
         self.final_metrics = final_metrics
+        self.baseline_test_results = baseline_test_results
+        self.comparative_metrics = comparative_metrics
 
         self.next(self.end)
 
@@ -220,6 +327,23 @@ class TrainingFlow(FlowSpec):
         print("✅ Training Flow completed.")
         print(f"🛠️ Training Metrics: {self.training_metrics}")
         print(f"📊 Evaluation Metrics: {self.final_metrics}")
+        
+        # Display baseline comparison results
+        print("\n📈 Model vs Baseline Performance:")
+        print("-" * 60)
+        
+        for strategy_name, baseline_metrics in self.baseline_test_results.items():
+            print(f"\n{strategy_name.replace('baseline_', '').replace('_', ' ').title()}:")
+            for metric_name in ["coverage", "mean_width", "pinball_loss"]:
+                trained_value = self.final_metrics[metric_name][0]
+                baseline_value = baseline_metrics[metric_name]
+                improvement_key = f"{strategy_name}_{metric_name}_improvement"
+                improvement = self.comparative_metrics[improvement_key]
+                
+                improvement_sign = "✅" if improvement > 0 else "❌" if improvement < 0 else "➡️"
+                print(f"  {metric_name}: {trained_value:.4f} vs {baseline_value:.4f} {improvement_sign}")
+        
+        print("\n📊 Summary: Trained model improvements over baselines logged to Wandb")
 
 if __name__ == "__main__":
     TrainingFlow()
