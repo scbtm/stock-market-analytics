@@ -1,61 +1,55 @@
-import pandas as pd
-from catboost import Pool
-from hamilton.function_modifiers import extract_fields
+from typing import Any
 
-from stock_market_analytics.modeling.modeling_config import modeling_config
+import pandas as pd
+
+from stock_market_analytics.modeling.pipeline_components.configs import modeling_config
 
 TARGET = modeling_config["TARGET"]
 
-@extract_fields(
-    dict({"train": pd.DataFrame, "validation": pd.DataFrame, "test": pd.DataFrame})
-)
 def split_data(
     df: pd.DataFrame,
     time_span: int,
-) -> dict[str, pd.DataFrame]:
+) -> pd.DataFrame:
     """
     Split the DataFrame chronologically into training, validation, and testing sets
     """
 
     # Test with the most recent 6 months of data
-    test = df[df["date"] >= df["date"].max() - pd.Timedelta(days=time_span)]
+    df['fold'] = 'train'  # Initialize fold column
+    df.loc[df['date'] >= df['date'].max() - pd.Timedelta(days=time_span), 'fold'] = 'test'
 
-    min_test_date = test["date"].min()
+    min_test_date = df[df['fold'] == 'test']["date"].min()
+
+    min_val_date = min_test_date - pd.Timedelta(days=time_span)
 
     # Validation is 6 months prior to test
-    validation = df[
-        (df["date"] < min_test_date)
-        & (df["date"] >= min_test_date - pd.Timedelta(days=time_span))
-    ]
-    min_val_date = validation["date"].min()
+    df.loc[(df['date'] < min_test_date) & (df['date'] >= min_val_date), 'fold'] = 'validation'
 
-    # Training data is anything before validation
-    train = df[df["date"] < min_val_date]
+    return df
 
-    return dict({"train": train, "validation": validation, "test": test})  # type: ignore
 
 
 def metadata(
-    train: pd.DataFrame, validation: pd.DataFrame, test: pd.DataFrame
-) -> dict[str, pd.DataFrame]:
+    split_data: pd.DataFrame,
+) -> dict[str, Any]:
     """
     Get metadata for the training, validation, and test sets.
     """
-    training_start, training_end = train["date"].min(), train["date"].max()
+    training_start, training_end = split_data[split_data['fold'] == 'train']["date"].min(), split_data[split_data['fold'] == 'train']["date"].max()
     validation_start, validation_end = (
-        validation["date"].min(),
-        validation["date"].max(),
+        split_data[split_data['fold'] == 'validation']["date"].min(),
+        split_data[split_data['fold'] == 'validation']["date"].max(),
     )
-    test_start, test_end = test["date"].min(), test["date"].max()
+    test_start, test_end = split_data[split_data['fold'] == 'test']["date"].min(), split_data[split_data['fold'] == 'test']["date"].max()
 
-    training_n_rows = train.shape[0]
-    validation_n_rows = validation.shape[0]
-    test_n_rows = test.shape[0]
+    training_n_rows = split_data[split_data['fold'] == 'train'].shape[0]
+    validation_n_rows = split_data[split_data['fold'] == 'validation'].shape[0]
+    test_n_rows = split_data[split_data['fold'] == 'test'].shape[0]
 
     # Nice string format
     date_of_run = pd.Timestamp.now()
 
-    features = train.columns.tolist()
+    columns = split_data.columns.tolist()
 
     metadata_info = {
         "date_of_run": date_of_run,
@@ -68,50 +62,33 @@ def metadata(
         "test_start": test_start,
         "test_end": test_end,
         "test_n_rows": test_n_rows,
-        "features": features,
+        "columns": columns,
     }
 
     return metadata_info
 
 
-def pools(
-    train: pd.DataFrame,
-    validation: pd.DataFrame,
-    test: pd.DataFrame,
-    features: list[str],
-) -> dict[str, Pool]:
+def modeling_datasets(
+        split_data: pd.DataFrame,
+        features: list[str],
+        target: str = TARGET,
+    ) -> dict[str, Any]:
+
     """
-    Create CatBoost Pools for training, validation, and test sets.
+    Prepare modeling datasets.
     """
 
-    xtrain = train[features]
-    xvalidation = validation[features]
-    xtest = test[features]
+    xtrain, ytrain = split_data[split_data['fold'] == 'train'][features], split_data[split_data['fold'] == 'train'][target]
+    xval, yval = split_data[split_data['fold'] == 'validation'][features], split_data[split_data['fold'] == 'validation'][target]
+    xtest, ytest = split_data[split_data['fold'] == 'test'][features], split_data[split_data['fold'] == 'test'][target]
 
-    train_pool = Pool(data=xtrain, label=train[TARGET], feature_names=features)
-    validation_pool = Pool(
-        data=xvalidation, label=validation[TARGET], feature_names=features
-    )
-    test_pool = Pool(data=xtest, label=test[TARGET], feature_names=features)
-
-    return {
-        "train_pool": train_pool,
-        "validation_pool": validation_pool,
-        "test_pool": test_pool,
+    modeling_data = {
+        "xtrain": xtrain,
+        "ytrain": ytrain,
+        "xval": xval,
+        "yval": yval,
+        "xtest": xtest,
+        "ytest": ytest,
     }
 
-def dataset(
-    train: pd.DataFrame,
-    validation: pd.DataFrame,
-    test: pd.DataFrame,
-) -> pd.DataFrame:
-    """
-    Build a single dataframe with a fold column to indicate the data split.
-    """
-    train["fold"] = "train"
-    validation["fold"] = "validation"
-    test["fold"] = "test"
-
-    combined = pd.concat([train, validation, test], axis=0)
-
-    return combined
+    return modeling_data
