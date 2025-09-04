@@ -99,7 +99,8 @@ class TrainingFlow(FlowSpec):
 
         pipeline = get_pipeline()
         pca = pipeline.named_steps["pca"]  # type: ignore
-        pca.fit(xtrain)  # Fit PCA on training data only
+        pca.fit(xtrain)  # Fit PCA on training data only. 
+        # This is needed as there is no gracefull way to handle this in the pipeline if we want to use early stopping.
         _xval = pca.transform(xval)
         # Fit the pipeline with early stopping parameters. This need to be passed to the pipeline as follows:
         fit_params = cb_fit_params.copy()
@@ -111,7 +112,7 @@ class TrainingFlow(FlowSpec):
         final_iterations = quantile_regressor.best_iteration_
         print(f"🏁 Training completed in {final_iterations} iterations.")
 
-        # Evaluation metrics using new wrapper
+        # Evaluation metrics. The pipeline is now fitted with the best model and ready for inference. (although calibration is pending)
         preds = pipeline.predict(xval)
         ytrue = yval.values
 
