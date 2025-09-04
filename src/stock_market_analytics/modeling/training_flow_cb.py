@@ -1,7 +1,7 @@
 import os
 from pathlib import Path
 from stock_market_analytics.modeling.pipeline_components.parameters import cb_fit_params
-from stock_market_analytics.modeling.pipeline_factory import get_pipeline
+from stock_market_analytics.modeling.pipeline_components.pipeline_factory import get_pipeline
 import pandas as pd
 from metaflow import FlowSpec, step
 
