@@ -10,6 +10,7 @@ from stock_market_analytics.modeling import processing_functions
 from stock_market_analytics.modeling.pipeline_components.configs import modeling_config
 from stock_market_analytics.modeling.pipeline_components.parameters import cb_model_params, cb_fit_params
 from stock_market_analytics.modeling.pipeline_components.evaluators import ModelEvaluator, EvaluationReport
+from stock_market_analytics.modeling.pipeline_components.calibrators import PipelineWithCalibrator
 from stock_market_analytics.modeling.pipeline_components.predictors import CatBoostMultiQuantileModel
 from wandb.integration.metaflow import wandb_log
 
@@ -145,21 +146,45 @@ class TrainingFlow(FlowSpec):
         xcal, ycal = modeling_datasets["xval"], modeling_datasets["yval"]
         xtest, ytest = modeling_datasets["xtest"], modeling_datasets["ytest"]
 
-        # Perform conformal evaluation using the evaluator
+        # Create calibrated pipeline for production use
+        print("🔧 Creating calibrated pipeline...")
+        calibrated_pipeline, calibrator = PipelineWithCalibrator.create_calibrated_pipeline(
+            base_pipeline=model,
+            X_cal=xcal,
+            y_cal=ycal
+        )
+        
+        # Evaluate calibrated predictions (independent of calibrator)
         evaluator = ModelEvaluator()
-        conformal_results = evaluator.evaluate_conformal(model, xcal, ycal, xtest, ytest)
+        
+        # Get calibrated bounds and evaluate them
+        calibrated_bounds = calibrated_pipeline.predict(xtest)
+        
+        # Get median predictions for pinball loss
+        raw_predictions = model.predict(xtest)
+        mid_idx = modeling_config["MID"]
+        median_predictions = raw_predictions[:, mid_idx]
+        
+        conformal_results = evaluator.evaluate_calibrated_predictions(
+            calibrated_bounds, ytest, median_predictions
+        )
 
         final_metrics = {
             "coverage": [conformal_results["coverage"]],
             "mean_width": [conformal_results["mean_width"]],
             "pinball_loss": [conformal_results["pinball_loss"]],
         }
+        
+        print(f"📏 Conformal quantile: {calibrator.conformal_quantile_:.4f}")
+        print(f"🎯 Target coverage: {calibrator.target_coverage:.1%}")
 
         training_metrics = calibration_info["metrics"]
 
         # Log results to wandb
         self.params = params
         self.pipeline = model
+        self.calibrated_pipeline = calibrated_pipeline  # Production-ready pipeline with conformal calibration
+        self.calibrator = calibrator  # Standalone calibrator for analysis
         self.training_metrics = training_metrics
         self.development_data = processing_functions.metadata(split_data=self.data)
         self.final_metrics = final_metrics
@@ -181,6 +206,19 @@ class TrainingFlow(FlowSpec):
             "conformal": self.final_metrics
         }
         EvaluationReport.print_summary(evaluation_results)
+        
+        # Display calibrator information
+        print(f"\n🔧 Calibrated Pipeline Summary:")
+        print(f"Pipeline steps: {[step[0] for step in self.calibrated_pipeline.steps]}")
+        calibrator_info = self.calibrator.get_conformal_info()
+        print(f"Conformal quantile: {calibrator_info['conformal_quantile']:.4f}")
+        print(f"Target coverage: {calibrator_info['target_coverage']:.1%}")
+        
+        # Usage example
+        print(f"\n💡 Usage:")
+        print(f"# For raw quantile predictions: self.pipeline.predict(X)")
+        print(f"# For conformal bounds: self.calibrated_pipeline.predict(X)")
+        print(f"# Returns: array of shape (n_samples, 2) with [lower_bound, upper_bound]")
 
 if __name__ == "__main__":
     TrainingFlow()

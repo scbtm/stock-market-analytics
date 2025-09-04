@@ -4,8 +4,6 @@ import pandas as pd
 from sklearn.pipeline import Pipeline
 from stock_market_analytics.modeling.pipeline_components.functions import (
     eval_multiquantile,
-    conformal_adjustment,
-    apply_conformal,
     coverage,
     mean_width,
     pinball_loss
@@ -16,8 +14,15 @@ class ModelEvaluator:
     """
     Evaluator for stock market analytics models that leverages the pipeline architecture.
     
-    This class provides a clean interface for both training-time and conformal evaluation
-    while maintaining flexibility through the pipeline_components architecture.
+    This class provides evaluation capabilities for both raw quantile predictions
+    and calibrated predictions (conformal bounds). It focuses purely on evaluation
+    and does NOT perform any calibration - that is handled by the ConformalCalibrator.
+    
+    Key methods:
+    - evaluate_training(): Evaluate raw quantile predictions during training
+    - evaluate_calibrated_predictions(): Evaluate already-calibrated bounds
+    - evaluate_quantile_predictions(): Alias for evaluate_training()
+    - full_evaluation(): Evaluate both raw and calibrated pipelines
     """
     
     def __init__(
@@ -75,110 +80,131 @@ class ModelEvaluator:
             return_per_quantile=return_per_quantile
         )
     
-    def evaluate_conformal(
+    def evaluate_calibrated_predictions(
         self,
-        pipeline: Pipeline,
-        X_cal: pd.DataFrame | np.ndarray,
-        y_cal: pd.DataFrame | np.ndarray,
-        X_test: pd.DataFrame | np.ndarray,
-        y_test: pd.DataFrame | np.ndarray,
-        low_idx: int = None,
-        high_idx: int = None,
-        mid_idx: int = None
+        calibrated_predictions: np.ndarray,
+        y_true: pd.DataFrame | np.ndarray,
+        mid_predictions: Optional[np.ndarray] = None
     ) -> dict[str, Any]:
         """
-        Perform conformal prediction evaluation.
+        Evaluate calibrated predictions (conformal bounds).
+        
+        This method evaluates predictions that are already calibrated,
+        typically from a calibrated pipeline that returns bounds.
         
         Args:
-            pipeline: Fitted sklearn pipeline containing the model
-            X_cal: Calibration features
-            y_cal: Calibration targets
-            X_test: Test features
-            y_test: Test targets
-            low_idx: Index of low quantile (defaults to modeling_config["LOW"])
-            high_idx: Index of high quantile (defaults to modeling_config["HIGH"])
-            mid_idx: Index of median quantile (defaults to modeling_config["MID"])
+            calibrated_predictions: Calibrated bounds, shape (n_samples, 2)
+                                  Column 0: lower bounds, Column 1: upper bounds
+            y_true: True targets
+            mid_predictions: Optional median predictions for pinball loss
             
         Returns:
-            Dictionary containing conformal evaluation metrics
+            Dictionary containing evaluation metrics
         """
-        # Default indices from config
-        low_idx = low_idx if low_idx is not None else modeling_config["LOW"]
-        high_idx = high_idx if high_idx is not None else modeling_config["HIGH"]
-        mid_idx = mid_idx if mid_idx is not None else modeling_config["MID"]
-        
-        # Convert targets to arrays
-        if hasattr(y_cal, 'values'):
-            y_cal_array = y_cal.values
+        # Convert inputs to arrays
+        bounds = np.asarray(calibrated_predictions)
+        if hasattr(y_true, 'values'):
+            y_array = y_true.values.ravel()
         else:
-            y_cal_array = np.asarray(y_cal)
-            
-        if hasattr(y_test, 'values'):
-            y_test_array = y_test.values
-        else:
-            y_test_array = np.asarray(y_test)
+            y_array = np.asarray(y_true).ravel()
         
-        # Get predictions
-        q_cal = pipeline.predict(X_cal)
-        q_test = pipeline.predict(X_test)
+        # Validate inputs
+        if bounds.ndim != 2 or bounds.shape[1] != 2:
+            raise ValueError(f"calibrated_predictions must have shape (n_samples, 2), got {bounds.shape}")
         
-        # Extract specific quantiles for conformal adjustment
-        qlo_cal, qhi_cal = q_cal[:, low_idx], q_cal[:, high_idx]
-        qlo_test, qhi_test = q_test[:, low_idx], q_test[:, high_idx]
+        if len(y_array) != bounds.shape[0]:
+            raise ValueError(f"Mismatched samples: predictions {bounds.shape[0]}, targets {len(y_array)}")
         
-        # Conformal adjustment
-        alpha = 1 - self.target_coverage
-        q_conformal = conformal_adjustment(qlo_cal, qhi_cal, y_cal_array, alpha=alpha)
+        # Extract bounds
+        lower_bounds = bounds[:, 0]
+        upper_bounds = bounds[:, 1]
         
-        # Apply conformal adjustment to test set
-        lo_cqr, hi_cqr = apply_conformal(qlo_test, qhi_test, q_conformal)
-        med_pred = q_test[:, mid_idx]
+        # Calculate coverage and width metrics
+        cov = coverage(y_array, lower_bounds, upper_bounds)
+        width = mean_width(lower_bounds, upper_bounds)
         
-        # Calculate metrics
-        cov = coverage(y_test_array, lo_cqr, hi_cqr)
-        width = mean_width(lo_cqr, hi_cqr)
-        pin50 = pinball_loss(y_test_array, med_pred, alpha=0.5)
-        
-        return {
+        results = {
             "coverage": cov,
-            "mean_width": width,
-            "pinball_loss": pin50,
-            "conformal_quantile": q_conformal,
-            "predictions": {
-                "lower_bound": lo_cqr,
-                "upper_bound": hi_cqr,
-                "median": med_pred
-            }
+            "mean_width": width
         }
+        
+        # Add pinball loss if median predictions provided
+        if mid_predictions is not None:
+            mid_array = np.asarray(mid_predictions).ravel()
+            if len(mid_array) == len(y_array):
+                pin50 = pinball_loss(y_array, mid_array, alpha=0.5)
+                results["pinball_loss"] = pin50
+        
+        return results
+    
+    def evaluate_quantile_predictions(
+        self,
+        pipeline: Pipeline,
+        X: pd.DataFrame | np.ndarray,
+        y: pd.DataFrame | np.ndarray,
+        sample_weight: Optional[np.ndarray] = None,
+        lambda_cross: float = 0.0,
+        return_per_quantile: bool = False
+    ) -> tuple[float, dict[str, Any]]:
+        """
+        Evaluate raw quantile predictions from a pipeline.
+        
+        This method evaluates the raw quantile predictions before any
+        conformal calibration is applied.
+        
+        Args:
+            pipeline: Pipeline that produces quantile predictions
+            X: Features
+            y: Targets
+            sample_weight: Optional sample weights
+            lambda_cross: Penalty for quantile crossing
+            return_per_quantile: Whether to return per-quantile metrics
+            
+        Returns:
+            Tuple of (loss, metrics_dict)
+        """
+        return self.evaluate_training(
+            pipeline, X, y, sample_weight, lambda_cross, return_per_quantile
+        )
     
     def full_evaluation(
         self,
-        pipeline: Pipeline,
+        raw_pipeline: Pipeline,
+        calibrated_pipeline: Pipeline,
         X_val: pd.DataFrame | np.ndarray,
         y_val: pd.DataFrame | np.ndarray,
-        X_cal: pd.DataFrame | np.ndarray,
-        y_cal: pd.DataFrame | np.ndarray,
         X_test: pd.DataFrame | np.ndarray,
         y_test: pd.DataFrame | np.ndarray,
         return_predictions: bool = False
     ) -> dict[str, Any]:
         """
-        Perform complete evaluation including both training and conformal steps.
+        Perform complete evaluation of both raw and calibrated pipelines.
         
         Args:
-            pipeline: Fitted sklearn pipeline
-            modeling_datasets: Dictionary containing train/val/test splits
+            raw_pipeline: Pipeline producing raw quantile predictions
+            calibrated_pipeline: Pipeline producing calibrated bounds
+            X_val: Validation features
+            y_val: Validation targets
+            X_test: Test features
+            y_test: Test targets
             return_predictions: Whether to include predictions in results
             
         Returns:
             Complete evaluation results dictionary
         """
-        # Training evaluation
-        training_loss, training_metrics = self.evaluate_training(pipeline, X_val, y_val)
+        # Evaluate raw quantile predictions
+        training_loss, training_metrics = self.evaluate_training(raw_pipeline, X_val, y_val)
         
-        # Conformal evaluation
-        conformal_results = self.evaluate_conformal(
-            pipeline, X_cal, y_cal, X_test, y_test
+        # Evaluate calibrated predictions
+        calibrated_bounds = calibrated_pipeline.predict(X_test)
+        
+        # Get median predictions for pinball loss (from raw pipeline)
+        raw_predictions = raw_pipeline.predict(X_test)
+        mid_idx = modeling_config["MID"]
+        median_predictions = raw_predictions[:, mid_idx] if raw_predictions.ndim > 1 else None
+        
+        calibrated_results = self.evaluate_calibrated_predictions(
+            calibrated_bounds, y_test, median_predictions
         )
         
         results = {
@@ -186,14 +212,14 @@ class ModelEvaluator:
                 "loss": training_loss,
                 "metrics": training_metrics
             },
-            "conformal": {
-                key: value for key, value in conformal_results.items() 
-                if key != "predictions"
-            }
+            "calibrated": calibrated_results
         }
         
         if return_predictions:
-            results["predictions"] = conformal_results["predictions"]
+            results["predictions"] = {
+                "raw_quantiles": raw_predictions,
+                "calibrated_bounds": calibrated_bounds
+            }
         
         return results
 

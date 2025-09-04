@@ -119,6 +119,10 @@ class CatBoostMultiQuantileModel(BaseEstimator, RegressorMixin):
         predictions.sort(axis=1)
         
         return predictions
+    
+    def transform(self, X: Any) -> np.ndarray:
+        """Alias for predict to support transformer interface inside pipelines."""
+        return self.predict(X)
         
     def score(self, X: Any, y: Any, sample_weight: Any = None) -> float:
         """Return the coefficient of determination R^2 for median quantile.
