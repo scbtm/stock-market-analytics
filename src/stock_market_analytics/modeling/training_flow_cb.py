@@ -1,17 +1,29 @@
 import os
 from pathlib import Path
-from stock_market_analytics.modeling.pipeline_components.parameters import cb_fit_params
-from stock_market_analytics.modeling.pipeline_components.pipeline_factory import get_pipeline
+
 import pandas as pd
 from metaflow import FlowSpec, step
 
 import wandb
 from stock_market_analytics.modeling import processing_functions
+from stock_market_analytics.modeling.pipeline_components.calibrators import (
+    PipelineWithCalibrator,
+)
 from stock_market_analytics.modeling.pipeline_components.configs import modeling_config
-from stock_market_analytics.modeling.pipeline_components.parameters import cb_model_params, cb_fit_params
-from stock_market_analytics.modeling.pipeline_components.evaluators import ModelEvaluator, EvaluationReport
-from stock_market_analytics.modeling.pipeline_components.calibrators import PipelineWithCalibrator
-from stock_market_analytics.modeling.pipeline_components.predictors import CatBoostMultiQuantileModel
+from stock_market_analytics.modeling.pipeline_components.evaluators import (
+    EvaluationReport,
+    ModelEvaluator,
+)
+from stock_market_analytics.modeling.pipeline_components.parameters import (
+    cb_fit_params,
+    cb_model_params,
+)
+from stock_market_analytics.modeling.pipeline_components.pipeline_factory import (
+    get_pipeline,
+)
+from stock_market_analytics.modeling.pipeline_components.predictors import (
+    CatBoostMultiQuantileModel,
+)
 from wandb.integration.metaflow import wandb_log
 
 wandb.login(key=os.environ.get("WANDB_KEY"))
@@ -69,7 +81,7 @@ class TrainingFlow(FlowSpec):
             return pd.read_parquet(features_path)
         except Exception as e:
             raise ValueError(f"Error loading features file: {str(e)}") from e
-        
+
     @step
     def model_training(self) -> None:
         print("🧹 Preparing Feature Data...")
@@ -92,7 +104,7 @@ class TrainingFlow(FlowSpec):
 
         pipeline = get_pipeline()
         pca = pipeline.named_steps["pca"]  # type: ignore
-        pca.fit(xtrain)  # Fit PCA on training data only. 
+        pca.fit(xtrain)  # Fit PCA on training data only.
         # This is needed as there is no gracefull way to handle this in the pipeline if we want to use early stopping.
         _xval = pca.transform(xval)
         # Fit the pipeline with early stopping parameters. This need to be passed to the pipeline as follows:
@@ -153,18 +165,18 @@ class TrainingFlow(FlowSpec):
             X_cal=xcal,
             y_cal=ycal
         )
-        
+
         # Evaluate calibrated predictions (independent of calibrator)
         evaluator = ModelEvaluator()
-        
+
         # Get calibrated bounds and evaluate them
         calibrated_bounds = calibrated_pipeline.predict(xtest)
-        
+
         # Get median predictions for pinball loss
         raw_predictions = model.predict(xtest)
         mid_idx = modeling_config["MID"]
         median_predictions = raw_predictions[:, mid_idx]
-        
+
         conformal_results = evaluator.evaluate_calibrated_predictions(
             calibrated_bounds, ytest, median_predictions
         )
@@ -174,7 +186,7 @@ class TrainingFlow(FlowSpec):
             "mean_width": [conformal_results["mean_width"]],
             "pinball_loss": [conformal_results["pinball_loss"]],
         }
-        
+
         print(f"📏 Conformal quantile: {calibrator.conformal_quantile_:.4f}")
         print(f"🎯 Target coverage: {calibrator.target_coverage:.1%}")
 
@@ -199,26 +211,26 @@ class TrainingFlow(FlowSpec):
         perform any final actions or cleanup.
         """
         print("✅ Training Flow completed.")
-        
+
         # Display formatted evaluation results
         evaluation_results = {
             "training": {"metrics": self.training_metrics},
             "conformal": self.final_metrics
         }
         EvaluationReport.print_summary(evaluation_results)
-        
+
         # Display calibrator information
-        print(f"\n🔧 Calibrated Pipeline Summary:")
+        print("\n🔧 Calibrated Pipeline Summary:")
         print(f"Pipeline steps: {[step[0] for step in self.calibrated_pipeline.steps]}")
         calibrator_info = self.calibrator.get_conformal_info()
         print(f"Conformal quantile: {calibrator_info['conformal_quantile']:.4f}")
         print(f"Target coverage: {calibrator_info['target_coverage']:.1%}")
-        
+
         # Usage example
-        print(f"\n💡 Usage:")
-        print(f"# For raw quantile predictions: self.pipeline.predict(X)")
-        print(f"# For conformal bounds: self.calibrated_pipeline.predict(X)")
-        print(f"# Returns: array of shape (n_samples, 2) with [lower_bound, upper_bound]")
+        print("\n💡 Usage:")
+        print("# For raw quantile predictions: self.pipeline.predict(X)")
+        print("# For conformal bounds: self.calibrated_pipeline.predict(X)")
+        print("# Returns: array of shape (n_samples, 2) with [lower_bound, upper_bound]")
 
 if __name__ == "__main__":
     TrainingFlow()

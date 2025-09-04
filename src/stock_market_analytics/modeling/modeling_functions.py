@@ -4,8 +4,9 @@ import numpy as np
 import optuna
 import pandas as pd
 import plotly.graph_objects as go
-from optuna.study import Study
 from catboost import CatBoostRegressor, Pool
+from optuna.study import Study
+
 
 def predict_quantiles(model: CatBoostRegressor, X: pd.DataFrame | Pool) -> np.ndarray:
     # MultiQuantile returns (n_samples, n_quantiles)
@@ -29,7 +30,7 @@ def predict_quantiles(model: CatBoostRegressor, X: pd.DataFrame | Pool) -> np.nd
 def _weighted_mean(x: np.ndarray, w: np.ndarray | None) -> float:
     if w is None:
         return float(np.mean(x))
-    
+
     w = np.asarray(w, dtype=float).ravel()
     w = w / np.sum(w)
     return float(np.sum(w * x))
@@ -37,7 +38,7 @@ def _weighted_mean(x: np.ndarray, w: np.ndarray | None) -> float:
 def _pinball(
         y: np.ndarray, q: np.ndarray, alpha: float, w: np.ndarray | None = None
         ) -> float:
-        
+
     e = y - q
     return _weighted_mean(np.maximum(alpha * e, (alpha - 1.0) * e), w)
 

@@ -1,8 +1,16 @@
-from sklearn.pipeline import Pipeline
 from sklearn.decomposition import PCA
-from stock_market_analytics.modeling.pipeline_components.configs import modeling_config as modeling_config
-from stock_market_analytics.modeling.pipeline_components.parameters import cb_model_params, pca_params
-from stock_market_analytics.modeling.pipeline_components.predictors import CatBoostMultiQuantileModel
+from sklearn.pipeline import Pipeline
+
+from stock_market_analytics.modeling.pipeline_components.configs import (
+    modeling_config as modeling_config,
+)
+from stock_market_analytics.modeling.pipeline_components.parameters import (
+    cb_model_params,
+    pca_params,
+)
+from stock_market_analytics.modeling.pipeline_components.predictors import (
+    CatBoostMultiQuantileModel,
+)
 
 QUANTILES = modeling_config["QUANTILES"]
 

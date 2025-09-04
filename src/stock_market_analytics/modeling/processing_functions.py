@@ -1,7 +1,8 @@
+from typing import Any
+
 import pandas as pd
 
 from stock_market_analytics.modeling.pipeline_components.configs import modeling_config
-from typing import Any
 
 TARGET = modeling_config["TARGET"]
 
