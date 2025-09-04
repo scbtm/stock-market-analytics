@@ -1,24 +1,23 @@
 import os
 from pathlib import Path
-from typing import Any
-
+from stock_market_analytics.modeling.pipeline_components.parameters import cb_fit_params
+from stock_market_analytics.modeling.pipeline_factory import get_pipeline
 import pandas as pd
-from catboost import CatBoostRegressor, Pool
-from hamilton import driver
 from metaflow import FlowSpec, step
 
 import wandb
 from stock_market_analytics.modeling import processing_functions
-from stock_market_analytics.modeling.modeling_config import modeling_config
+from stock_market_analytics.modeling.pipeline_components.configs import modeling_config
+from stock_market_analytics.modeling.pipeline_components.parameters import cb_model_params, cb_fit_params
 from stock_market_analytics.modeling.modeling_functions import (
     eval_multiquantile,
-    predict_quantiles,
     conformal_adjustment,
     apply_conformal,
     mean_width,
     pinball_loss,
     coverage
 )
+from stock_market_analytics.modeling.pipeline_components.predictors import CatBoostMultiQuantileModel
 from wandb.integration.metaflow import wandb_log
 
 wandb.login(key=os.environ.get("WANDB_KEY"))
@@ -27,7 +26,6 @@ wandb.login(key=os.environ.get("WANDB_KEY"))
 FEATURES_FILE = modeling_config["FEATURES_FILE"]
 QUANTILES = modeling_config["QUANTILES"]
 FEATURES = modeling_config["FEATURES"]
-PARAMS = modeling_config["PARAMS"]
 TARGET_COVERAGE = modeling_config["TARGET_COVERAGE"]
 LOW, MID, HIGH = modeling_config["LOW"], modeling_config["MID"], modeling_config["HIGH"]
 TARGET = modeling_config["TARGET"]
@@ -59,8 +57,10 @@ class TrainingFlow(FlowSpec):
         Load input data for model training.
         """
         base_data_path = Path(os.environ["BASE_DATA_PATH"])
-        self.data = self._load_features(base_data_path)
-        self.next(self.training_model)
+        data = self._load_features(base_data_path)
+        #only for training we remove the nulls
+        self.data = data.dropna()
+        self.next(self.model_training)
 
     def _load_features(self, base_data_path: Path) -> pd.DataFrame:
         """Load and validate stock data from Parquet file."""
@@ -78,38 +78,42 @@ class TrainingFlow(FlowSpec):
             raise ValueError(f"Error loading features file: {str(e)}") from e
         
     @step
-    def training_model(self) -> None:
-        data = self._prepare_data()
+    def model_training(self) -> None:
+        print("🧹 Preparing Feature Data...")
 
-        pools = data["pools"]
-        dataset = data["dataset"]
+        # Prepare data
+        data = self.data
 
-        params = PARAMS.copy()
+        data = processing_functions.split_data(df=data, time_span=TIME_SPAN)
 
-        early_stopping_rounds = params["num_boost_round"] * 0.08
-
-        # Initialize Catboost regressor with current hyperparameters
-        model = CatBoostRegressor(**params)
-        
-        # Train the regressor
-        model.fit(
-            pools["train_pool"],
-            eval_set=pools["validation_pool"],
-            early_stopping_rounds=early_stopping_rounds,
-            verbose=int(early_stopping_rounds/2),
-            plot=False,
+        modeling_datasets = processing_functions.modeling_datasets(
+            split_data=data,
+            features=FEATURES,
+            target=TARGET,
         )
 
-        final_iterations = model.best_iteration_
+        xtrain, ytrain = modeling_datasets["xtrain"], modeling_datasets["ytrain"]
+        xval, yval = modeling_datasets["xval"], modeling_datasets["yval"]
 
-        params.update({
-            "num_boost_round": final_iterations,
-        })
+        print("🤖 Training CatBoost Quantile Regressor...")
 
-        # Evaluation metrics
-        preds = model.predict(pools["validation_pool"])
-        preds = predict_quantiles(model, pools["validation_pool"])
-        ytrue = pools["validation_pool"].get_label()
+        pipeline = get_pipeline()
+        pca = pipeline.named_steps["pca"]  # type: ignore
+        pca.fit(xtrain)  # Fit PCA on training data only
+        _xval = pca.transform(xval)
+        # Fit the pipeline with early stopping parameters. This need to be passed to the pipeline as follows:
+        fit_params = cb_fit_params.copy()
+        fit_params["eval_set"] = (_xval, yval)
+        fit_params = {f"quantile_regressor__{k}": v for k, v in fit_params.items()}
+        pipeline.fit(xtrain, ytrain, **fit_params)
+
+        quantile_regressor: CatBoostMultiQuantileModel = pipeline.named_steps["quantile_regressor"]  # type: ignore
+        final_iterations = quantile_regressor.best_iteration_
+        print(f"🏁 Training completed in {final_iterations} iterations.")
+
+        # Evaluation metrics using new wrapper
+        preds = pipeline.predict(xval)
+        ytrue = yval.values
 
         loss, metrics = eval_multiquantile(
                 y_true=ytrue, q_pred=preds, quantiles=QUANTILES, interval=(0.1, 0.9)
@@ -119,31 +123,15 @@ class TrainingFlow(FlowSpec):
         calibration_info = {
             "loss": loss,
             "metrics": metrics,
-            "params": params,
-            "model": model,
-            "dataset": dataset,
+            "params": cb_model_params,
+            "model": quantile_regressor,
+            "modeling_datasets": modeling_datasets,
+            "pipeline": pipeline
         }
 
         self.calibration_info = calibration_info
         self.next(self.calibrate_model)
 
-    def _prepare_data(self) -> tuple[dict[str, Pool], dict[str, Any]]:
-        """
-        Clean and preprocess the loaded feature data.
-        """
-        print("🧹 Preparing Feature Data...")
-        # We only need to drop null values, since the features are already clean
-        df = self.data.dropna()
-
-        dr = driver.Builder().with_modules(processing_functions).build()
-
-        data = dr.execute(
-            final_vars=["pools", "metadata", "dataset"],
-            inputs={"df": df, "time_span": TIME_SPAN, "features": FEATURES},
-        )
-
-        return data
-    
     @step
     @wandb_log(
         datasets=True,
@@ -158,24 +146,19 @@ class TrainingFlow(FlowSpec):
 
         calibration_info = self.calibration_info
 
-        model = calibration_info["model"]
+        # model = calibration_info["model"]
+        model = calibration_info["pipeline"]
 
         params = calibration_info["params"]
 
-        dataset = calibration_info["dataset"]
+        modeling_datasets = calibration_info["modeling_datasets"]
 
-        dcal = dataset[dataset['fold'] == 'validation'].copy()
-        dtest = dataset[dataset['fold'] == 'test'].copy()
+        xcal, ycal = modeling_datasets["xval"], modeling_datasets["yval"].values
+        xtest, ytest = modeling_datasets["xtest"], modeling_datasets["ytest"].values
 
-        xcal = dcal[FEATURES]
-        xtest = dtest[FEATURES]
-
-        ycal = dcal[TARGET].values
-        ytest = dtest[TARGET].values
-
-        # Predict quantiles
-        q_cal = predict_quantiles(model, xcal)
-        q_tst = predict_quantiles(model, xtest)
+        # Predict quantiles using sklearn wrapper
+        q_cal = model.predict(xcal)
+        q_tst = model.predict(xtest)
 
         # Pull specific lower/upper for CQR (here 10% / 90%)
         qlo_cal, qhi_cal = q_cal[:, LOW], q_cal[:, HIGH]
@@ -203,9 +186,9 @@ class TrainingFlow(FlowSpec):
 
         # Log results to wandb
         self.params = params
-        self.model = model
+        self.pipeline = model
         self.training_metrics = training_metrics
-        self.development_data = dataset
+        self.development_data = processing_functions.metadata(split_data=self.data)
         self.final_metrics = final_metrics
 
         self.next(self.end)

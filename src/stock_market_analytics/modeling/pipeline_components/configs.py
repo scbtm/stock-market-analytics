@@ -29,25 +29,6 @@ FEATURES = [
     "day_of_year",
 ]
 
-# Starter params. Some of the params might be modified during training flow.
-alpha_str = ",".join([str(q) for q in QUANTILES])
-        
-PARAMS = {
-    "loss_function": f"MultiQuantile:alpha={alpha_str}",
-    "num_boost_round": 1_000,
-    "learning_rate": 0.01,
-    "depth": 3,
-    "l2_leaf_reg": 10,
-    "grow_policy": "SymmetricTree",
-    "border_count": 8,
-    "bootstrap_type": "Bayesian",
-    "bagging_temperature": 0.8,
-    # "min_data_in_leaf": 200,
-    # "colsample_bylevel": 0.7,
-    "random_state": 1,
-    "verbose": False,
-}
-
 TARGET_COVERAGE = 0.8
 LOW, MID, HIGH = 0, 2, 4  # indices in Q for 0.10, 0.50, 0.90
 
@@ -63,7 +44,6 @@ modeling_config = {
     "N_TRIALS": N_TRIALS,
     "STUDY_NAME": STUDY_NAME,
     "FEATURES": FEATURES,
-    "PARAMS": PARAMS,
     "TARGET_COVERAGE": TARGET_COVERAGE,
     "LOW": LOW,
     "MID": MID,
