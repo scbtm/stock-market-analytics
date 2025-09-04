@@ -9,14 +9,7 @@ import wandb
 from stock_market_analytics.modeling import processing_functions
 from stock_market_analytics.modeling.pipeline_components.configs import modeling_config
 from stock_market_analytics.modeling.pipeline_components.parameters import cb_model_params, cb_fit_params
-from stock_market_analytics.modeling.modeling_functions import (
-    eval_multiquantile,
-    conformal_adjustment,
-    apply_conformal,
-    mean_width,
-    pinball_loss,
-    coverage
-)
+from stock_market_analytics.modeling.pipeline_components.evaluators import ModelEvaluator, EvaluationReport
 from stock_market_analytics.modeling.pipeline_components.predictors import CatBoostMultiQuantileModel
 from wandb.integration.metaflow import wandb_log
 
@@ -27,7 +20,6 @@ FEATURES_FILE = modeling_config["FEATURES_FILE"]
 QUANTILES = modeling_config["QUANTILES"]
 FEATURES = modeling_config["FEATURES"]
 TARGET_COVERAGE = modeling_config["TARGET_COVERAGE"]
-LOW, MID, HIGH = modeling_config["LOW"], modeling_config["MID"], modeling_config["HIGH"]
 TARGET = modeling_config["TARGET"]
 TIME_SPAN = modeling_config["TIME_SPAN"]  # days
 
@@ -113,12 +105,8 @@ class TrainingFlow(FlowSpec):
         print(f"🏁 Training completed in {final_iterations} iterations.")
 
         # Evaluation metrics. The pipeline is now fitted with the best model and ready for inference. (although calibration is pending)
-        preds = pipeline.predict(xval)
-        ytrue = yval.values
-
-        loss, metrics = eval_multiquantile(
-                y_true=ytrue, q_pred=preds, quantiles=QUANTILES, interval=(0.1, 0.9)
-            )
+        evaluator = ModelEvaluator()
+        loss, metrics = evaluator.evaluate_training(pipeline, xval, yval)
 
         # Pass information to next step
         calibration_info = {
@@ -154,33 +142,17 @@ class TrainingFlow(FlowSpec):
 
         modeling_datasets = calibration_info["modeling_datasets"]
 
-        xcal, ycal = modeling_datasets["xval"], modeling_datasets["yval"].values
-        xtest, ytest = modeling_datasets["xtest"], modeling_datasets["ytest"].values
+        xcal, ycal = modeling_datasets["xval"], modeling_datasets["yval"]
+        xtest, ytest = modeling_datasets["xtest"], modeling_datasets["ytest"]
 
-        # Predict quantiles using sklearn wrapper
-        q_cal = model.predict(xcal)
-        q_tst = model.predict(xtest)
-
-        # Pull specific lower/upper for CQR (here 10% / 90%)
-        qlo_cal, qhi_cal = q_cal[:, LOW], q_cal[:, HIGH]
-        qlo_tst, qhi_tst = q_tst[:, LOW], q_tst[:, HIGH]
-
-        # Conformal adjustment on calibration slice
-        qconf = conformal_adjustment(qlo_cal, qhi_cal, ycal, alpha=1 - TARGET_COVERAGE)
-
-        # Apply to test
-        lo_cqr, hi_cqr = apply_conformal(qlo_tst, qhi_tst, qconf)
-        med_pred = q_tst[:, MID]
-
-        # Metrics
-        cov   = coverage(ytest, lo_cqr, hi_cqr)
-        width = mean_width(lo_cqr, hi_cqr)
-        pin50 = pinball_loss(ytest, med_pred, alpha=0.5)
+        # Perform conformal evaluation using the evaluator
+        evaluator = ModelEvaluator()
+        conformal_results = evaluator.evaluate_conformal(model, xcal, ycal, xtest, ytest)
 
         final_metrics = {
-            "coverage": [cov],
-            "mean_width": [width],
-            "pinball_loss": [pin50],
+            "coverage": [conformal_results["coverage"]],
+            "mean_width": [conformal_results["mean_width"]],
+            "pinball_loss": [conformal_results["pinball_loss"]],
         }
 
         training_metrics = calibration_info["metrics"]
@@ -202,8 +174,13 @@ class TrainingFlow(FlowSpec):
         perform any final actions or cleanup.
         """
         print("✅ Training Flow completed.")
-        print(f"🛠️ Training Metrics: {self.training_metrics}")
-        print(f"📊 Evaluation Metrics: {self.final_metrics}")
+        
+        # Display formatted evaluation results
+        evaluation_results = {
+            "training": {"metrics": self.training_metrics},
+            "conformal": self.final_metrics
+        }
+        EvaluationReport.print_summary(evaluation_results)
 
 if __name__ == "__main__":
     TrainingFlow()
