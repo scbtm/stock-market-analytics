@@ -325,7 +325,7 @@ class TrainingFlow(FlowSpec):
             
             # Performance comparison
             best_baseline_loss = min([data['loss'] for data in self.baseline_results.values()])
-            catboost_loss_val = self.training_metrics.get('pinball_loss', float('inf'))
+            catboost_loss_val = self.training_metrics.get('pinball_mean', float('inf'))
             
             if catboost_loss_val < best_baseline_loss:
                 improvement = ((best_baseline_loss - catboost_loss_val) / best_baseline_loss + epsilon) * 100
