@@ -154,7 +154,12 @@ class ModelEvaluator:
     def full_evaluation(
         self,
         pipeline: Pipeline,
-        modeling_datasets: dict[str, Any],
+        X_val: pd.DataFrame | np.ndarray,
+        y_val: pd.DataFrame | np.ndarray,
+        X_cal: pd.DataFrame | np.ndarray,
+        y_cal: pd.DataFrame | np.ndarray,
+        X_test: pd.DataFrame | np.ndarray,
+        y_test: pd.DataFrame | np.ndarray,
         return_predictions: bool = False
     ) -> dict[str, Any]:
         """
@@ -169,13 +174,9 @@ class ModelEvaluator:
             Complete evaluation results dictionary
         """
         # Training evaluation
-        X_val, y_val = modeling_datasets["xval"], modeling_datasets["yval"]
         training_loss, training_metrics = self.evaluate_training(pipeline, X_val, y_val)
         
         # Conformal evaluation
-        X_cal, y_cal = modeling_datasets["xval"], modeling_datasets["yval"] 
-        X_test, y_test = modeling_datasets["xtest"], modeling_datasets["ytest"]
-        
         conformal_results = self.evaluate_conformal(
             pipeline, X_cal, y_cal, X_test, y_test
         )
