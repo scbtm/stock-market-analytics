@@ -16,7 +16,6 @@ from stock_market_analytics.modeling.pipeline_components.evaluators import (
 )
 from stock_market_analytics.modeling.pipeline_components.parameters import (
     cb_fit_params,
-    cb_model_params,
 )
 from stock_market_analytics.modeling.pipeline_components.pipeline_factory import (
     get_pipeline,
@@ -103,10 +102,10 @@ class TrainingFlow(FlowSpec):
         print("🤖 Training CatBoost Quantile Regressor...")
 
         pipeline = get_pipeline()
-        pca = pipeline.named_steps["pca"]  # type: ignore
-        pca.fit(xtrain)  # Fit PCA on training data only.
+        transformations = pipeline[0]  # type: ignore
+        transformations.fit(xtrain)  # Fit PCA on training data only.
         # This is needed as there is no gracefull way to handle this in the pipeline if we want to use early stopping.
-        _xval = pca.transform(xval)
+        _xval = transformations.transform(xval)
         # Fit the pipeline with early stopping parameters. This need to be passed to the pipeline as follows:
         fit_params = cb_fit_params.copy()
         fit_params["eval_set"] = (_xval, yval)
@@ -125,11 +124,11 @@ class TrainingFlow(FlowSpec):
         calibration_info = {
             "loss": loss,
             "metrics": metrics,
-            "params": cb_model_params,
-            "model": quantile_regressor,
             "modeling_datasets": modeling_datasets,
             "pipeline": pipeline
         }
+
+        self.data = data  # Pass the original data with fold column for logging
 
         self.calibration_info = calibration_info
         self.next(self.calibrate_model)
@@ -147,11 +146,10 @@ class TrainingFlow(FlowSpec):
         """
 
         calibration_info = self.calibration_info
+        data = self.data
 
         # model = calibration_info["model"]
-        model = calibration_info["pipeline"]
-
-        params = calibration_info["params"]
+        pipeline = calibration_info["pipeline"]
 
         modeling_datasets = calibration_info["modeling_datasets"]
 
@@ -161,7 +159,7 @@ class TrainingFlow(FlowSpec):
         # Create calibrated pipeline for production use
         print("🔧 Creating calibrated pipeline...")
         calibrated_pipeline, calibrator = PipelineWithCalibrator.create_calibrated_pipeline(
-            base_pipeline=model,
+            base_pipeline=pipeline,
             X_cal=xcal,
             y_cal=ycal
         )
@@ -173,7 +171,7 @@ class TrainingFlow(FlowSpec):
         calibrated_bounds = calibrated_pipeline.predict(xtest)
 
         # Get median predictions for pinball loss
-        raw_predictions = model.predict(xtest)
+        raw_predictions = pipeline.predict(xtest)
         mid_idx = modeling_config["MID"]
         median_predictions = raw_predictions[:, mid_idx]
 
@@ -193,12 +191,9 @@ class TrainingFlow(FlowSpec):
         training_metrics = calibration_info["metrics"]
 
         # Log results to wandb
-        self.params = params
-        self.pipeline = model
         self.calibrated_pipeline = calibrated_pipeline  # Production-ready pipeline with conformal calibration
-        self.calibrator = calibrator  # Standalone calibrator for analysis
         self.training_metrics = training_metrics
-        self.development_data = processing_functions.metadata(split_data=self.data)
+        self.data = data
         self.final_metrics = final_metrics
 
         self.next(self.end)
@@ -222,7 +217,7 @@ class TrainingFlow(FlowSpec):
         # Display calibrator information
         print("\n🔧 Calibrated Pipeline Summary:")
         print(f"Pipeline steps: {[step[0] for step in self.calibrated_pipeline.steps]}")
-        calibrator_info = self.calibrator.get_conformal_info()
+        calibrator_info = self.calibrated_pipeline[-1].get_conformal_info()
         print(f"Conformal quantile: {calibrator_info['conformal_quantile']:.4f}")
         print(f"Target coverage: {calibrator_info['target_coverage']:.1%}")
 

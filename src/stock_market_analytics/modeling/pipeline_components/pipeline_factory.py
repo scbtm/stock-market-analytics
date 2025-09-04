@@ -1,4 +1,5 @@
 from sklearn.decomposition import PCA
+from sklearn.preprocessing import StandardScaler
 from sklearn.pipeline import Pipeline
 
 from stock_market_analytics.modeling.pipeline_components.configs import (
@@ -19,10 +20,14 @@ quantile_regressor = CatBoostMultiQuantileModel(
             **cb_model_params
         )
 
-pca = PCA(**pca_params)
+transformation_pipeline = Pipeline(steps=[
+    ("scaler", StandardScaler()),
+    ("pca", PCA(**pca_params))
+])
+
 
 pipeline = Pipeline(steps=[
-    ("pca", pca),
+    ("transformations", transformation_pipeline),
     ("quantile_regressor", quantile_regressor)
 ])
 
