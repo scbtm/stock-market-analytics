@@ -12,6 +12,9 @@ from stock_market_analytics.modeling.pipeline_components.parameters import (
 from stock_market_analytics.modeling.pipeline_components.predictors import (
     CatBoostMultiQuantileModel,
 )
+from stock_market_analytics.modeling.pipeline_components.naive_baselines import (
+    HistoricalQuantileBaseline,
+)
 
 QUANTILES = modeling_config["QUANTILES"]
 
@@ -31,16 +34,65 @@ pipeline = Pipeline(steps=[
     ("quantile_regressor", quantile_regressor)
 ])
 
-# This function gets modified according to the intended pipeline to be used. The one defined above is an example.
-def get_pipeline() -> Pipeline:
+# Baseline pipelines for comparison
+baseline_pipelines = {
+    "historical": Pipeline(steps=[
+        ("transformations", transformation_pipeline),
+        ("quantile_regressor", HistoricalQuantileBaseline(quantiles=QUANTILES))
+    ]),
+    
+    # "linear": Pipeline(steps=[
+    #     ("transformations", transformation_pipeline),
+    #     ("quantile_regressor", LinearQuantileBaseline(quantiles=QUANTILES))
+    # ]),
+    
+    # "ensemble": Pipeline(steps=[
+    #     ("transformations", transformation_pipeline),
+    #     ("quantile_regressor", NaiveQuantileEnsemble(quantiles=QUANTILES))
+    # ])
+}
+
+
+def get_pipeline(model_type: str = "catboost") -> Pipeline:
     """
     Returns the machine learning pipeline for stock market analytics.
 
-    The pipeline consists of:
-    1. PCA for dimensionality reduction.
-    2. CatBoost MultiQuantile Regressor for quantile regression.
+    Parameters
+    ----------
+    model_type : str, default="catboost"
+        Type of model to use. Options:
+        - "catboost": CatBoost MultiQuantile Regressor (default)
+        - "historical": Historical quantile baseline  
+        - "linear": Linear quantile regression baseline
+        - "ensemble": Ensemble of naive baselines
 
-    Returns:
-        Pipeline: A scikit-learn Pipeline object.
+    Returns
+    -------
+    Pipeline: A scikit-learn Pipeline object.
     """
-    return pipeline
+    if model_type == "catboost":
+        return pipeline
+    elif model_type in baseline_pipelines:
+        return baseline_pipelines[model_type]
+    else:
+        raise ValueError(f"Unknown model_type: {model_type}. "
+                        f"Available options: 'catboost', 'historical', 'linear', 'ensemble'")
+
+
+def get_baseline_pipeline(baseline_type: str = "ensemble") -> Pipeline:
+    """
+    Returns a baseline pipeline for comparison with the main CatBoost model.
+    
+    Parameters
+    ----------
+    baseline_type : str, default="ensemble"
+        Type of baseline. Options: "historical", "linear", "ensemble"
+        
+    Returns
+    -------
+    Pipeline: A baseline pipeline for comparison.
+    """
+    if baseline_type not in baseline_pipelines:
+        raise ValueError(f"Unknown baseline_type: {baseline_type}. "
+                        f"Available options: {list(baseline_pipelines.keys())}")
+    return baseline_pipelines[baseline_type]
