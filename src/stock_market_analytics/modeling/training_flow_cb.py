@@ -18,8 +18,8 @@ from stock_market_analytics.modeling.pipeline_components.parameters import (
     cb_fit_params,
 )
 from stock_market_analytics.modeling.pipeline_components.pipeline_factory import (
-    get_pipeline,
     get_baseline_pipeline,
+    get_pipeline,
 )
 from stock_market_analytics.modeling.pipeline_components.predictors import (
     CatBoostMultiQuantileModel,
@@ -140,42 +140,42 @@ class TrainingFlow(FlowSpec):
         Train baseline quantile regressors for comparison.
         """
         print("📊 Training baseline quantile regressors...")
-        
+
         calibration_info = self.calibration_info
         modeling_datasets = calibration_info["modeling_datasets"]
-        
+
         xtrain, ytrain = modeling_datasets["xtrain"], modeling_datasets["ytrain"]
         xval, yval = modeling_datasets["xval"], modeling_datasets["yval"]
-        
+
         evaluator = ModelEvaluator()
-        
+
         # Train and evaluate different baselines
         baselines = ["historical"]
         baseline_results = {}
-        
+
         for baseline_name in baselines:
             print(f"🔄 Training {baseline_name} baseline...")
-            
+
             # Get baseline pipeline
             baseline_pipeline = get_baseline_pipeline(baseline_name)
-            
+
             # Train the baseline (no early stopping needed for simple baselines)
             baseline_pipeline.fit(xtrain, ytrain)
-            
+
             # Evaluate on validation set
             loss, metrics = evaluator.evaluate_training(baseline_pipeline, xval, yval)
-            
+
             baseline_results[baseline_name] = {
                 "pipeline": baseline_pipeline,
                 "loss": loss,
                 "metrics": metrics
             }
-            
+
             print(f"✅ {baseline_name} baseline - Loss: {loss:.4f}")
-        
+
         # Store baseline results
         self.baseline_results = baseline_results
-        
+
         # Continue to join step
         self.next(self.join_results)
 
@@ -244,38 +244,38 @@ class TrainingFlow(FlowSpec):
 
         self.next(self.join_results)
 
-    @step 
+    @step
     def join_results(self, inputs: list) -> None:
         """
         Join results from CatBoost training and baseline training branches.
         """
         print("🔀 Joining training results...")
-        
+
         # Merge artifacts from both branches
         # Find the calibrate_model input (has calibrated_pipeline)
         # Find the baseline_training input (has baseline_results)
-        
+
         catboost_input = None
         baseline_input = None
-        
+
         for inp in inputs:
             if hasattr(inp, 'calibrated_pipeline'):
                 catboost_input = inp
             if hasattr(inp, 'baseline_results'):
                 baseline_input = inp
-        
+
         if catboost_input is None or baseline_input is None:
             raise ValueError("Could not find both CatBoost and baseline results")
-        
-        # Copy all CatBoost results  
+
+        # Copy all CatBoost results
         self.calibrated_pipeline = catboost_input.calibrated_pipeline
         self.training_metrics = catboost_input.training_metrics
         self.data = catboost_input.data
         self.final_metrics = catboost_input.final_metrics
-        
+
         # Add baseline results
         self.baseline_results = baseline_input.baseline_results
-        
+
         print("✅ Results joined successfully")
         self.next(self.end)
 
@@ -305,16 +305,16 @@ class TrainingFlow(FlowSpec):
 
         # Display baseline comparison
         if hasattr(self, 'baseline_results'):
-            print(f"\n📊 Baseline Model Comparison:")
+            print("\n📊 Baseline Model Comparison:")
             print(f"{'Model':<15} {'Validation Loss':<15} {'Coverage':<12} {'Width':<12}")
             print(f"{'-'*15} {'-'*15} {'-'*12} {'-'*12}")
-            
+
             # CatBoost results
             catboost_loss = self.training_metrics.get('pinball_mean', 0.0)
-            catboost_coverage = self.training_metrics.get('coverage_10_90', 0.0) 
+            catboost_coverage = self.training_metrics.get('coverage_10_90', 0.0)
             catboost_width = self.training_metrics.get('mean_width', 0.0)
             print(f"{'CatBoost':<15} {catboost_loss:<15.4f} {catboost_coverage:<12.3f} {catboost_width:<12.3f}")
-            
+
             # Baseline results
             for baseline_name, baseline_data in self.baseline_results.items():
                 loss = baseline_data['loss']
@@ -322,11 +322,11 @@ class TrainingFlow(FlowSpec):
                 coverage = metrics.get('coverage_10_90', 0.0)
                 width = metrics.get('mean_width', 0.0)
                 print(f"{baseline_name.capitalize():<15} {loss:<15.4f} {coverage:<12.3f} {width:<12.3f}")
-            
+
             # Performance comparison
             best_baseline_loss = min([data['loss'] for data in self.baseline_results.values()])
             catboost_loss_val = self.training_metrics.get('pinball_mean', float('inf'))
-            
+
             if catboost_loss_val < best_baseline_loss:
                 improvement = ((best_baseline_loss - catboost_loss_val) / best_baseline_loss + epsilon) * 100
                 print(f"\n🎯 CatBoost improvement over best baseline: {improvement:.1f}%")
@@ -335,11 +335,11 @@ class TrainingFlow(FlowSpec):
                 print(f"\n⚠️  CatBoost performance vs best baseline: -{degradation:.1f}%")
 
         # Usage example
-        print(f"\n💡 Usage:")
-        print(f"# For raw quantile predictions: Use main pipeline")
-        print(f"# For conformal bounds: self.calibrated_pipeline.predict(X)")
-        print(f"# For baseline comparisons: self.baseline_results[<baseline_name>]['pipeline'].predict(X)")
-        print(f"# Returns: array of shape (n_samples, 2) for conformal, (n_samples, n_quantiles) for others")
+        print("\n💡 Usage:")
+        print("# For raw quantile predictions: Use main pipeline")
+        print("# For conformal bounds: self.calibrated_pipeline.predict(X)")
+        print("# For baseline comparisons: self.baseline_results[<baseline_name>]['pipeline'].predict(X)")
+        print("# Returns: array of shape (n_samples, 2) for conformal, (n_samples, n_quantiles) for others")
 
 if __name__ == "__main__":
     TrainingFlow()

@@ -1,9 +1,12 @@
 from sklearn.decomposition import PCA
-from sklearn.preprocessing import StandardScaler
 from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import StandardScaler
 
 from stock_market_analytics.modeling.pipeline_components.configs import (
     modeling_config as modeling_config,
+)
+from stock_market_analytics.modeling.pipeline_components.naive_baselines import (
+    HistoricalQuantileBaseline,
 )
 from stock_market_analytics.modeling.pipeline_components.parameters import (
     cb_model_params,
@@ -11,9 +14,6 @@ from stock_market_analytics.modeling.pipeline_components.parameters import (
 )
 from stock_market_analytics.modeling.pipeline_components.predictors import (
     CatBoostMultiQuantileModel,
-)
-from stock_market_analytics.modeling.pipeline_components.naive_baselines import (
-    HistoricalQuantileBaseline,
 )
 
 QUANTILES = modeling_config["QUANTILES"]
@@ -40,12 +40,12 @@ baseline_pipelines = {
         ("transformations", transformation_pipeline),
         ("quantile_regressor", HistoricalQuantileBaseline(quantiles=QUANTILES))
     ]),
-    
+
     # "linear": Pipeline(steps=[
     #     ("transformations", transformation_pipeline),
     #     ("quantile_regressor", LinearQuantileBaseline(quantiles=QUANTILES))
     # ]),
-    
+
     # "ensemble": Pipeline(steps=[
     #     ("transformations", transformation_pipeline),
     #     ("quantile_regressor", NaiveQuantileEnsemble(quantiles=QUANTILES))

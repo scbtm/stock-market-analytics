@@ -475,4 +475,11 @@ def dff(
     merged = log_returns_d.join(y_log_returns, on=["date", "symbol"], how="inner")
     merged = merged.join(dollar_volume, on=["date", "symbol"], how="inner")
 
-    return merged.sort(["symbol", "date"])
+    output_df = merged.with_columns([
+        pl.col("date").dt.year().alias("year"),
+        pl.col("date").dt.month().alias("month"),
+        pl.col("date").dt.weekday().alias("day_of_week"),
+        pl.col("date").dt.ordinal_day().alias("day_of_year"),
+    ])
+
+    return output_df.sort(["symbol", "date"])

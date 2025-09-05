@@ -1,309 +1,204 @@
 import polars as pl
 
+# This file demonstrates how to structure a Polars feature engineering pipeline
+# to be compatible with the Hamilton framework. The key idea is to have functions
+# define and return Polars *expressions* (pl.Expr) rather than fully computed
+# DataFrames. A final function then gathers all expressions and executes them
+# in a single, optimized `with_columns` call.
 
-def amihud_illiq(dff: pl.DataFrame, short_window: int = 21) -> pl.DataFrame:
+# This pattern gives you the best of both worlds:
+# 1. Hamilton's DAG visualization and modularity.
+# 2. Polars' high-performance query optimization.
+# 3. Easy unit testing for each individual feature expression.
+
+# --- Base Expresions (Inputs to nodes in the DAG) ---
+
+def long_vol_ewm_expr(long_window: int) -> pl.Expr:
+    """Expression for long-term exponentially weighted volatility."""
+    return pl.col('log_returns_d').ewm_std(span=long_window).over("symbol").alias("long_vol_ewm").shift(1)
+
+def short_vol_ewm_expr(short_window: int) -> pl.Expr:
+    """Expression for short-term exponentially weighted volatility."""
+    return pl.col('log_returns_d').ewm_std(span=short_window).over("symbol").alias("short_vol_ewm").shift(1)
+
+def long_momentum_expr(long_window: int) -> pl.Expr:
+    """Expression for long-term rolling sum of returns (momentum)."""
+    return pl.col('log_returns_d').rolling_sum(long_window).over("symbol").alias("long_momentum").shift(1)
+
+def short_momentum_expr(short_window: int) -> pl.Expr:
+    """Expression for short-term rolling sum of returns (momentum)."""
+    return pl.col('log_returns_d').rolling_sum(short_window).over("symbol").alias("short_momentum").shift(1)
+
+def long_short_momentum_expr(long_momentum_expr: pl.Expr, short_momentum_expr: pl.Expr) -> pl.Expr:
+    """Expression for standard long-short momentum."""
+    return (long_momentum_expr - short_momentum_expr).alias("long_short_momentum")
+
+def ichimoku_components_expr(
+        ichimoku_p1: int,
+        ichimoku_p2: int,
+        ichimoku_p3: int
+        ) -> dict[str, pl.Expr]:
     """
-    Amihud illiquidity: E[ |r| / $volume ] over a rolling window. Higher => less liquid.
+    Expressions for Ichimoku Cloud-based features.
+    Returns a dictionary of expressions for various Ichimoku-based features.
     """
-    return dff.with_columns(
-        (pl.col("log_returns_d").abs() / (pl.col("dollar_volume") + 1e-12))
-        .rolling_mean(short_window).over("symbol").shift(1)
-        .alias("amihud_illiq")
+    # Standard Ichimoku periods
+    p1, p2, p3 = ichimoku_p1, ichimoku_p2, ichimoku_p3
+
+    high = pl.col("high")
+    low = pl.col("low")
+    close = pl.col("close")
+
+    # Component Lines
+    tenkan_sen = ((high.rolling_max(p1) + low.rolling_min(p1)) / 2).over("symbol")
+    kijun_sen = ((high.rolling_max(p2) + low.rolling_min(p2)) / 2).over("symbol")
+    senkou_span_a = ((tenkan_sen + kijun_sen) / 2)
+    senkou_span_b = ((high.rolling_max(p3) + low.rolling_min(p3)) / 2).shift(p2).over("symbol")
+
+    # --- Feature Engineering from Ichimoku Components ---
+
+    # 1. Price position relative to the cloud (trend)
+    price_vs_cloud_top = (close - pl.max_horizontal(senkou_span_a, senkou_span_b)).alias("price_vs_cloud_top")
+
+    # 2. Tenkan-Kijun cross (momentum signal)
+    tenkan_kijun_cross = (tenkan_sen - kijun_sen).alias("tenkan_kijun_cross")
+
+    # 3. Cloud thickness (volatility / strength of support/resistance)
+    cloud_thickness = (senkou_span_a - senkou_span_b).abs().alias("cloud_thickness")
+
+    return {
+        "price_vs_cloud_top": price_vs_cloud_top,
+        "tenkan_kijun_cross": tenkan_kijun_cross,
+        "cloud_thickness": cloud_thickness
+        }
+
+# input_expressions = [
+#     long_vol_ewm_expr,
+#     short_vol_ewm_expr,
+#     long_momentum_expr,
+#     short_momentum_expr,
+#     ichimoku_components_expr
+# ]
+# --- Feature Expressions (Nodes in the DAG) ---
+
+def turnover_proxy_expr(long_window: int) -> pl.Expr:
+    """Expression for turnover proxy over a rolling window."""
+    avg_dollar_volume = pl.col("dollar_volume").rolling_mean(long_window).over("symbol")
+    turnover_proxy = (pl.col("dollar_volume") / (avg_dollar_volume + 1e-12)).alias("turnover_proxy")
+    return turnover_proxy.shift(1)
+
+def drawdown_expr(long_window: int) -> pl.Expr:
+    """Expression for maximum drawdown over a rolling window."""
+    rolling_max = pl.col("close").rolling_max(long_window).over("symbol")
+    drawdown = (pl.col("close") / rolling_max - 1).alias("max_drawdown")
+    return drawdown.shift(1)
+
+def price_vs_cloud_top_expr(ichimoku_components_expr: dict[str, pl.Expr]) -> pl.Expr:
+    """Price position relative to the cloud (trend)"""
+    return ichimoku_components_expr["price_vs_cloud_top"].shift(1)
+
+def tenkan_kijun_cross_expr(ichimoku_components_expr: dict[str, pl.Expr]) -> pl.Expr:
+    """Tenkan-Kijun cross (momentum signal)"""
+    return ichimoku_components_expr["tenkan_kijun_cross"].shift(1)
+
+def cloud_thickness_expr(ichimoku_components_expr: dict[str, pl.Expr]) -> pl.Expr:
+    """Cloud thickness (volatility / strength of support/resistance)"""
+    return ichimoku_components_expr["cloud_thickness"].shift(1)
+
+def risk_adj_momentum_ewm_expr(long_short_momentum_expr: pl.Expr, long_vol_ewm_expr: pl.Expr) -> pl.Expr:
+    """Expression for volatility-adjusted momentum."""
+    return (long_short_momentum_expr / (long_vol_ewm_expr + 1e-12)).alias("risk_adj_momentum_ewm")
+
+def cmo_expr(long_window: int) -> pl.Expr:
+    """Expression for the Chande Momentum Oscillator (CMO)."""
+    log_ret = pl.col("log_returns_d")
+
+    sum_up = pl.when(log_ret > 0).then(log_ret).otherwise(0.0).rolling_sum(long_window).over("symbol")
+    sum_down = pl.when(log_ret < 0).then(-log_ret).otherwise(0.0).rolling_sum(long_window).over("symbol")
+
+    cmo = ((sum_up - sum_down) / (sum_up + sum_down + 1e-12) * 100).alias("cmo")
+
+    return cmo.shift(1)
+
+def rsi_ewm_expr(long_window: int) -> pl.Expr:
+    """Expression for an exponentially weighted RSI."""
+    up = pl.when(pl.col('log_returns_d') > 0).then(pl.col('log_returns_d')).otherwise(0.0)
+    dn = pl.when(pl.col('log_returns_d') < 0).then(-pl.col('log_returns_d')).otherwise(0.0)
+    rs = up.ewm_mean(span=long_window).over("symbol") / (
+        dn.ewm_mean(span=long_window).over("symbol") + 1e-12
     )
+    return (100 - 100 / (1 + rs)).shift(1).alias("rsi_ewm")
 
-def kurtosis_long_short(
-    dff: pl.DataFrame, long_window: int, short_window: int
-) -> pl.DataFrame:
-    """
-    Compute the kurtosis of log returns for each symbol over specified rolling windows.
-    """
-    return dff.with_columns(
-        [
-            pl.col("log_returns_d")
-            .rolling_kurtosis(window_size=long_window)
-            .over("symbol")
-            .alias("long_kurtosis"),
-            pl.col("log_returns_d")
-            .rolling_kurtosis(window_size=short_window)
-            .over("symbol")
-            .alias("short_kurtosis"),
-        ]
-    )
+def sortino_ratio_expr(short_window: int) -> pl.Expr:
+    """Expression for the Sortino ratio over a rolling window."""
+    log_ret = pl.col("log_returns_d")
+    downside_returns = pl.when(log_ret < 0).then(log_ret).otherwise(0.0)
+    downside_std = downside_returns.rolling_std(short_window).over("symbol")
+    mean_return = log_ret.rolling_mean(short_window).over("symbol")
+    sortino_ratio = (mean_return / (downside_std + 1e-12)).alias("sortino_ratio")
+    return sortino_ratio.shift(1)
 
+def volatility_of_volatility_expr(long_window: int) -> pl.Expr:
+    """Expression for the volatility of volatility."""
+    return pl.col("short_vol_ewm").rolling_std(long_window).over("symbol").alias("volatility_of_volatility")
 
-def skewness_long_short(
-    dff: pl.DataFrame, long_window: int, short_window: int
-) -> pl.DataFrame:
-    """
-    Compute the skewness of log returns for each symbol over specified rolling windows.
-    """
-    return dff.with_columns(
-        [
-            pl.col("log_returns_d")
-            .rolling_skew(window_size=long_window)
-            .over("symbol")
-            .alias("long_skewness"),
-            pl.col("log_returns_d")
-            .rolling_skew(window_size=short_window)
-            .over("symbol")
-            .alias("short_skewness"),
-        ]
-    )
+def autocorr_sq_returns_expr(short_window: int, horizon: int) -> pl.Expr:
+    """Expression for the autocorrelation of squared returns."""
+    squared_returns = pl.col("log_returns_d").pow(2)
+    autocorr_sq_returns = (
+        pl.rolling_corr(a = squared_returns, b = squared_returns.shift(horizon), window_size=short_window)
+        .over("symbol")
+        .alias("autocorr_sq_returns")
+        )
+    return autocorr_sq_returns.shift(1)
 
+# dag_nodes [
+#     turnover_proxy_expr,
+#     drawdown_expr,
+#     price_vs_cloud_top_expr,
+#     tenkan_kijun_cross_expr,
+#     cloud_thickness_expr,
+#     risk_adj_momentum_ewm_expr,
+#     cmo_expr,
+#     rsi_ewm_expr,
+#     sortino_ratio_expr,
+#     volatility_of_volatility_expr,
+#     autocorr_sq_returns_expr
+#     ]
 
-def mean_long_short(
-    dff: pl.DataFrame, long_window: int, short_window: int
-) -> pl.DataFrame:
-    """
-    Compute the mean of log returns for each symbol over specified rolling windows.
-    """
-    return dff.with_columns(
-        [
-            pl.col("log_returns_d")
-            .rolling_mean(window_size=long_window)
-            .over("symbol")
-            .alias("long_mean"),
-            pl.col("log_returns_d")
-            .rolling_mean(window_size=short_window)
-            .over("symbol")
-            .alias("short_mean"),
-        ]
-    )
-
-
-def mean_diff(mean_long_short: pl.DataFrame) -> pl.DataFrame:
-    """
-    Compute the difference between long and short mean log returns.
-    """
-    return mean_long_short.with_columns(
-        [(pl.col("long_mean") - pl.col("short_mean")).alias("mean_diff")]
-    )
-
-
-def absolute_diff(
-    dff: pl.DataFrame, long_window: int, short_window: int
-) -> pl.DataFrame:
-    """
-    Compute the rolling difference between long and short mean log returns.
-    """
-    return dff.with_columns(
-        [
-            (
-                pl.col("log_returns_d")
-                .rolling_max(window_size=long_window)
-                .over("symbol")
-                - pl.col("log_returns_d")
-                .rolling_min(window_size=long_window)
-                .over("symbol")
-            ).alias("long_diff"),
-            (
-                pl.col("log_returns_d")
-                .rolling_max(window_size=short_window)
-                .over("symbol")
-                - pl.col("log_returns_d")
-                .rolling_min(window_size=short_window)
-                .over("symbol")
-            ).alias("short_diff"),
-        ]
-    )
-
-def rsi(dff: pl.DataFrame, long_window: int) -> pl.DataFrame:
-    """
-    RSI computed from rolling mean of up/down returns (no EMAs to keep it simple).
-    """
-    r = pl.col("log_returns_d")
-    up = pl.when(r > 0).then(r).otherwise(0.0)
-    dn = pl.when(r < 0).then(-r).otherwise(0.0)
-
-    rs = up.rolling_mean(long_window).over("symbol") / (dn.rolling_mean(long_window).over("symbol") + 1e-12)
-    return dff.with_columns([
-        (100 - 100 / (1 + rs)).shift(1).alias("rsi"),
-    ])
-
-
-def long_short_momentum(
-    dff: pl.DataFrame, long_window: int = 252, short_window: int = 21
-) -> pl.DataFrame:
-    """
-    Compute the long-short momentum for each symbol.
-    """
-    return dff.with_columns(
-        (
-            pl.col("log_returns_d").rolling_sum(long_window).over("symbol")
-            - pl.col("log_returns_d").rolling_sum(short_window).over("symbol")
-        ).alias("long_short_momentum")
-    )
-
-def long_vol(dff: pl.DataFrame, long_window: int) -> pl.DataFrame:
-    """
-    Compute the long volatility for each symbol.
-    """
-
-    return dff.with_columns(
-        (pl.col("log_returns_d").rolling_std(window_size=long_window).over("symbol")).alias("long_vol")
-    )
-
-def risk_adj_momentum(long_vol: pl.DataFrame, long_short_momentum: pl.DataFrame) -> pl.DataFrame:
-    lsm = long_short_momentum.select(pl.col("symbol"), pl.col("date"), pl.col("long_short_momentum"))
-    lsv = long_vol.select(pl.col("symbol"), pl.col("date"), pl.col("long_vol"))
-    aux_df = lsm.join(lsv, on=["symbol", "date"])
-    aux_df = aux_df.sort(["symbol", "date"])
-    return aux_df.with_columns(
-        (pl.col("long_short_momentum") / pl.col("long_vol")).alias("risk_adj_momentum")
-    )
-
-
-def pct_from_high_long(dff: pl.DataFrame, long_window: int) -> pl.DataFrame:
-    """
-    Compute the percentage distance from the highest close price over a long window.
-    """
-    return dff.with_columns(
-        (
-            pl.col("close") / pl.col("close").rolling_max(long_window).over("symbol")
-            - 1
-        ).alias("pct_from_high_long")
-    )
-
-
-def pct_from_high_short(dff: pl.DataFrame, short_window: int) -> pl.DataFrame:
-    """
-    Compute the percentage distance from the highest close price over a short window.
-    """
-    return dff.with_columns(
-        (
-            pl.col("close") / pl.col("close").rolling_max(short_window).over("symbol")
-            - 1
-        ).alias("pct_from_high_short")
-    )
-
-def iqr_vol(dff: pl.DataFrame, short_window: int = 21) -> pl.DataFrame:
-    """
-    Rolling inter-quantile range (q90 - q10) of returns as a robust vol measure.
-    """
-    return dff.with_columns(
-        (pl.col("log_returns_d").rolling_quantile(quantile = 0.90, interpolation = "nearest", window_size = short_window).over("symbol") -
-         pl.col("log_returns_d").rolling_quantile(quantile = 0.10, interpolation = "nearest", window_size = short_window).over("symbol"))
-        .alias("iqr_vol")
-    )
-
-
-def chronological_features(dff: pl.DataFrame) -> pl.DataFrame:
-    """
-    Extract chronological features from the date column.
-    """
-    return dff.with_columns(
-        pl.col("date").dt.year().alias("year"),
-        pl.col("date").dt.month().alias("month"),
-        pl.col("date").dt.weekday().alias("day_of_week"),
-        pl.col("date").dt.ordinal_day().alias("day_of_year"),
-    )
-
+# --- Final Aggregator Function (Terminal Node in the DAG) ---
 
 def df_features(
     dff: pl.DataFrame,
-    amihud_illiq: pl.DataFrame,
-    kurtosis_long_short: pl.DataFrame,
-    skewness_long_short: pl.DataFrame,
-    mean_long_short: pl.DataFrame,
-    mean_diff: pl.DataFrame,
-    absolute_diff: pl.DataFrame,
-    rsi: pl.DataFrame,
-    long_short_momentum: pl.DataFrame,
-    risk_adj_momentum: pl.DataFrame,
-    pct_from_high_long: pl.DataFrame,
-    pct_from_high_short: pl.DataFrame,
-    iqr_vol: pl.DataFrame,
-    chronological_features: pl.DataFrame,
+    turnover_proxy_expr: pl.Expr,
+    drawdown_expr: pl.Expr,
+    price_vs_cloud_top_expr: pl.Expr,
+    tenkan_kijun_cross_expr: pl.Expr,
+    cloud_thickness_expr: pl.Expr,
+    risk_adj_momentum_ewm_expr: pl.Expr,
+    cmo_expr: pl.Expr,
+    rsi_ewm_expr: pl.Expr,
+    sortino_ratio_expr: pl.Expr,
+    autocorr_sq_returns_expr: pl.Expr
 ) -> pl.DataFrame:
     """
-    Combine all statistical features into a single DataFrame.
+    Collects all feature expressions from the Hamilton DAG and executes them
+    in a single, optimized Polars query.
     """
-    dff = dff.select(
-        pl.col("symbol"),
-        pl.col("date"),
-        pl.col("y_log_returns"),
-        pl.col("dollar_volume"),
-    )
+    # Create a list of all the expressions to compute
+    all_feature_expressions = [
+        turnover_proxy_expr,
+        drawdown_expr,
+        risk_adj_momentum_ewm_expr,
+        cmo_expr,
+        rsi_ewm_expr,
+        autocorr_sq_returns_expr,
+        sortino_ratio_expr,
+        price_vs_cloud_top_expr,
+        tenkan_kijun_cross_expr,
+        cloud_thickness_expr,
+    ]
 
-    amihud_illiq = amihud_illiq.select(
-        pl.col("symbol"),
-        pl.col("date"),
-        pl.col("amihud_illiq"),
-    )
-
-    kurtosis_long_short = kurtosis_long_short.select(
-        pl.col("symbol"),
-        pl.col("date"),
-        pl.col("long_kurtosis"),
-        pl.col("short_kurtosis"),
-    )
-    skewness_long_short = skewness_long_short.select(
-        pl.col("symbol"),
-        pl.col("date"),
-        pl.col("long_skewness"),
-        pl.col("short_skewness"),
-    )
-    mean_long_short = mean_long_short.select(
-        pl.col("symbol"), pl.col("date"), pl.col("long_mean"), pl.col("short_mean")
-    )
-    mean_diff = mean_diff.select(pl.col("symbol"), pl.col("date"), pl.col("mean_diff"))
-
-    absolute_diff = absolute_diff.select(
-        pl.col("symbol"), pl.col("date"), pl.col("long_diff"), pl.col("short_diff")
-    )
-
-    rsi = rsi.select(
-        pl.col("symbol"), pl.col("date"), pl.col("rsi")
-    )
-
-    long_short_momentum = long_short_momentum.select(
-        pl.col("symbol"), pl.col("date"), pl.col("long_short_momentum")
-    )
-
-    risk_adj_momentum = risk_adj_momentum.select(
-        pl.col("symbol"), pl.col("date"), pl.col("risk_adj_momentum")
-    )
-
-    pct_from_high_long = pct_from_high_long.select(
-        pl.col("symbol"), pl.col("date"), pl.col("pct_from_high_long")
-    )
-
-    pct_from_high_short = pct_from_high_short.select(
-        pl.col("symbol"), pl.col("date"), pl.col("pct_from_high_short")
-    )
-
-    iqr_vol = iqr_vol.select(
-        pl.col("symbol"), pl.col("date"), pl.col("iqr_vol")
-    )
-
-    chronological_features = chronological_features.select(
-        pl.col("symbol"),
-        pl.col("date"),
-        pl.col("year"),
-        pl.col("month"),
-        pl.col("day_of_week"),
-        pl.col("day_of_year"),
-    )
-
-    final_df = (
-        dff.join(amihud_illiq, on=["symbol", "date"], how="inner")
-        .join(kurtosis_long_short, on=["symbol", "date"], how="inner")
-        .join(skewness_long_short, on=["symbol", "date"], how="inner")
-        .join(mean_long_short, on=["symbol", "date"], how="inner")
-        .join(mean_diff, on=["symbol", "date"], how="inner")
-        .join(absolute_diff, on=["symbol", "date"], how="inner")
-        .join(rsi, on=["symbol", "date"], how="inner")
-        .join(long_short_momentum, on=["symbol", "date"], how="inner")
-        .join(risk_adj_momentum, on=["symbol", "date"], how="inner")
-        .join(pct_from_high_long, on=["symbol", "date"], how="inner")
-        .join(pct_from_high_short, on=["symbol", "date"], how="inner")
-        .join(iqr_vol, on=["symbol", "date"], how="inner")
-        .join(chronological_features, on=["symbol", "date"], how="inner")
-    )
-
-    final_df = final_df.with_columns(
-       (pl.col("long_kurtosis") - pl.col("short_kurtosis")).alias("kurtosis_diff"),
-       (pl.col("long_skewness") - pl.col("short_skewness")).alias("skewness_diff")
-    )
+    final_df = dff.with_columns(all_feature_expressions)
 
     return final_df
