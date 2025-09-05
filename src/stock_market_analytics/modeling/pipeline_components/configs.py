@@ -32,7 +32,7 @@ STUDY_NAME = "catboost_hyperparameter_optimization_dummy"
 FEATURES = [
     "amihud_illiq",
     "turnover_proxy",
-    "max_drawdown",
+    # "max_drawdown",
     "risk_adj_momentum_ewm",
     "cmo",
     "rsi_ewm",

@@ -91,18 +91,19 @@ def amihud_illiq_expr(short_window: int) -> pl.Expr:
     )
     return illiq.shift(1).alias("amihud_illiq")
 
-
 def turnover_proxy_expr(long_window: int) -> pl.Expr:
     """Expression for turnover proxy over a rolling window."""
     avg_dollar_volume = pl.col("dollar_volume").rolling_mean(long_window).over("symbol")
     turnover_proxy = (pl.col("dollar_volume") / (avg_dollar_volume + 1e-12))
     return turnover_proxy.shift(1).alias("turnover_proxy")
 
-def drawdown_expr(long_window: int) -> pl.Expr:
-    """Expression for maximum drawdown over a rolling window."""
-    rolling_max = pl.col("close").rolling_max(long_window).over("symbol")
-    drawdown = (pl.col("close") / rolling_max - 1)
-    return drawdown.shift(1).alias("max_drawdown")
+# def drawdown_expr(long_window: int) -> pl.Expr:
+#     """Expression for maximum drawdown over a rolling window."""
+#     large_float = 1e6
+#     # Prevent extreme negative values
+#     rolling_max = pl.col("close").rolling_max(long_window).over("symbol")
+#     drawdown = (pl.col("close") / rolling_max - 1).clip(lower_bound=-large_float, upper_bound=large_float)
+#     return drawdown.shift(1).alias("max_drawdown")
 
 def price_vs_cloud_top_expr(ichimoku_components_expr: dict[str, pl.Expr]) -> pl.Expr:
     """Price position relative to the cloud (trend)"""
@@ -177,21 +178,25 @@ def pct_from_high_long_expr(long_window: int) -> pl.Expr:
     """
     Compute the percentage distance from the highest close price over a long window.
     """
+    large_float = 1e6
+    lower_bound = -large_float  # Prevent extreme negative values
     pct_fh = (
         pl.col("close") / pl.col("close").rolling_max(long_window).over("symbol")
         - 1
     )
-    return pct_fh.shift(1).alias("pct_from_high_long")
+    return pct_fh.clip(lower_bound=lower_bound, upper_bound=1).shift(1).alias("pct_from_high_long")
 
 def pct_from_high_short_expr(short_window: int) -> pl.Expr:
     """
     Compute the percentage distance from the highest close price over a short window.
     """
+    large_float = 1e6
+    lower_bound = -large_float  # Prevent extreme negative values
     pct_fh = (
         pl.col("close") / pl.col("close").rolling_max(short_window).over("symbol")
         - 1
     )
-    return pct_fh.shift(1).alias("pct_from_high_short")
+    return pct_fh.clip(lower_bound=lower_bound, upper_bound=1).shift(1).alias("pct_from_high_short")
 
 # dag_nodes [
 #     amihud_illiq_expr,
@@ -217,7 +222,7 @@ def df_features(
     dff: pl.DataFrame,
     amihud_illiq_expr: pl.Expr,
     turnover_proxy_expr: pl.Expr,
-    drawdown_expr: pl.Expr,
+    # drawdown_expr: pl.Expr,
     price_vs_cloud_top_expr: pl.Expr,
     tenkan_kijun_cross_expr: pl.Expr,
     cloud_thickness_expr: pl.Expr,
@@ -239,7 +244,7 @@ def df_features(
     all_feature_expressions = [
         amihud_illiq_expr,
         turnover_proxy_expr,
-        drawdown_expr,
+        # drawdown_expr,
         risk_adj_momentum_ewm_expr,
         cmo_expr,
         rsi_ewm_expr,
