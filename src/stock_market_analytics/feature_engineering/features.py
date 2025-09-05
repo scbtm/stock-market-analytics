@@ -152,9 +152,9 @@ def sortino_ratio_expr(short_window: int) -> pl.Expr:
     return sortino_ratio.shift(1).alias("sortino_ratio")
 
 # Input expression is already shifted by 1 in the above function
-def volatility_of_volatility_expr(long_window: int) -> pl.Expr:
-    """Expression for the volatility of volatility."""
-    return pl.col("short_vol_ewm").rolling_std(long_window).over("symbol").alias("volatility_of_volatility")
+# def volatility_of_volatility_expr(long_window: int) -> pl.Expr:
+#     """Expression for the volatility of volatility."""
+#     return pl.col("short_vol_ewm").rolling_std(long_window).over("symbol").alias("volatility_of_volatility")
 
 def autocorr_sq_returns_expr(short_window: int, horizon: int) -> pl.Expr:
     """Expression for the autocorrelation of squared returns."""

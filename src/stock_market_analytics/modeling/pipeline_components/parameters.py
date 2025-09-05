@@ -11,7 +11,7 @@ cb_model_params = {
     "loss_function": f"MultiQuantile:alpha={alpha_str}",
     "num_boost_round": 1_000,
     "learning_rate": 0.01,
-    "depth": 3,
+    "depth": 4,
     "l2_leaf_reg": 10,
     "grow_policy": "SymmetricTree",
     "border_count": 8,
