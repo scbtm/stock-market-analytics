@@ -7,9 +7,8 @@ from hamilton import driver
 from metaflow import FlowSpec, step
 
 from stock_market_analytics.feature_engineering import (
-    features,
+    feature_pipeline,
     features_config,
-    preprocessing,
 )
 
 # Constants
@@ -66,7 +65,7 @@ class FeatureBuildingFlow(FlowSpec):
         """
         Build features from raw stock market data.
         """
-        dr = driver.Builder().with_modules(features, preprocessing).build()
+        dr = driver.Builder().with_modules(feature_pipeline).build()
 
         results = dr.execute(
             final_vars=["df_features"],

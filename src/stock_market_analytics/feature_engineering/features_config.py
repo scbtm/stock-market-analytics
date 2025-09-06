@@ -8,6 +8,17 @@ features_config["long_window"] = horizon * 4
 features_config["horizon"] = horizon
 features_config["past_horizon"] = past_horizon
 
-features_config["ichimoku_p1"] = horizon
-features_config["ichimoku_p2"] = horizon * 2
-features_config["ichimoku_p3"] = horizon * 4
+# features_config["ichimoku_p1"] = horizon
+# features_config["ichimoku_p2"] = horizon * 2
+# features_config["ichimoku_p3"] = horizon * 4
+
+ichimoku_params = {
+    "p1": horizon,
+    "p2": horizon * 2,
+    "p3": horizon * 4,
+    "atr_n": 14,
+    "slope_window": 5,
+    "persist_window": 20
+}
+
+features_config["ichimoku_params"] = ichimoku_params
