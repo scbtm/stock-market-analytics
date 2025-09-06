@@ -122,73 +122,53 @@ The Hamilton framework automatically generates this dependency graph showing the
 
 The feature engineering pipeline uses Hamilton for functional, dependency-driven feature computation. To add a new feature, follow these steps:
 
-#### Step 1: Add Feature Function to `features.py`
+#### Step 1: Add Feature Function to `feature_pipeline.py`
 
-Create a new function in `src/stock_market_analytics/feature_engineering/features.py`:
+The feature engineering uses Hamilton framework with functions grouped by category. Add your new feature to the appropriate section in `src/stock_market_analytics/feature_engineering/feature_pipeline.py`.
+
+For example, to add a new volatility feature, add it to the `volatility_features_df` function:
 
 ```python
-def my_new_feature(dff: pl.DataFrame, window_size: int) -> pl.DataFrame:
+def volatility_features_df(
+    interpolated_df: pl.DataFrame,
+    short_window: int,
+    long_window: int,
+) -> pl.DataFrame:
     """
-    Description of your new feature.
+    Compute volatility features using Hamilton framework.
     """
-    return dff.with_columns(
-        # Your feature computation here - use .over("symbol") to ensure no data leakage
+    return interpolated_df.with_columns([
+        # ... existing features ...
+        
+        # Your new feature - use .over("symbol") to ensure no data leakage
         pl.col("log_returns_d")
-        .rolling_std(window_size)
+        .rolling_std(short_window)
         .over("symbol")
-        .shift(1)  # Optional: shift by 1 to avoid lookahead bias (depends on time of inference; current setup avoids lookahead without shifting, but it can be added to be extra-safe)
-        .alias("my_new_feature")
-    )
+        .alias("my_new_volatility_feature"),
+    ])
 ```
 
 **Key Requirements**:
-- Function name becomes the Hamilton node name (must be unique)
-- Return a DataFrame with `symbol`, `date`, and your new feature columns
+- Add features to the appropriate category function (volatility, momentum, statistical, etc.)
+- Return a DataFrame with all features in that category
 - Use `.over("symbol")` for all rolling operations to prevent cross-symbol contamination
-- Use `.shift(1)` to avoid lookahead bias in predictions
 - Include proper type hints
+- Features are automatically included in `df_features` through Hamilton's dependency resolution
 
-#### Step 2: Update `df_features` Function
+#### Step 2: Update Feature Selection in Configuration
 
-Add your new feature as a parameter and include it in the join chain:
-
-```python
-def df_features(
-    dff: pl.DataFrame,
-    # ... existing parameters ...
-    my_new_feature: pl.DataFrame,  # Add your feature here
-) -> pl.DataFrame:
-    # ... existing code ...
-    
-    # Select only the columns you need
-    my_new_feature = my_new_feature.select(
-        pl.col("symbol"), 
-        pl.col("date"), 
-        pl.col("my_new_feature")
-    )
-    
-    # Add to the join chain
-    final_df = (
-        dff.join(amihud_illiq, on=["symbol", "date"], how="inner")
-        # ... existing joins ...
-        .join(my_new_feature, on=["symbol", "date"], how="inner")  # Add here
-    )
-```
-
-#### Step 3: Add Feature to Model Configuration
-
-Add your new feature to the `FEATURES` list in the centralized configuration. You can either edit `src/stock_market_analytics/config.py` directly or override it via the modeling configuration:
+The `df_features` function automatically joins all feature categories. To include your new feature in the model, add it to the features list in `config.py`:
 
 ```python
 # In src/stock_market_analytics/config.py
 class ModelingConfig(BaseModel):
     features: list[str] = Field(default=[
         # ... existing features ...
-        "my_new_feature",  # Add your feature name here
+        "my_new_volatility_feature",  # Add your feature name here
     ])
 ```
 
-#### Step 4: Update Feature Parameters (Optional)
+#### Step 3: Update Feature Parameters (Optional)
 
 If your feature needs configurable parameters, add them to the centralized configuration in `src/stock_market_analytics/config.py`:
 
@@ -199,14 +179,14 @@ class FeatureEngineeringConfig(BaseModel):
 
 #### Why This Structure?
 
-This multi-step process exists for good reasons:
+This approach provides several advantages:
 
-1. **Hamilton Requirements**: Function names must be unique and represent outputs
-2. **Data Integrity**: DataFrame returns preserve symbol/date relationships
+1. **Modular Design**: Features are grouped by category (volatility, momentum, etc.)
+2. **Hamilton Integration**: Automatic dependency resolution and parallel execution
 3. **No Data Leakage**: `.over("symbol")` ensures computations stay within symbols
-4. **Explicit Dependencies**: Hamilton automatically tracks which features depend on which inputs
-5. **Testing**: Each feature function can be tested independently
-6. **Performance**: Hamilton optimizes the computation graph and enables parallel execution
+4. **Type Safety**: Hamilton validates all function signatures and return types
+5. **Performance**: Optimized computation graph with efficient data joins
+6. **Maintainability**: Clear separation of concerns and easy feature management
 
 #### Hamilton Visualization
 
@@ -265,7 +245,7 @@ This command:
 
 **Location**: `src/stock_market_analytics/modeling/`
 
-The modeling module implements production-ready machine learning workflows for quantile regression on stock market data, featuring automated hyperparameter optimization and conformal prediction.
+The modeling module implements production-ready machine learning workflows for quantile regression on stock market data, featuring pre-configured hyperparameters and conformal prediction.
 
 #### Framework & Architecture
 
@@ -274,18 +254,14 @@ The module leverages several enterprise-grade frameworks:
 1. **CatBoost**: Gradient boosting framework optimized for:
    - **Multi-quantile regression**: Predicts uncertainty intervals (10th, 25th, 50th, 75th, 90th percentiles)
    - **Large datasets**: Efficient training on time series with hundreds of symbols
+   - **Pre-configured parameters**: Optimized hyperparameters based on extensive testing
 
-2. **Optuna**: Hyperparameter optimization with:
-   - **TPE Sampler**: Tree-structured Parzen Estimator for intelligent search
-   - **Multi-objective**: Optimizes pinball loss while preventing overfitting
-   - **Parallel execution**: Concurrent trial evaluation for faster tuning
-
-3. **Conformal Prediction**: Provides statistical guarantees:
+2. **Conformal Prediction**: Provides statistical guarantees:
    - **Coverage guarantee**: Ensures prediction intervals contain true values with specified probability
    - **Distribution-free**: Works regardless of underlying data distribution
    - **Post-hoc calibration**: Adjusts model predictions without retraining
 
-4. **W&B Integration**: Experiment tracking and monitoring:
+3. **W&B Integration**: Experiment tracking and monitoring:
    - **Automated logging**: Tracks hyperparameters, metrics, and artifacts
    - **Model versioning**: Maintains history of model iterations
    - **Visualization**: Rich dashboards for experiment comparison
@@ -315,10 +291,10 @@ class ModelingConfig(BaseModel):
 
 ##### Model Training (`train-model`)
 
-Trains CatBoost model with pre-configured hyperparameters:
+Trains CatBoost model with optimized pre-configured hyperparameters:
 
 ```bash
-# Train model with configured hyperparameters  
+# Train model with pre-configured hyperparameters  
 export BASE_DATA_PATH="/path/to/your/data"
 export WANDB_KEY="your_wandb_key"
 uv run train-model run
@@ -379,7 +355,6 @@ Evaluation Metrics: {
 
 **Dependencies**:
 - **CatBoost**: Multi-quantile regression model
-- **Optuna**: Hyperparameter optimization
 - **Hamilton**: Data processing pipeline  
 - **W&B**: Experiment tracking and visualization
 - **Metaflow**: Pipeline orchestration and versioning
@@ -502,7 +477,7 @@ Note: building the features for 500 tickers on 4 cores takes about 30 seconds th
 # Set up Weights & Biases for experiment tracking
 export WANDB_KEY="your_wandb_api_key"
 
-# Train the model
+# Train the model with pre-configured parameters
 uv run train-model run
 ```
 Note: Model training completes in under 5 minutes and includes conformal calibration for uncertainty quantification.
@@ -550,7 +525,7 @@ The feature pipeline will:
 export BASE_DATA_PATH="/path/to/your/data"
 export WANDB_KEY="your_wandb_api_key"
 
-# Train model with pre-configured hyperparameters
+# Train model with pre-configured parameters
 uv run train-model run
 ```
 
