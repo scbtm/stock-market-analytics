@@ -43,7 +43,7 @@ scalers = ColumnTransformer(
     ],
     remainder="drop",  # Drop any features not specified in the transformers
     verbose_feature_names_out="{feature_name}__scaled",
-    verbose=True
+    verbose=False
 ).set_output(transform="pandas")
 
 dimensionality_reducers = ColumnTransformer(
@@ -53,7 +53,7 @@ dimensionality_reducers = ColumnTransformer(
     ],
     remainder="drop",  # Drop any features not specified in the transformers
     verbose_feature_names_out=True,
-    verbose=True
+    verbose=False
 ).set_output(transform="pandas")
 
 transformation_pipeline = Pipeline(steps=[
