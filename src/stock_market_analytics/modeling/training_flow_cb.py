@@ -103,10 +103,13 @@ class TrainingFlow(FlowSpec):
         print("🤖 Training CatBoost Quantile Regressor...")
 
         pipeline = get_pipeline()
-        transformations = pipeline[0]  # type: ignore
-        transformations.fit(xtrain)  # Fit PCA on training data only.
-        # This is needed as there is no gracefull way to handle this in the pipeline if we want to use early stopping.
-        _xval = transformations.transform(xval)
+        if pipeline.named_steps.get("transformations") is not None:
+            transformations = pipeline[0]  # type: ignore
+            transformations.fit(xtrain)  # Fit PCA on training data only.
+            # This is needed as there is no gracefull way to handle this in the pipeline if we want to use early stopping.
+            _xval = transformations.transform(xval)
+        else:
+            _xval = xval
         # Fit the pipeline with early stopping parameters. This need to be passed to the pipeline as follows:
         fit_params = cb_fit_params.copy()
         fit_params["eval_set"] = (_xval, yval)
@@ -117,8 +120,14 @@ class TrainingFlow(FlowSpec):
         final_iterations = quantile_regressor.best_iteration_
         #print feature names and importances
         feature_importance_df = quantile_regressor._model.get_feature_importance(prettified=True)
-        indx_to_col_name = {f"{i}": col for i, col in enumerate(transformations.get_feature_names_out())}
-        feature_importance_df['Feature Id'] = feature_importance_df['Feature Id'].map(indx_to_col_name) # type: ignore
+
+        if pipeline.named_steps.get("transformations") is not None:
+            indx_to_col_name = {f"{i}": col for i, col in enumerate(transformations.get_feature_names_out())}
+            feature_importance_df['Feature Id'] = feature_importance_df['Feature Id'].map(indx_to_col_name) # type: ignore
+        else:
+            indx_to_col_name = {f"{i}": col for i, col in enumerate(xtrain.columns)}
+            feature_importance_df['Feature Id'] = feature_importance_df['Feature Id'].map(indx_to_col_name) # type: ignore
+
         feature_importance_df = feature_importance_df.rename(columns={"Feature Id": "Feature", "Importances": "Importance"})
         feature_importance_df = feature_importance_df.sort_values(by="Importance", ascending=False).reset_index(drop=True)
         print("🏆 Feature Importances:")
