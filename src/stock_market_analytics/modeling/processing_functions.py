@@ -2,9 +2,9 @@ from typing import Any
 
 import pandas as pd
 
-from stock_market_analytics.modeling.pipeline_components.configs import modeling_config
+from stock_market_analytics.config import config
 
-TARGET = modeling_config["TARGET"]
+TARGET = config.modeling.target
 
 
 def split_data(

@@ -65,7 +65,7 @@ class FeatureBuildingFlow(FlowSpec):
         """
         Build features from raw stock market data.
         """
-        past_horizon = features_config.get("past_horizon", 0)
+        past_horizon = features_config.past_horizon
         if past_horizon > 0:
             max_lookback_date = self.data["date"].max() - pd.Timedelta(
                 days=past_horizon
@@ -78,7 +78,7 @@ class FeatureBuildingFlow(FlowSpec):
 
         results = dr.execute(
             final_vars=["df_features"],
-            inputs={"raw_df": data, **features_config},
+            inputs={"raw_df": data, **features_config.as_dict},
         )
 
         data = results["df_features"]

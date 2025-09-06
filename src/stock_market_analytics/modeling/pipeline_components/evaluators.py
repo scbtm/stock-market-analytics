@@ -4,7 +4,7 @@ import numpy as np
 import pandas as pd
 from sklearn.pipeline import Pipeline
 
-from stock_market_analytics.modeling.pipeline_components.configs import modeling_config
+from stock_market_analytics.config import config
 from stock_market_analytics.modeling.pipeline_components.functions import (
     coverage,
     eval_multiquantile,
@@ -34,9 +34,9 @@ class ModelEvaluator:
         interval: tuple[float, float] = None,
         target_coverage: float = None,
     ):
-        self.quantiles = quantiles or modeling_config["QUANTILES"]
-        self.interval = interval or (modeling_config["LOW"], modeling_config["HIGH"])
-        self.target_coverage = target_coverage or modeling_config["TARGET_COVERAGE"]
+        self.quantiles = quantiles or config.modeling.quantiles
+        self.interval = interval or (config.modeling.quantile_indices["LOW"], config.modeling.quantile_indices["HIGH"])
+        self.target_coverage = target_coverage or config.modeling.target_coverage
 
         # Convert interval indices to alpha values if needed
         if isinstance(self.interval[0], int):
@@ -209,7 +209,7 @@ class ModelEvaluator:
 
         # Get median predictions for pinball loss (from raw pipeline)
         raw_predictions = raw_pipeline.predict(X_test)
-        mid_idx = modeling_config["MID"]
+        mid_idx = config.modeling.quantile_indices["MID"]
         median_predictions = (
             raw_predictions[:, mid_idx] if raw_predictions.ndim > 1 else None
         )

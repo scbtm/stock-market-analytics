@@ -10,19 +10,19 @@ from stock_market_analytics.data_collection import (
     ContinuousTimelineProcessor,
     YFinanceCollector,
 )
-from stock_market_analytics.data_collection.data_config import data_config
+from stock_market_analytics.config import config
 
 # Constants
-TICKERS_FILE = data_config["TICKERS_FILE"]
-METADATA_FILE = data_config["METADATA_FILE"]
-STOCKS_HISTORY_FILE = data_config["STOCKS_HISTORY_FILE"]
+TICKERS_FILE = config.data_collection.tickers_file
+METADATA_FILE = config.data_collection.metadata_file
+STOCKS_HISTORY_FILE = config.data_collection.stocks_history_file
 
 # Required columns for tickers file
-REQUIRED_TICKER_COLUMNS = data_config["REQUIRED_TICKER_COLUMNS"]
-TICKER_COLUMN_MAPPING = data_config["TICKER_COLUMN_MAPPING"]
+REQUIRED_TICKER_COLUMNS = config.data_collection.required_ticker_columns
+TICKER_COLUMN_MAPPING = config.data_collection.ticker_column_mapping
 
 # Required columns for metadata file
-REQUIRED_METADATA_COLUMNS = data_config["REQUIRED_METADATA_COLUMNS"]
+REQUIRED_METADATA_COLUMNS = config.data_collection.required_metadata_columns
 
 
 class BatchCollectionFlow(FlowSpec):

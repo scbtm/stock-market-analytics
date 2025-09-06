@@ -3,7 +3,7 @@ import pandas as pd
 from sklearn.base import BaseEstimator, TransformerMixin
 from sklearn.pipeline import Pipeline
 
-from stock_market_analytics.modeling.pipeline_components.configs import modeling_config
+from stock_market_analytics.config import config
 from stock_market_analytics.modeling.pipeline_components.functions import (
     apply_conformal,
     conformal_adjustment,
@@ -34,17 +34,17 @@ class ConformalCalibrator(BaseEstimator, TransformerMixin):
 
         Args:
             target_coverage: Target coverage level (e.g., 0.8 for 80% coverage)
-                           Defaults to modeling_config["TARGET_COVERAGE"]
+                           Defaults to config.modeling.target_coverage
             low_idx: Index of the lower quantile in model predictions
-                    Defaults to modeling_config["LOW"]
+                    Defaults to config.modeling.quantile_indices["LOW"]
             high_idx: Index of the upper quantile in model predictions
-                     Defaults to modeling_config["HIGH"]
+                     Defaults to config.modeling.quantile_indices["HIGH"]
             store_calibration_data: Whether to store calibration predictions
                                   Set to False to save memory if not needed
         """
-        self.target_coverage = target_coverage or modeling_config["TARGET_COVERAGE"]
-        self.low_idx = low_idx if low_idx is not None else modeling_config["LOW"]
-        self.high_idx = high_idx if high_idx is not None else modeling_config["HIGH"]
+        self.target_coverage = target_coverage or config.modeling.target_coverage
+        self.low_idx = low_idx if low_idx is not None else config.modeling.quantile_indices["LOW"]
+        self.high_idx = high_idx if high_idx is not None else config.modeling.quantile_indices["HIGH"]
         self.store_calibration_data = store_calibration_data
 
         # Will be set during fit()

@@ -65,6 +65,17 @@ class FeatureEngineeringConfig(BaseModel):
             "persist_window": self.horizon * 3,
         }
 
+    @property
+    def as_dict(self) -> dict[str, Any]:
+        """Get all feature engineering configuration as a dictionary for easy unpacking."""
+        return {
+            "horizon": self.horizon,
+            "past_horizon": self.past_horizon,
+            "short_window": self.short_window,
+            "long_window": self.long_window,
+            "ichimoku_params": self.ichimoku_params,
+        }
+
 
 class ModelingConfig(BaseModel):
     """Configuration for modeling pipeline."""
@@ -76,6 +87,11 @@ class ModelingConfig(BaseModel):
     time_span: int = Field(
         default=7 * 28, description="Weeks of historical data for validation/testing"
     )
+
+    # Deprecated tuning parameters (no longer used since tuning flow was removed)
+    timeout_mins: int = 10
+    n_trials: int = 200
+    study_name: str = "catboost_hyperparameter_optimization_dummy"
 
     # Feature groups
     features: list[str] = Field(
@@ -202,6 +218,94 @@ class ModelingConfig(BaseModel):
             ],
         }
 
+    @property 
+    def cb_model_params(self) -> dict[str, Any]:
+        """CatBoost model parameters."""
+        alpha_str = ",".join([str(q) for q in self.quantiles])
+        return {
+            "loss_function": f"MultiQuantile:alpha={alpha_str}",
+            "num_boost_round": 1_000,
+            "learning_rate": 0.07,
+            "depth": 5,
+            "l2_leaf_reg": 10,
+            "grow_policy": "SymmetricTree",
+            "border_count": 128,
+            "bootstrap_type": "Bayesian",
+            "bagging_temperature": 0.5,
+            "random_state": 1,
+            "verbose": False,
+        }
+
+    @property
+    def early_stopping_rounds(self) -> int:
+        """Early stopping rounds for CatBoost."""
+        return int(self.cb_model_params["num_boost_round"] * 0.08)
+
+    @property
+    def cb_fit_params(self) -> dict[str, Any]:
+        """CatBoost fit parameters."""
+        early_stopping = self.early_stopping_rounds
+        return {
+            "early_stopping_rounds": early_stopping,
+            "verbose": int(early_stopping / 2),
+            "plot": False,
+        }
+
+    @property
+    def pca_params(self) -> dict[str, Any]:
+        """PCA parameters."""
+        return {
+            "n_components": 0.8,  # retain 80% of variance
+            "svd_solver": "full",
+            "random_state": 1,
+        }
+
+    @property
+    def pca_group_params(self) -> dict[str, dict[str, Any]]:
+        """PCA parameters for each feature group."""
+        return {
+            "FINANCIAL_FEATURES": {
+                "n_components": 3,
+                "random_state": 1,
+            },
+            "LIQUIDITY_FEATURES": {
+                "n_components": 1,
+                "random_state": 1,
+            },
+            "STATISTICAL_FEATURES": {
+                "n_components": 4,
+                "random_state": 1,
+            },
+            "MOMENTUM_INDICATORS_FEATURES": {
+                "n_components": 1,
+                "random_state": 1,
+            },
+            "VOLATILITY_MEASURES_FEATURES": {
+                "n_components": 1,
+                "random_state": 1,
+            },
+            "ICHIMOKU_SLOPE_FEATURES": {
+                "n_components": 4,
+                "random_state": 1,
+            },
+            "ICHIMOKU_POSITIONAL_FEATURES": {
+                "n_components": 3,
+                "random_state": 1,
+            },
+            "ICHIMOKU_CROSSOVER_FEATURES": {
+                "n_components": 3,
+                "random_state": 1,
+            },
+            "ICHIMOKU_STRENGTH_FEATURES": {
+                "n_components": 1,
+                "random_state": 1,
+            },
+            "ICHIMOKU_ATR_FEATURES": {
+                "n_components": 2,
+                "random_state": 1,
+            },
+        }
+
 
 class AppConfig(BaseModel):
     """Main application configuration."""
@@ -275,5 +379,28 @@ def get_modeling_config() -> dict[str, Any]:
         "TARGET": model_cfg.target,
         "TIME_SPAN": model_cfg.time_span,
         "FEATURE_GROUPS": model_cfg.feature_groups,
+        "TIMEOUT_MINS": model_cfg.timeout_mins,
+        "N_TRIALS": model_cfg.n_trials,
+        "STUDY_NAME": model_cfg.study_name,
         **model_cfg.quantile_indices,
     }
+
+
+def get_cb_model_params() -> dict[str, Any]:
+    """Get CatBoost model parameters."""
+    return config.modeling.cb_model_params
+
+
+def get_cb_fit_params() -> dict[str, Any]:
+    """Get CatBoost fit parameters."""
+    return config.modeling.cb_fit_params
+
+
+def get_pca_params() -> dict[str, Any]:
+    """Get PCA parameters."""
+    return config.modeling.pca_params
+
+
+def get_pca_group_params() -> dict[str, dict[str, Any]]:
+    """Get PCA group parameters."""
+    return config.modeling.pca_group_params

@@ -10,10 +10,7 @@ from stock_market_analytics.modeling import processing_functions
 from stock_market_analytics.modeling.pipeline_components.calibrators import (
     PipelineWithCalibrator,
 )
-from stock_market_analytics.modeling.pipeline_components.configs import (
-    cb_fit_params,
-    modeling_config,
-)
+from stock_market_analytics.config import config
 from stock_market_analytics.modeling.pipeline_components.evaluators import (
     EvaluationReport,
     ModelEvaluator,
@@ -30,12 +27,12 @@ from wandb.integration.metaflow import wandb_log
 wandb.login(key=os.environ.get("WANDB_KEY"))
 
 # Constants
-FEATURES_FILE = modeling_config["FEATURES_FILE"]
-QUANTILES = modeling_config["QUANTILES"]
-FEATURES = modeling_config["FEATURES"]
-TARGET_COVERAGE = modeling_config["TARGET_COVERAGE"]
-TARGET = modeling_config["TARGET"]
-TIME_SPAN = modeling_config["TIME_SPAN"]  # days
+FEATURES_FILE = config.modeling.features_file
+QUANTILES = config.modeling.quantiles
+FEATURES = config.modeling.features
+TARGET_COVERAGE = config.modeling.target_coverage
+TARGET = config.modeling.target
+TIME_SPAN = config.modeling.time_span  # days
 
 
 class TrainingFlow(FlowSpec):
@@ -147,7 +144,7 @@ class TrainingFlow(FlowSpec):
             _xval = xval
 
         # Set up early stopping parameters
-        fit_params = cb_fit_params.copy()
+        fit_params = config.modeling.cb_fit_params.copy()
         fit_params["eval_set"] = (_xval, yval)
         fit_params = {f"quantile_regressor__{k}": v for k, v in fit_params.items()}
 
@@ -289,7 +286,7 @@ class TrainingFlow(FlowSpec):
 
         # Get median predictions for pinball loss
         raw_predictions = pipeline.predict(xtest)
-        mid_idx = modeling_config["MID"]
+        mid_idx = config.modeling.quantile_indices["MID"]
         median_predictions = raw_predictions[:, mid_idx]
 
         conformal_results = evaluator.evaluate_calibrated_predictions(

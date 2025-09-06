@@ -4,11 +4,7 @@ from sklearn.impute import SimpleImputer
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 
-from stock_market_analytics.modeling.pipeline_components.configs import (
-    cb_model_params,
-    modeling_config,
-    pca_group_params,
-)
+from stock_market_analytics.config import config
 from stock_market_analytics.modeling.pipeline_components.naive_baselines import (
     HistoricalQuantileBaseline,
 )
@@ -17,10 +13,10 @@ from stock_market_analytics.modeling.pipeline_components.predictors import (
 )
 
 # ------------------------------- PCA for feature groups -------------------------------
-feature_groups = modeling_config["FEATURE_GROUPS"]
+feature_groups = config.modeling.feature_groups
 
 pca_groups = {
-    group.lower() + "_pca": PCA(**pca_group_params[group]) for group in feature_groups
+    group.lower() + "_pca": PCA(**config.modeling.pca_group_params[group]) for group in feature_groups
 }
 
 scaler_groups = {
@@ -68,9 +64,9 @@ transformation_pipeline = Pipeline(
 
 # ------------------------------- Full Pipeline -------------------------------
 
-QUANTILES = modeling_config["QUANTILES"]
+QUANTILES = config.modeling.quantiles
 
-quantile_regressor = CatBoostMultiQuantileModel(quantiles=QUANTILES, **cb_model_params)
+quantile_regressor = CatBoostMultiQuantileModel(quantiles=QUANTILES, **config.modeling.cb_model_params)
 
 # transformation_pipeline = Pipeline(steps=[
 #     ("scaler", StandardScaler()),
