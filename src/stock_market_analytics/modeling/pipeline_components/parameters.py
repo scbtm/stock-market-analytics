@@ -14,9 +14,9 @@ cb_model_params = {
     "depth": 4,
     "l2_leaf_reg": 10,
     "grow_policy": "SymmetricTree",
-    "border_count": 8,
+    "border_count": 16,
     "bootstrap_type": "Bayesian",
-    "bagging_temperature": 0.8,
+    "bagging_temperature": 0.5,
     # "min_data_in_leaf": 200,
     # "colsample_bylevel": 0.7,
     "random_state": 1,
@@ -33,7 +33,7 @@ cb_fit_params = {
 }
 
 pca_params = {
-    "n_components": 0.97, # retain 97% of variance
+    "n_components": 0.8, # retain 97% of variance
     "svd_solver": "full",
     "random_state": 1,
 }

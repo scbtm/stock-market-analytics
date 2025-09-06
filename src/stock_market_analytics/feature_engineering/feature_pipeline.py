@@ -136,9 +136,9 @@ def volatility_features_df(volatility_indicators_df: pl.DataFrame, long_window: 
     return volatility_indicators_df.with_columns([vol_of_vol_expr, vol_expansion_expr]).select([
         "symbol",
         "date",
-        # "vol_ratio",
+        "vol_ratio",
         "vol_of_vol_ewm",
-        # "vol_expansion"
+        "vol_expansion"
     ])
 
 def momentum_indicators_df(basic_indicators_df: pl.DataFrame, long_window: int, short_window: int) -> pl.DataFrame:
@@ -183,7 +183,7 @@ def momentum_features_df(momentum_indicators_df: pl.DataFrame, volatility_indica
     return momentum_indicators_df.with_columns([risk_adj_momentum_expr]).select([
         "symbol",
         "date",
-        # "long_short_momentum",
+        "long_short_momentum",
         "cmo",
         "risk_adj_momentum"
     ])
@@ -489,32 +489,32 @@ def ichimoku_features_df(
     return ichimoku_indicators_df.with_columns(features.values()).select([
         "symbol",
         "date",
-        # "tenkan_slope",
-        # "kijun_slope",
-        # "span_a_slope",
-        # "span_b_slope",
+        "tenkan_slope",
+        "kijun_slope",
+        "span_a_slope",
+        "span_b_slope",
         "cloud_top_slope",
         "cloud_bot_slope",
         "above_cloud",
-        # "between_cloud",
-        # "below_cloud",
+        "between_cloud",
+        "below_cloud",
         "above_cloud_persist",
-        # "below_cloud_persist",
+        "below_cloud_persist",
         "tenkan_cross_up",
-        # "tenkan_cross_dn",
+        "tenkan_cross_dn",
         "price_break_up",
-        # "price_break_dn",
-        # "twist_event",
+        "price_break_dn",
+        "twist_event",
         "twist_recent",
         "bull_strength",
-        # "bear_strength",
+        "bear_strength",
         "tenkan_kijun_spread_atr",
-        # "price_above_cloud_atr",
-        # "price_below_cloud_atr",
+        "price_above_cloud_atr",
+        "price_below_cloud_atr",
         "cloud_thickness_atr",
         "price_vs_lead_top_atr",
-        # "price_vs_lead_bot_atr",
-        # "atr"
+        "price_vs_lead_bot_atr",
+        "atr"
     ]).sort(["symbol", "date"])
 
 

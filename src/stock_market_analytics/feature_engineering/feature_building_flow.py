@@ -65,22 +65,23 @@ class FeatureBuildingFlow(FlowSpec):
         """
         Build features from raw stock market data.
         """
-        dr = driver.Builder().with_modules(feature_pipeline).build()
-
-        results = dr.execute(
-            final_vars=["df_features"],
-            inputs={"raw_df": self.data, **features_config},
-        )
-
         past_horizon = features_config.get("past_horizon", 0)
-
         if past_horizon > 0:
             max_lookback_date = self.data["date"].max() - pd.Timedelta(
                 days=past_horizon
             )  # type: ignore
-            data = results["df_features"].filter(pl.col("date") >= max_lookback_date)
+            data = self.data.filter(pl.col("date") >= max_lookback_date)
         else:
-            data = results["df_features"]
+            data = self.data
+
+        dr = driver.Builder().with_modules(feature_pipeline).build()
+
+        results = dr.execute(
+            final_vars=["df_features"],
+            inputs={"raw_df": data, **features_config},
+        )
+
+        data = results["df_features"]
 
         self.data = data
 
