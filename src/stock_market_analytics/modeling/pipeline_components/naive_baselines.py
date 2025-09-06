@@ -13,10 +13,10 @@ from sklearn.utils.validation import check_array, check_X_y
 class HistoricalQuantileBaseline(BaseEstimator, RegressorMixin):
     """
     Naive baseline that predicts historical quantiles from training data.
-    
+
     This is the simplest possible quantile regressor - it ignores features
     and always predicts the empirical quantiles computed from training targets.
-    
+
     Parameters
     ----------
     quantiles : list of float
@@ -48,7 +48,7 @@ class HistoricalQuantileBaseline(BaseEstimator, RegressorMixin):
         self.empirical_quantiles_ = np.quantile(y, self.quantiles)
 
         self.n_features_in_ = X.shape[1]
-        if hasattr(X, 'columns'):
+        if hasattr(X, "columns"):
             self.feature_names_in_ = X.columns.tolist()
 
         return self
@@ -56,12 +56,12 @@ class HistoricalQuantileBaseline(BaseEstimator, RegressorMixin):
     def predict(self, X: Any) -> np.ndarray:
         """
         Predict quantiles by repeating empirical quantiles for all samples.
-        
+
         Parameters
         ----------
         X : array-like of shape (n_samples, n_features)
             Input features
-            
+
         Returns
         -------
         predictions : ndarray of shape (n_samples, n_quantiles)
@@ -69,7 +69,7 @@ class HistoricalQuantileBaseline(BaseEstimator, RegressorMixin):
         """
         X = check_array(X, accept_sparse=False)
 
-        if not hasattr(self, 'empirical_quantiles_'):
+        if not hasattr(self, "empirical_quantiles_"):
             raise ValueError("Model must be fitted before making predictions")
 
         n_samples = X.shape[0]

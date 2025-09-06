@@ -42,5 +42,4 @@ dev = [
 stock-market-analytics = "stock_market_analytics.main:main"
 batch-collect = "stock_market_analytics.data_collection.batch_collection_flow:BatchCollectionFlow"
 build-features = "stock_market_analytics.feature_engineering.feature_building_flow:FeatureBuildingFlow"
-tune-model = "stock_market_analytics.modeling.tuning_flow_cb:TuningFlow"
 train-model = "stock_market_analytics.modeling.training_flow_cb:TrainingFlow"

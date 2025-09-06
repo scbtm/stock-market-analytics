@@ -8,6 +8,7 @@ This project implements an end-to-end stock market analytics platform designed f
 
 - **Scalable Data Pipelines**: Robust data collection and feature engineering workflows
 - **Production Architecture**: Modular design with clear separation of concerns
+- **Type-Safe Configuration**: Centralized Pydantic-based configuration system with validation
 - **Quality Assurance**: Comprehensive testing, type checking, and code quality controls
 - **MLOps Best Practices**: Versioned data flows, reproducible experiments, and automated validation
 
@@ -18,6 +19,8 @@ The platform focuses on creating reliable, maintainable, and scalable infrastruc
 ```
 📁 stock-market-analytics/
 ├── src/stock_market_analytics/     # Core application code
+│   ├── config.py                   # Centralized type-safe configuration
+│   ├── main.py                     # CLI entry point  
 │   ├── data_collection/            # Data ingestion pipeline
 │   ├── feature_engineering/       # Feature computation pipeline
 │   └── modeling/                   # ML model training and evaluation
@@ -42,9 +45,9 @@ The project follows a modular architecture with **Metaflow workflows as primary 
 
 ```toml
 [project.scripts]
+stock-market-analytics = "stock_market_analytics.main:main"
 batch-collect = "stock_market_analytics.data_collection.batch_collection_flow:BatchCollectionFlow"
 build-features = "stock_market_analytics.feature_engineering.feature_building_flow:FeatureBuildingFlow"
-tune-model = "stock_market_analytics.modeling.tuning_flow_cb:TuningFlow"
 train-model = "stock_market_analytics.modeling.training_flow_cb:TrainingFlow"
 ```
 
@@ -55,9 +58,6 @@ uv run batch-collect run
 
 # Execute feature engineering pipeline  
 uv run build-features run
-
-# Run hyperparameter tuning pipeline
-uv run tune-model run
 
 # Execute model training pipeline
 uv run train-model run
@@ -103,7 +103,7 @@ The feature engineering pipeline leverages **Hamilton** for functional, declarat
 
 - **Declarative Features**: Functions define features through clear input/output contracts
 - **Composable Transforms**: Small, focused functions that combine into complex features
-- **Configuration-Driven**: External config files (`features_config.py`) control feature parameters
+- **Configuration-Driven**: Centralized configuration system (`config.py`) controls all feature parameters
 - **Pipeline Visualization**: Generated diagrams show feature dependencies and computation flow
 
 #### Hamilton DAG Visualization
@@ -114,8 +114,9 @@ The Hamilton framework automatically generates this dependency graph showing the
 
 - **Data Flow**: Clear progression from raw data through preprocessing to final features
 - **Parallel Processing**: Independent feature computations that can run concurrently  
-- **Configuration Points**: Input parameters that control window sizes and feature selection
+- **Configuration Points**: Parameters from the centralized `config.py` control window sizes and feature selection
 - **Dependency Management**: Automatic resolution of feature dependencies and execution order
+- **Type Safety**: All configuration parameters are validated through Pydantic models
 
 ### Adding New Features
 
@@ -176,21 +177,24 @@ def df_features(
 
 #### Step 3: Add Feature to Model Configuration
 
-Add your new feature to the `FEATURES` list in `src/stock_market_analytics/modeling/modeling_config.py`:
+Add your new feature to the `FEATURES` list in the centralized configuration. You can either edit `src/stock_market_analytics/config.py` directly or override it via the modeling configuration:
 
 ```python
-FEATURES = [
-    # ... existing features ...
-    "my_new_feature",  # Add your feature name here
-]
+# In src/stock_market_analytics/config.py
+class ModelingConfig(BaseModel):
+    features: list[str] = Field(default=[
+        # ... existing features ...
+        "my_new_feature",  # Add your feature name here
+    ])
 ```
 
 #### Step 4: Update Feature Parameters (Optional)
 
-If your feature needs configurable parameters, add them to `src/stock_market_analytics/feature_engineering/features_config.py`:
+If your feature needs configurable parameters, add them to the centralized configuration in `src/stock_market_analytics/config.py`:
 
 ```python
-features_config["my_window_size"] = 30
+class FeatureEngineeringConfig(BaseModel):
+    my_window_size: int = 30  # Add your parameter here
 ```
 
 #### Why This Structure?
@@ -212,8 +216,8 @@ After adding features, you can visualize the dependency graph. **Note**: Require
 # Generate visualization of the complete feature pipeline
 uv run python -c "
 from hamilton import driver
-from stock_market_analytics.feature_engineering import features, preprocessing
-dr = driver.Builder().with_modules(features, preprocessing).build()
+from stock_market_analytics.feature_engineering import feature_pipeline
+dr = driver.Builder().with_modules(feature_pipeline).build()
 dr.visualize_execution(['df_features'], './features_graph.png', bypass_validation=True)
 print('Hamilton dependency graph saved to: ./features_graph.png')
 "
@@ -236,11 +240,11 @@ To regenerate the official Hamilton dependency graph shown in this README:
 # Regenerate the official features_diagram.png
 uv run python -c "
 from hamilton import driver
-from stock_market_analytics.feature_engineering import features, preprocessing
+from stock_market_analytics.feature_engineering import feature_pipeline
 import os
 
 # Create Hamilton driver
-dr = driver.Builder().with_modules(features, preprocessing).build()
+dr = driver.Builder().with_modules(feature_pipeline).build()
 
 # Generate the visualization (overwrites existing diagram)
 output_path = 'src/stock_market_analytics/feature_engineering/features_diagram.png'
@@ -290,10 +294,11 @@ The module leverages several enterprise-grade frameworks:
 
 **Configuration-Driven Design**:
 ```python
-# modeling_config.py - Central configuration
-FEATURES = ["amihud_illiq", "rsi", "momentum", ...]  # Selected features
-QUANTILES = [0.1, 0.25, 0.5, 0.75, 0.9]            # Prediction quantiles
-PARAMS = {...}                                       # Base model parameters
+# config.py - Centralized type-safe configuration
+class ModelingConfig(BaseModel):
+    features: list[str] = ["amihud_illiq", "rsi", "momentum", ...]  # Selected features
+    quantiles: list[float] = [0.1, 0.25, 0.5, 0.75, 0.9]         # Prediction quantiles
+    # ... other parameters with validation
 ```
 
 **Hamilton Integration**: 
@@ -308,29 +313,12 @@ PARAMS = {...}                                       # Base model parameters
 
 #### Key Workflows
 
-##### 1. Hyperparameter Tuning (`tune-model`)
+##### Model Training (`train-model`)
 
-Automated optimization of CatBoost hyperparameters:
-
-```bash
-# Run hyperparameter optimization
-export BASE_DATA_PATH="/path/to/your/data"
-export WANDB_KEY="your_wandb_key"
-uv run tune-model run
-```
-
-**Optimization Strategy**:
-- **Search space**: 15+ hyperparameters optimized for financial data
-- **Objective**: Minimize pinball loss across all quantiles
-- **Regularization**: Stronger penalties for noisy financial signals
-- **Early stopping**: Prevents overfitting and speeds up tuning
-
-##### 2. Model Training (`train-model`)
-
-Trains final model with optimized hyperparameters:
+Trains CatBoost model with pre-configured hyperparameters:
 
 ```bash
-# Train model with best hyperparameters  
+# Train model with configured hyperparameters  
 export BASE_DATA_PATH="/path/to/your/data"
 export WANDB_KEY="your_wandb_key"
 uv run train-model run
@@ -514,13 +502,10 @@ Note: building the features for 500 tickers on 4 cores takes about 30 seconds th
 # Set up Weights & Biases for experiment tracking
 export WANDB_KEY="your_wandb_api_key"
 
-# Run hyperparameter optimization (optional, for best performance)
-uv run tune-model run
-
-# Train the final model
+# Train the model
 uv run train-model run
 ```
-Note: Hyperparameter tuning takes 10-30 minutes depending on the number of trials. Model training completes in under 5 minutes and includes conformal calibration for uncertainty quantification.
+Note: Model training completes in under 5 minutes and includes conformal calibration for uncertainty quantification.
 
 ### Pipeline Execution Examples
 
@@ -565,19 +550,11 @@ The feature pipeline will:
 export BASE_DATA_PATH="/path/to/your/data"
 export WANDB_KEY="your_wandb_api_key"
 
-# Optional: Run hyperparameter optimization
-uv run tune-model run
-
-# Train final model with best hyperparameters
+# Train model with pre-configured hyperparameters
 uv run train-model run
 ```
 
 The ML pipeline will:
-- **Hyperparameter Tuning** (optional):
-  - Optimize 15+ CatBoost parameters using Optuna
-  - Minimize pinball loss across multiple quantiles
-  - Use TPE sampler for efficient search
-  - Log all trials to Weights & Biases
 - **Model Training**:
   - Load engineered features from parquet
   - Split data chronologically (train/validation/test)
@@ -588,8 +565,8 @@ The ML pipeline will:
 
 **Expected Results**:
 - **Coverage**: ~80% of true values within prediction intervals
-- **Pinball Loss**: ~0.02 (optimized quantile prediction error)
-- **Training Time**: <5 minutes for model training, 10-30 minutes for tuning
+- **Pinball Loss**: ~0.02 (quantile prediction error)
+- **Training Time**: <5 minutes for complete model training and calibration
 
 ### Development Workflow
 
@@ -637,8 +614,8 @@ The pipelines support configuration through environment variables and config fil
 # Custom data paths
 export BASE_DATA_PATH="/path/to/your/data"
 
-# Feature engineering parameters (modify features_config.py)
-# Adjust window sizes, feature selections, etc.
+# Feature engineering parameters (modify config.py)
+# Adjust window sizes, feature selections, etc. with type safety
 ```
 
 #### Pipeline Debugging
