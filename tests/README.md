@@ -1,6 +1,6 @@
 # Tests Documentation
 
-This directory contains focused unit tests for the stock market analytics project.
+This directory contains unit and integration tests for the stock market analytics project, properly organized by test type.
 
 ## Structure
 
@@ -9,16 +9,20 @@ tests/
 ├── __init__.py
 ├── conftest.py                          # Common test fixtures and configuration
 ├── README.md                            # This file
-└── unit/                               # Unit tests organized by module
-    ├── test_config.py                  # Tests for configuration module
-    ├── test_data_collection/           # Tests for data collection module
-    │   ├── test_models.py             # Data models (YFinanceCollectionPlan)
-    │   ├── test_processors.py         # Data processors (ContinuousTimelineProcessor)
-    │   └── test_collectors.py         # Data collectors (YFinanceCollector)
-    ├── test_feature_engineering/       # Tests for feature engineering
-    │   └── test_feature_pipeline.py   # Core feature functions
-    └── test_modeling/                  # Tests for modeling module
-        └── test_functions.py          # Modeling utility functions
+├── unit/                               # Pure unit tests (no external dependencies)
+│   ├── test_config.py                  # Configuration object tests
+│   ├── test_data_collection/           # Unit tests for data collection
+│   │   ├── test_models.py             # Data models (YFinanceCollectionPlan)
+│   │   ├── test_processors.py         # Data processors (ContinuousTimelineProcessor)
+│   │   └── test_collectors_unit.py    # Basic collector initialization tests
+│   ├── test_feature_engineering/       # Pure function tests
+│   │   └── test_feature_pipeline.py   # Core feature pipeline functions
+│   └── test_modeling/                  # Unit tests for modeling
+│       ├── test_functions.py          # Modeling utility functions
+│       └── test_processing.py         # Data processing functions
+└── integration/                       # Integration tests (external API interactions)
+    └── test_data_collection/          # Integration tests for data collection
+        └── test_collectors.py         # YFinanceCollector API interaction tests
 ```
 
 ## Running Tests
@@ -40,7 +44,7 @@ pip install pytest
 From the project root directory:
 
 ```bash
-# Run all tests
+# Run all tests (unit + integration)
 uv run pytest tests/ -v
 
 # Run all tests with coverage
@@ -50,52 +54,65 @@ uv run pytest tests/ -v --cov=src
 uv run pytest tests/ -v -n auto
 ```
 
+### Running Tests by Type
+
+```bash
+# Run only unit tests (fast, no external dependencies)
+uv run pytest tests/unit/ -v
+
+# Run only integration tests (may use mocked external APIs)
+uv run pytest tests/integration/ -v
+
+# Run unit tests with coverage (recommended for development)
+uv run pytest tests/unit/ -v --cov=src
+```
+
 ### Running Specific Test Modules
 
 ```bash
-# Run only data collection tests
-uv run pytest tests/test_data_collection/ -v
+# Unit tests
+uv run pytest tests/unit/test_data_collection/ -v
+uv run pytest tests/unit/test_feature_engineering/test_feature_pipeline.py -v
+uv run pytest tests/unit/test_modeling/test_functions.py -v
 
-# Run only model tests
-uv run pytest tests/test_data_collection/test_models.py -v
-
-# Run only processor tests
-uv run pytest tests/test_data_collection/test_processors.py -v
+# Integration tests  
+uv run pytest tests/integration/test_data_collection/test_collectors.py -v
 ```
 
 
 ## Test Coverage
 
-### Configuration (`test_config.py`)
+### Unit Tests (Pure, No External Dependencies)
 
-Tests for configuration classes:
+**Configuration (`test_config.py`)**:
 - ✅ Default configuration values
 - ✅ Environment variable loading
 - ✅ Configuration property calculations
 
-### Data Collection Module
+**Data Collection Module**:
+- **Models (`test_models.py`)**: `YFinanceCollectionPlan` validation and conversion
+- **Processors (`test_processors.py`)**: `ContinuousTimelineProcessor` data processing workflows
+- **Collectors (`test_collectors_unit.py`)**: Basic `YFinanceCollector` initialization and protocol compliance
 
-**Models (`test_models.py`)**:
-- ✅ `YFinanceCollectionPlan` validation and conversion
-
-**Processors (`test_processors.py`)**:
-- ✅ `ContinuousTimelineProcessor` data processing
-
-**Collectors (`test_collectors.py`)**:
-- ✅ `YFinanceCollector` data retrieval and error handling
-
-### Feature Engineering (`test_feature_pipeline.py`)
-
-Tests for core feature functions:
-- ✅ Data sorting and preprocessing
+**Feature Engineering (`test_feature_pipeline.py`)**:
+- ✅ Data sorting and preprocessing functions
 - ✅ Date-based feature generation
-- ✅ Missing value handling
+- ✅ Technical indicators (volatility, momentum, statistical)
+- ✅ Ichimoku cloud features
+- ✅ Missing value handling and data joins
 
-### Modeling (`test_functions.py`)
+**Modeling**:
+- **Functions (`test_functions.py`)**: Conformal prediction functions, coverage metrics
+- **Processing (`test_processing.py`)**: Data splitting and metadata functions
 
-Tests for modeling utility functions:
-- ✅ Conformal prediction functions
-- ✅ Coverage and metric calculations
+### Integration Tests (External API Interactions with Mocks)
+
+**Data Collection (`test_collectors.py`)**:
+- ✅ `YFinanceCollector` external API interactions (mocked)
+- ✅ Success/failure scenarios with yfinance API
+- ✅ Error handling and state management
+- ✅ Data transformation and column mapping
+
 
 ## Test Data and Fixtures
 
@@ -108,31 +125,52 @@ Tests use pytest fixtures to provide consistent test data:
 
 ## Testing Philosophy
 
-This project follows a **simple and focused** approach to unit testing:
+This project follows a **layered testing approach** with proper separation of concerns:
 
-1. **Function-Level Testing**: Each test focuses on a single function or method
-2. **Happy Path Coverage**: Tests verify core functionality with valid inputs
-3. **Essential Edge Cases**: Only test critical edge cases (empty data, basic error conditions)
-4. **Readable Tests**: Test names clearly describe what is being verified
-5. **Minimal Complexity**: Avoid over-testing implementation details
+### Unit Tests (`tests/unit/`)
+1. **Pure Functions**: Test individual functions in isolation with no external dependencies
+2. **No Mocking**: Use real data and avoid mocking internal components
+3. **Fast Execution**: Should run quickly for rapid feedback during development
+4. **Happy Path + Edge Cases**: Cover core functionality and critical edge cases
+5. **Minimal Complexity**: Focus on behavior, not implementation details
+
+### Integration Tests (`tests/integration/`)
+1. **External Interactions**: Test components that interact with external systems (APIs, databases)
+2. **Mock External Systems**: Use mocks for external dependencies (yfinance API, file system)
+3. **System Integration**: Test how components work together in realistic scenarios
+4. **Error Handling**: Verify proper handling of external system failures
 
 ## Adding New Tests
 
-When adding new tests:
+### For Unit Tests (`tests/unit/`)
+When testing pure functions with no external dependencies:
 
-1. **Keep it Simple**: Focus on testing the core functionality
-2. **One Function, Few Tests**: 2-4 tests per function (happy path + key edge cases)
-3. **Clear Names**: Use descriptive test method names (`test_function_does_what`)
-4. **Assume Good Data**: Don't test every possible invalid input scenario
-5. **Focus on Behavior**: Test what the function should do, not how it does it
+1. **Choose Unit Tests When**:
+   - Testing individual functions or methods
+   - No external API calls, file I/O, or database interactions
+   - Can use real test data without mocking
 
-## Guidelines for New Functions
+2. **Structure**:
+   - Create test class: `TestMyFunctionUnit`
+   - 2-4 focused tests: happy path + key edge cases
+   - Use descriptive names: `test_function_does_what_with_input_type`
 
-When you add a new function to the codebase:
+### For Integration Tests (`tests/integration/`)
+When testing components that interact with external systems:
 
-1. Create a simple test class with the function name: `TestMyNewFunction`
-2. Add 2-3 focused tests:
-   - `test_basic_functionality()` - Core happy path
-   - `test_handles_empty_data()` - Empty/edge case
-   - `test_invalid_input()` - One key error condition (if needed)
-3. Keep each test under 10 lines when possible 
+1. **Choose Integration Tests When**:
+   - Component makes external API calls (yfinance, web APIs)
+   - Reads/writes files or databases
+   - Tests interaction between multiple components
+   - Need to mock external dependencies
+
+2. **Structure**:
+   - Create test class: `TestMyComponentIntegration`
+   - Use `@patch` or `Mock` for external dependencies
+   - Test both success and failure scenarios
+   - Verify external calls are made correctly
+
+### Quick Decision Guide
+- **Pure function, no external calls** → `tests/unit/`
+- **Uses external APIs, files, or databases** → `tests/integration/`
+- **When in doubt** → Start with unit test, move to integration if mocking is needed 
