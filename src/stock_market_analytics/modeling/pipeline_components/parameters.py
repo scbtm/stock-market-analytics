@@ -10,11 +10,11 @@ alpha_str = ",".join([str(q) for q in QUANTILES])
 cb_model_params = {
     "loss_function": f"MultiQuantile:alpha={alpha_str}",
     "num_boost_round": 1_000,
-    "learning_rate": 0.01,
-    "depth": 4,
+    "learning_rate": 0.07,
+    "depth": 5,
     "l2_leaf_reg": 10,
     "grow_policy": "SymmetricTree",
-    "border_count": 16,
+    "border_count": 128,
     "bootstrap_type": "Bayesian",
     "bagging_temperature": 0.5,
     # "min_data_in_leaf": 200,
@@ -39,10 +39,10 @@ pca_params = {
 }
 
 pca_group_params = {
-    "TIME_COLUMNS": {
-        "n_components": 1,  # retain 80% of variance
-        "random_state": 1,
-    },
+    # "TIME_COLUMNS": {
+    #     "n_components": 1,  # retain 80% of variance
+    #     "random_state": 1,
+    # },
     "FINANCIAL_FEATURES": {
         "n_components": 2,  # retain 80% of variance
         "random_state": 1,

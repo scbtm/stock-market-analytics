@@ -117,7 +117,7 @@ class TrainingFlow(FlowSpec):
         final_iterations = quantile_regressor.best_iteration_
         #print feature names and importances
         feature_importance_df = quantile_regressor._model.get_feature_importance(prettified=True)
-        indx_to_col_name = {i: col for i, col in enumerate(transformations.get_feature_names_out())}
+        indx_to_col_name = {f"{i}": col for i, col in enumerate(transformations.get_feature_names_out())}
         feature_importance_df['Feature Id'] = feature_importance_df['Feature Id'].map(indx_to_col_name) # type: ignore
         feature_importance_df = feature_importance_df.rename(columns={"Feature Id": "Feature", "Importances": "Importance"})
         feature_importance_df = feature_importance_df.sort_values(by="Importance", ascending=False).reset_index(drop=True)
