@@ -1,6 +1,8 @@
 from sklearn.decomposition import PCA
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
+from sklearn.compose import ColumnTransformer
+from sklearn.impute import SimpleImputer
 
 from stock_market_analytics.modeling.pipeline_components.configs import (
     modeling_config as modeling_config,
@@ -10,11 +12,56 @@ from stock_market_analytics.modeling.pipeline_components.naive_baselines import 
 )
 from stock_market_analytics.modeling.pipeline_components.parameters import (
     cb_model_params,
-    pca_params,
+    pca_group_params,
 )
 from stock_market_analytics.modeling.pipeline_components.predictors import (
     CatBoostMultiQuantileModel,
 )
+
+from stock_market_analytics.modeling.pipeline_components.configs import modeling_config
+
+# ------------------------------- PCA for feature groups -------------------------------
+feature_groups = modeling_config["FEATURE_GROUPS"]
+
+pca_groups = {
+    group.lower() + "_pca": PCA(**pca_group_params[group])
+    for group in feature_groups
+}
+
+scaler_groups = {
+    group.lower() + "_scaler": Pipeline(steps=[
+        ("imputer", SimpleImputer(strategy="mean")),
+        ("scaler", StandardScaler())
+    ]) for group in feature_groups
+}
+
+# ------------------------------- Transformation Pipeline -------------------------------
+scalers = ColumnTransformer(
+    transformers=[
+        (name, scaler, feature_groups[group])
+        for group, name, scaler in zip(feature_groups, scaler_groups.keys(), scaler_groups.values())
+    ],
+    remainder="drop",  # Drop any features not specified in the transformers
+    verbose_feature_names_out="{feature_name}__scaled",
+    verbose=True
+).set_output(transform="pandas")
+
+dimensionality_reducers = ColumnTransformer(
+    transformers=[
+        (name, pca, [f"{feature_name}__scaled" for feature_name in feature_groups[group]])
+        for group, name, pca in zip(feature_groups, pca_groups.keys(), pca_groups.values())
+    ],
+    remainder="drop",  # Drop any features not specified in the transformers
+    verbose_feature_names_out=True,
+    verbose=True
+).set_output(transform="pandas")
+
+transformation_pipeline = Pipeline(steps=[
+    ("scalers", scalers),
+    ("dimensionality_reducers", dimensionality_reducers)
+])
+
+# ------------------------------- Full Pipeline -------------------------------
 
 QUANTILES = modeling_config["QUANTILES"]
 
@@ -23,10 +70,10 @@ quantile_regressor = CatBoostMultiQuantileModel(
             **cb_model_params
         )
 
-transformation_pipeline = Pipeline(steps=[
-    ("scaler", StandardScaler()),
-    ("pca", PCA(**pca_params))
-])
+# transformation_pipeline = Pipeline(steps=[
+#     ("scaler", StandardScaler()),
+#     ("pca", PCA(**pca_params))
+# ])
 
 
 pipeline = Pipeline(steps=[

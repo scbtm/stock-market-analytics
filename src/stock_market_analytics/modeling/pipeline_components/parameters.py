@@ -37,3 +37,51 @@ pca_params = {
     "svd_solver": "full",
     "random_state": 1,
 }
+
+pca_group_params = {
+    "TIME_COLUMNS": {
+        "n_components": 1,  # retain 80% of variance
+        "random_state": 1,
+    },
+    "FINANCIAL_FEATURES": {
+        "n_components": 2,  # retain 80% of variance
+        "random_state": 1,
+    },
+    "LIQUIDITY_FEATURES": {
+        "n_components": 1,  # retain 80% of variance
+        "random_state": 1,
+    },
+    "STATISTICAL_FEATURES": {
+        "n_components": 3,  # retain 80% of variance
+        "random_state": 1,
+    },
+    "MOMENTUM_INDICATORS_FEATURES": {
+        "n_components": 1,  # retain 80% of variance
+        "random_state": 1,
+    },
+    "VOLATILITY_MEASURES_FEATURES": {
+        "n_components": 1,  # retain 80% of variance
+        "random_state": 1,
+    },
+    "ICHIMOKU_SLOPE_FEATURES": {
+        "n_components": 4,  # retain 80% of variance
+        "random_state": 1,
+    },
+    "ICHIMOKU_POSITIONAL_FEATURES": {
+        "n_components": 3,  # retain 80% of variance
+        "random_state": 1,
+    },
+    "ICHIMOKU_CROSSOVER_FEATURES": {
+        "n_components": 3,  # retain 80% of variance
+        "random_state": 1,
+    },
+    "ICHIMOKU_STRENGTH_FEATURES": {
+        "n_components": 1,  # retain 80% of variance
+        "random_state": 1,
+    },
+    "ICHIMOKU_ATR_FEATURES": {
+        "n_components": 2,  # retain 80% of variance
+        "random_state": 1,
+    },
+
+}

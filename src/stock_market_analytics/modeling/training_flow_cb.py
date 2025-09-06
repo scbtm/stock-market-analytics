@@ -115,7 +115,16 @@ class TrainingFlow(FlowSpec):
 
         quantile_regressor: CatBoostMultiQuantileModel = pipeline.named_steps["quantile_regressor"]  # type: ignore
         final_iterations = quantile_regressor.best_iteration_
-        print(f"🏁 Training completed in {final_iterations} iterations.")
+        #print feature names and importances
+        feature_importance_df = quantile_regressor._model.get_feature_importance(prettified=True)
+        indx_to_col_name = {i: col for i, col in enumerate(transformations.get_feature_names_out())}
+        feature_importance_df['Feature Id'] = feature_importance_df['Feature Id'].map(indx_to_col_name) # type: ignore
+        feature_importance_df = feature_importance_df.rename(columns={"Feature Id": "Feature", "Importances": "Importance"})
+        feature_importance_df = feature_importance_df.sort_values(by="Importance", ascending=False).reset_index(drop=True)
+        print("🏆 Feature Importances:")
+        print(feature_importance_df)
+
+        print(f"🏁 Training completed in {final_iterations + 1} iterations.")
 
         # Evaluation metrics. The pipeline is now fitted with the best model and ready for inference. (although calibration is pending)
         evaluator = ModelEvaluator()
