@@ -2,7 +2,7 @@ import polars as pl
 
 def sorted_df(raw_df: pl.DataFrame) -> pl.DataFrame:
     """
-    Sorts the input DataFrame by 'symbol' and 'timestamp' columns.
+    Sorts the input DataFrame by 'symbol' and 'timestamp' columns in ascending order.
 
     Args:
         raw_df (pl.DataFrame): Input DataFrame containing stock market data.
@@ -23,7 +23,8 @@ def interpolated_df(sorted_df: pl.DataFrame) -> pl.DataFrame:
         pl.DataFrame: DataFrame with interpolated missing values.
     """
 
-    sorted_df = sorted_df.with_columns(pl.col("*").interpolate().over("symbol")).drop_nulls()
+    # Forward fill interpolation by symbol to prevent leakage across different stocks and dates
+    sorted_df = sorted_df.with_columns(pl.col("*").forward_fill().over("symbol")).drop_nulls()
 
     year_expr = pl.col("date").dt.year().alias("year")
 
@@ -69,7 +70,7 @@ def basic_indicators_df(
 
     log_returns_ratio_expr = (short_log_returns_expr - long_log_returns_expr).alias("log_returns_ratio")
 
-    df_aux = interpolated_df.with_columns([
+    interpolated_df = interpolated_df.with_columns([
         dollar_volume_expr,
         log_returns_d_expr,
         log_returns_ratio_expr,
@@ -98,7 +99,7 @@ def basic_indicators_df(
     total_returns = log_ret.rolling_sum(window).over("symbol")
     sharpe_ratio_proxy = (total_returns / (pl.col("log_returns_d").rolling_std(window).over("symbol") + 1e-8)).alias("sharpe_ratio_proxy")
 
-    return df_aux.with_columns([
+    return interpolated_df.with_columns([
         rsi_ewm_expr,
         sortino_ratio,
         sharpe_ratio_proxy
@@ -135,9 +136,9 @@ def volatility_features_df(volatility_indicators_df: pl.DataFrame, long_window: 
     return volatility_indicators_df.with_columns([vol_of_vol_expr, vol_expansion_expr]).select([
         "symbol",
         "date",
-        "vol_ratio",
+        # "vol_ratio",
         "vol_of_vol_ewm",
-        "vol_expansion"
+        # "vol_expansion"
     ])
 
 def momentum_indicators_df(basic_indicators_df: pl.DataFrame, long_window: int, short_window: int) -> pl.DataFrame:
@@ -168,7 +169,7 @@ def momentum_indicators_df(basic_indicators_df: pl.DataFrame, long_window: int, 
 
 def momentum_features_df(momentum_indicators_df: pl.DataFrame, volatility_indicators_df: pl.DataFrame) -> pl.DataFrame:
 
-    aux_df = momentum_indicators_df.join(
+    momentum_indicators_df = momentum_indicators_df.join(
         volatility_indicators_df,
         on=["symbol", "date"],
         how="inner"
@@ -179,10 +180,10 @@ def momentum_features_df(momentum_indicators_df: pl.DataFrame, volatility_indica
 
     risk_adj_momentum_expr = (long_short_momentum_expr / (long_vol_ewm_expr + 1e-8)).alias("risk_adj_momentum")
 
-    return aux_df.with_columns([risk_adj_momentum_expr]).select([
+    return momentum_indicators_df.with_columns([risk_adj_momentum_expr]).select([
         "symbol",
         "date",
-        "long_short_momentum",
+        # "long_short_momentum",
         "cmo",
         "risk_adj_momentum"
     ])
@@ -262,10 +263,8 @@ def statistical_features_df(statistical_indicators_df: pl.DataFrame, horizon: in
 
     # Expression for the autocorrelation of squared returns.
     r2 = pl.col("log_returns_d").pow(2)
-    aux_df = statistical_indicators_df
-
-    aux_df = aux_df.with_columns(r2.alias("r2"))
-    aux_df = aux_df.with_columns([pl.col("r2").shift(horizon).over("symbol").alias("r2_shifted")])
+    statistical_indicators_df = statistical_indicators_df.with_columns(r2.alias("r2"))
+    statistical_indicators_df = statistical_indicators_df.with_columns([pl.col("r2").shift(horizon).over("symbol").alias("r2_shifted")])
 
     autocorr_expr = pl.rolling_corr(a = pl.col("r2"), b = pl.col("r2_shifted"), window_size=horizon).over("symbol")
 
@@ -276,7 +275,7 @@ def statistical_features_df(statistical_indicators_df: pl.DataFrame, horizon: in
 
     iqr_vol_expr = (p90 - p10).alias("iqr_vol")
 
-    return aux_df.with_columns([y_hat_expr, iqr_vol_expr]).select([
+    return statistical_indicators_df.with_columns([y_hat_expr, iqr_vol_expr]).select([
         "symbol",
         "date",
         "kurtosis_ratio",
@@ -310,7 +309,7 @@ def ichimoku_indicators_df(
 
     prev_close = close.shift(1).over("symbol")
 
-    aux_df = basic_indicators_df.with_columns([
+    basic_indicators_df = basic_indicators_df.with_columns([
         tenkan.alias("tenkan"),
         kijun.alias("kijun"),
         span_a_now.alias("span_a_now"),
@@ -337,17 +336,17 @@ def ichimoku_indicators_df(
         (low - prev_close).abs()
     )
 
-    atr = tr.rolling_mean(window_size = atr_n).over("symbol").alias("atr")
+    atr = tr.rolling_mean(window_size = atr_n).over("symbol").alias("atr") + 1e-8  # avoid div by zero
 
     # --- Distances / spreads (ATR-normalized) ---
-    price_above_cloud_atr = ((close - cloud_top_now) / atr).alias("price_above_cloud_atr")
+    price_above_cloud_atr = ((close - cloud_top_now) / atr ).alias("price_above_cloud_atr")
     price_below_cloud_atr = ((cloud_bot_now - close) / atr).alias("price_below_cloud_atr")
     tenkan_kijun_spread_atr = ((tenkan - kijun) / atr).alias("tenkan_kijun_spread_atr")
     cloud_thickness_atr = ((span_a_now - span_b_now).abs() / atr).alias("cloud_thickness_atr")
     price_vs_lead_top_atr = ((close - lead_top) / atr).alias("price_vs_lead_top_atr")
     price_vs_lead_bot_atr = ((close - lead_bot) / atr).alias("price_vs_lead_bot_atr")
 
-    return aux_df.with_columns([
+    return basic_indicators_df.with_columns([
         atr,
         price_above_cloud_atr,
         price_below_cloud_atr,
@@ -435,7 +434,7 @@ def ichimoku_features_df(
         "price_break_dn": ((close < cloud_bot_now) & (close.shift(1).over("symbol") >= cloud_bot_now.shift(1).over("symbol"))).cast(pl.Int8).alias("price_break_dn"),
     }
 
-    aux_df = ichimoku_indicators_df.with_columns(features.values())
+    ichimoku_indicators_df = ichimoku_indicators_df.with_columns(features.values())
 
 
     # aux features for twist detection
@@ -446,9 +445,9 @@ def ichimoku_features_df(
 
     features |= {"span_diff": span_diff.alias("span_diff")}
 
-    aux_df = aux_df.with_columns(features.values())
+    ichimoku_indicators_df = ichimoku_indicators_df.with_columns(features.values())
 
-    aux_df = aux_df.with_columns(pl.col("span_diff").shift(1).over("symbol").alias("span_diff_shifted"))
+    ichimoku_indicators_df = ichimoku_indicators_df.with_columns(pl.col("span_diff").shift(1).over("symbol").alias("span_diff_shifted"))
     #empty dict to collect features
 
     features = {}
@@ -460,7 +459,7 @@ def ichimoku_features_df(
         "twist_event": ((span_diff * span_diff_shifted) < 0).cast(pl.Int8).alias("twist_event"),
     }
 
-    aux_df = aux_df.with_columns(features.values())
+    ichimoku_indicators_df = ichimoku_indicators_df.with_columns(features.values())
 
     features = {}
 
@@ -470,7 +469,7 @@ def ichimoku_features_df(
         "twist_recent": twist_event.rolling_sum(persist_window).over("symbol").alias("twist_recent")
     }
 
-    aux_df = aux_df.with_columns(features.values())
+    ichimoku_indicators_df = ichimoku_indicators_df.with_columns(features.values())
 
     features = {}
 
@@ -487,36 +486,35 @@ def ichimoku_features_df(
         "bear_strength": ((kijun - tenkan) / atr * below_cloud).alias("bear_strength"),
     }
 
-    # TODO: Verify outputs match the function expressions above:
-    return aux_df.with_columns(features.values()).select([
+    return ichimoku_indicators_df.with_columns(features.values()).select([
         "symbol",
         "date",
-        "tenkan_slope",
-        "kijun_slope",
-        "span_a_slope",
-        "span_b_slope",
+        # "tenkan_slope",
+        # "kijun_slope",
+        # "span_a_slope",
+        # "span_b_slope",
         "cloud_top_slope",
         "cloud_bot_slope",
         "above_cloud",
-        "between_cloud",
-        "below_cloud",
+        # "between_cloud",
+        # "below_cloud",
         "above_cloud_persist",
-        "below_cloud_persist",
+        # "below_cloud_persist",
         "tenkan_cross_up",
-        "tenkan_cross_dn",
+        # "tenkan_cross_dn",
         "price_break_up",
-        "price_break_dn",
-        "twist_event",
+        # "price_break_dn",
+        # "twist_event",
         "twist_recent",
         "bull_strength",
-        "bear_strength",
+        # "bear_strength",
         "tenkan_kijun_spread_atr",
-        "price_above_cloud_atr",
-        "price_below_cloud_atr",
+        # "price_above_cloud_atr",
+        # "price_below_cloud_atr",
         "cloud_thickness_atr",
         "price_vs_lead_top_atr",
-        "price_vs_lead_bot_atr",
-        "atr"
+        # "price_vs_lead_bot_atr",
+        # "atr"
     ]).sort(["symbol", "date"])
 
 
@@ -528,6 +526,8 @@ def df_features(
         statistical_features_df: pl.DataFrame,
         ichimoku_features_df: pl.DataFrame
         ) -> pl.DataFrame:
+
+    basic_indicators_df = basic_indicators_df.drop(["dollar_volume"])
     
     basic_indicators_df = basic_indicators_df.join(
         liquidity_indicators_df,

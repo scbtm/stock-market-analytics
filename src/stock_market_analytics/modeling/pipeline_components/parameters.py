@@ -33,7 +33,7 @@ cb_fit_params = {
 }
 
 pca_params = {
-    "n_components": 0.95,
+    "n_components": 0.97, # retain 97% of variance
     "svd_solver": "full",
     "random_state": 1,
 }
