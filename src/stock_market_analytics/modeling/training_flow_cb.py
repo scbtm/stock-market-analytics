@@ -183,9 +183,9 @@ class TrainingFlow(FlowSpec):
 
         # Map feature indices to names
         feature_importance_df = feature_importance_df.copy()
-        feature_importance_df.loc[:, "Feature Id"] = feature_importance_df.loc[:, "Feature Id"].map(
-            indx_to_col_name
-        )
+        feature_importance_df.loc[:, "Feature Id"] = feature_importance_df.loc[
+            :, "Feature Id"
+        ].map(indx_to_col_name)
         feature_importance_df = feature_importance_df.rename(
             columns={"Feature Id": "Feature", "Importances": "Importance"}
         )

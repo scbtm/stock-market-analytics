@@ -7,7 +7,6 @@ of the stock market analytics pipeline.
 """
 
 
-
 def main() -> None:
     """
     Main entry point for the stock market analytics CLI.

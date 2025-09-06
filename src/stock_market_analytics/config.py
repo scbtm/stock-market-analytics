@@ -209,9 +209,7 @@ class AppConfig(BaseModel):
     base_data_path: Path | None = Field(
         default=None, description="Base path for data files"
     )
-    wandb_key: str | None = Field(
-        default=None, description="Weights & Biases API key"
-    )
+    wandb_key: str | None = Field(default=None, description="Weights & Biases API key")
 
     data_collection: DataCollectionConfig = Field(default_factory=DataCollectionConfig)
     feature_engineering: FeatureEngineeringConfig = Field(
