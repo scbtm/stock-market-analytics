@@ -1,287 +1,347 @@
-"""
-Generalized protocols for pipeline components to enable extensibility across different ML tasks.
+from __future__ import annotations
 
-This module defines abstract interfaces that allow the same modeling workflow to work
-with different types of models (regression, classification, etc.) and post-processing
-techniques (calibration, uncertainty quantification, etc.).
+"""
+Best-in-class protocols for modular ML components.
+
+Key ideas:
+- Capability protocols express *what* an estimator can do (predict, predict_proba, predict_quantiles)
+- Evaluators take ground truth + a typed PredictionBundle (not a model)
+- Calibrators wrap an existing fitted estimator into a new sklearn-compatible estimator
+- Everything remains sklearn-native (get_params/set_params where relevant)
+
+This file is intentionally dependency-light: numpy, pandas, sklearn.base only.
 """
 
-from abc import ABC, abstractmethod
-from typing import Any, Protocol, runtime_checkable
+from dataclasses import dataclass
+from typing import (
+    Any,
+    Callable,
+    Iterable,
+    Literal,
+    Mapping,
+    Protocol,
+    Sequence,
+    runtime_checkable,
+    TypeGuard,
+)
 
 import numpy as np
+import numpy.typing as npt
 import pandas as pd
-from sklearn.pipeline import Pipeline
+from sklearn.base import BaseEstimator
+
+
+# =========================
+# Common task/type aliases
+# =========================
+
+TaskType = Literal["regression", "classification", "quantile_regression"]
+
+PredKind = Literal["point", "proba", "quantiles", "interval"]
+# "interval" = explicit (lo, hi) intervals, often the *output* of calibration
+
+
+NDArrayF = npt.NDArray[np.float64]
+
+
+# =========================
+# Capability protocols
+# =========================
+
+@runtime_checkable
+class SupportsPredict(Protocol):
+    """Point prediction: y_hat shape (n_samples,)."""
+    def predict(self, X: Any) -> NDArrayF: ...
 
 
 @runtime_checkable
-class EvaluationResult(Protocol):
-    """
-    Standardized result format for all model evaluation operations.
-    
-    This protocol ensures that all evaluators return a consistent format that
-    can be easily consumed by modeling_steps.py and other components.
-    """
-    
-    @property
-    def primary_metric(self) -> float:
-        """
-        The primary metric for this evaluation task.
-        
-        For regression: typically MSE, MAE, or pinball loss
-        For classification: typically accuracy, F1, or log-loss
-        For quantile regression: typically pinball loss
-        """
-        ...
-    
-    @property
-    def metrics(self) -> dict[str, Any]:
-        """
-        Complete dictionary of all evaluation metrics.
-        
-        Should include:
-        - All computed metrics (e.g., accuracy, precision, coverage, etc.)
-        - Task-specific information (e.g., quantiles for quantile regression)
-        - Any debugging/analysis information
-        """
-        ...
-    
-    @property
-    def task_type(self) -> str:
-        """The type of ML task (e.g., 'quantile_regression', 'classification', 'regression')."""
-        ...
+class SupportsPredictProba(Protocol):
+    """Class probabilities: proba shape (n_samples, n_classes)."""
+    def predict_proba(self, X: Any) -> NDArrayF: ...
 
 
-class BaseEvaluationResult:
+@runtime_checkable
+class SupportsPredictQuantiles(Protocol):
     """
-    Base implementation of EvaluationResult protocol.
-    
-    This provides a concrete implementation that all evaluators can use or extend.
+    Quantile prediction: shape (n_samples, n_quantiles).
+    If `quantiles` is None, use model's internal quantiles order.
     """
-    
-    def __init__(
-        self, 
-        primary_metric: float,
-        metrics: dict[str, Any],
-        task_type: str
-    ):
-        self._primary_metric = primary_metric
-        self._metrics = metrics
-        self._task_type = task_type
-    
-    @property
-    def primary_metric(self) -> float:
-        return self._primary_metric
-    
-    @property 
-    def metrics(self) -> dict[str, Any]:
-        return self._metrics
-    
-    @property
-    def task_type(self) -> str:
-        return self._task_type
-    
-    def __repr__(self) -> str:
-        return (f"{self.__class__.__name__}("
-                f"primary_metric={self.primary_metric:.4f}, "
-                f"task_type='{self.task_type}')")
+    def predict_quantiles(
+        self,
+        X: Any,
+        quantiles: Sequence[float] | NDArrayF | None = None
+    ) -> NDArrayF: ...
 
 
-@runtime_checkable  
+# =========================
+# Predictions (discriminated union)
+# =========================
+
+@dataclass(frozen=True)
+class PointPreds:
+    kind: Literal["point"] = "point"
+    y_hat: NDArrayF = np.empty(0)  # (n_samples,)
+
+
+@dataclass(frozen=True)
+class ProbPreds:
+    kind: Literal["proba"] = "proba"
+    proba: NDArrayF = np.empty((0, 0))          # (n_samples, n_classes)
+    classes_: Sequence[Any] = ()                # Ordering of columns in `proba`
+
+
+@dataclass(frozen=True)
+class QuantilePreds:
+    kind: Literal["quantiles"] = "quantiles"
+    q: NDArrayF = np.empty((0, 0))              # (n_samples, n_quantiles)
+    quantiles: Sequence[float] = ()             # same order as columns in `q`
+
+
+@dataclass(frozen=True)
+class IntervalPreds:
+    kind: Literal["interval"] = "interval"
+    lo: NDArrayF = np.empty(0)                  # (n_samples,)
+    hi: NDArrayF = np.empty(0)                  # (n_samples,)
+    target_coverage: float | None = None        # e.g., 0.80
+
+
+PredictionBundle = PointPreds | ProbPreds | QuantilePreds | IntervalPreds
+
+
+# Tiny type guards for ergonomic branching in evaluators/calibrators
+def is_point(p: PredictionBundle) -> TypeGuard[PointPreds]: return p.kind == "point"
+def is_proba(p: PredictionBundle) -> TypeGuard[ProbPreds]: return p.kind == "proba"
+def is_quantiles(p: PredictionBundle) -> TypeGuard[QuantilePreds]: return p.kind == "quantiles"
+def is_interval(p: PredictionBundle) -> TypeGuard[IntervalPreds]: return p.kind == "interval"
+
+
+# =========================
+# Evaluation result
+# =========================
+
+@runtime_checkable
+class EvaluationResultProtocol(Protocol):
+    @property
+    def task_type(self) -> TaskType: ...
+    @property
+    def primary_metric_name(self) -> str: ...
+    @property
+    def primary_metric_value(self) -> float: ...
+    @property
+    def metrics(self) -> Mapping[str, Any]: ...
+    @property
+    def n_samples(self) -> int: ...
+    # Optional: artifacts/curves (ROC pts, PR pts, residual histograms, etc.)
+    @property
+    def artifacts(self) -> Mapping[str, Any]: ...
+
+
+@dataclass(frozen=True)
+class EvaluationResult(EvaluationResultProtocol):
+    task_type: TaskType
+    primary_metric_name: str
+    primary_metric_value: float
+    metrics: Mapping[str, Any]
+    n_samples: int
+    artifacts: Mapping[str, Any] = None  # type: ignore[assignment]
+
+
+# =========================
+# Evaluator protocol
+# =========================
+
+@runtime_checkable
 class ModelEvaluatorProtocol(Protocol):
     """
-    Protocol for model evaluation components.
-    
-    This protocol allows different evaluators (quantile regression, classification, 
-    standard regression, etc.) to be used interchangeably in the modeling workflow.
+    Evaluators are task-/kind-specific, *stateless* objects that consume ground truth
+    and a PredictionBundle, returning an EvaluationResult.
     """
-    
-    def evaluate(
-        self,
-        pipeline: Pipeline,
-        X: pd.DataFrame | np.ndarray,
-        y: pd.DataFrame | np.ndarray,
-        **kwargs: Any
-    ) -> EvaluationResult:
-        """
-        Evaluate model performance on given data.
-        
-        Args:
-            pipeline: Fitted sklearn pipeline
-            X: Features
-            y: Target values
-            **kwargs: Additional evaluation parameters (sample_weight, etc.)
-            
-        Returns:
-            EvaluationResult containing primary metric and detailed metrics
-        """
-        ...
+    task_type: TaskType
+    accepted_kinds: tuple[PredKind, ...]  # e.g. ("point",) or ("proba",) or ("quantiles","interval")
 
+    def evaluate_predictions(
+        self,
+        y_true: NDArrayF,
+        preds: PredictionBundle,
+        *,
+        sample_weight: NDArrayF | None = None,
+        **kwargs: Any,
+    ) -> EvaluationResult: ...
+
+
+# =========================
+# Calibrator protocol
+# =========================
+
+CalibrationKind = Literal[
+    "probability",         # e.g., Platt/Isotonic for classification
+    "quantile_interval",   # e.g., conformalizing (lo, hi)
+    "regression_residual", # e.g., std calibration for Gaussian residuals
+    "temperature",         # deep nets (logits scaling)
+]
 
 @runtime_checkable
 class CalibratorProtocol(Protocol):
     """
-    Protocol for model calibration components.
-    
-    This protocol allows different calibration techniques to be used interchangeably:
-    - Conformal prediction for quantile regression
-    - Platt scaling for classification  
-    - Temperature scaling for deep learning
-    - Isotonic regression for general calibration
+    Calibrators *wrap* a fitted base estimator and return a new estimator with
+    the same exposed prediction surface (or a superset), but calibrated.
     """
-    
-    def fit_calibrator(
+    calibration_kind: CalibrationKind
+    task_type: TaskType
+    # What this calibrator EXPECTS as input during fitting
+    input_kind: tuple[PredKind, ...]
+    # What the returned wrapper will EXPOSE as public prediction API
+    output_kind: tuple[PredKind, ...]
+
+    def fit(
         self,
-        base_pipeline: Pipeline,
-        X_cal: pd.DataFrame | np.ndarray, 
-        y_cal: pd.DataFrame | np.ndarray,
-        **kwargs: Any
-    ) -> 'CalibratorProtocol':
+        base_estimator: BaseEstimator,  # fitted
+        X_cal: Any,
+        y_cal: Any,
+        *,
+        extract: PredictionExtractor | None = None,
+        **kwargs: Any,
+    ) -> CalibratorProtocol: ...
+
+    def wrap(self, base_estimator: BaseEstimator) -> BaseEstimator:
         """
-        Fit the calibrator using calibration data.
-        
-        Args:
-            base_pipeline: Fitted base model pipeline
-            X_cal: Calibration features
-            y_cal: Calibration targets
-            **kwargs: Additional calibrator-specific parameters
-            
-        Returns:
-            Self for method chaining
-        """
-        ...
-    
-    def create_calibrated_pipeline(
-        self,
-        base_pipeline: Pipeline
-    ) -> Pipeline:
-        """
-        Create a new pipeline with calibration as the final step.
-        
-        Args:
-            base_pipeline: The base fitted pipeline
-            
-        Returns:
-            New pipeline with calibrator added as final step
-        """
-        ...
-    
-    def get_calibration_info(self) -> dict[str, Any]:
-        """
-        Get information about the fitted calibrator.
-        
-        Returns:
-            Dictionary with calibrator-specific information
+        Return a sklearn-compatible estimator that performs calibrated predictions.
+
+        - If output_kind contains "point" => wrapper must implement .predict(X)
+        - If "proba"                      => wrapper must implement .predict_proba(X)
+        - If "quantiles"                  => wrapper must implement .predict_quantiles(X, quantiles=None)
+        - If "interval"                   => wrapper must implement .predict_interval(X, coverage=None) [optional]
         """
         ...
 
+    def info(self) -> Mapping[str, Any]: ...
 
-class BaseCalibrator(ABC):
-    """
-    Abstract base class for calibrator implementations.
-    
-    This provides common functionality and ensures all calibrators
-    follow the same interface patterns.
-    """
-    
-    def __init__(self, **kwargs: Any):
-        self.is_fitted_ = False
-        self._calibration_info = {}
-    
-    @abstractmethod
-    def _fit_calibrator_impl(
-        self,
-        predictions: np.ndarray,
-        targets: np.ndarray,
-        **kwargs: Any
-    ) -> None:
-        """
-        Task-specific calibrator fitting logic.
-        
-        Args:
-            predictions: Model predictions on calibration set
-            targets: True targets for calibration set
-            **kwargs: Additional parameters
-        """
-        pass
-    
-    @abstractmethod
-    def _create_calibrator_component(self) -> Any:
-        """
-        Create the sklearn-compatible calibrator component.
-        
-        Returns:
-            Sklearn transformer/predictor that performs calibration
-        """
-        pass
-    
-    def fit_calibrator(
-        self,
-        base_pipeline: Pipeline,
-        X_cal: pd.DataFrame | np.ndarray,
-        y_cal: pd.DataFrame | np.ndarray,
-        **kwargs: Any
-    ) -> 'BaseCalibrator':
-        """Fit the calibrator using calibration data."""
-        # Get predictions from base pipeline
-        predictions = base_pipeline.predict(X_cal)
-        
-        # Convert targets to numpy
-        targets = (
-            y_cal.to_numpy().ravel() if hasattr(y_cal, 'values') 
-            else np.asarray(y_cal).ravel()
-        )
-        
-        # Fit calibrator
-        self._fit_calibrator_impl(predictions, targets, **kwargs)
-        self.is_fitted_ = True
-        
-        return self
-    
-    def create_calibrated_pipeline(self, base_pipeline: Pipeline) -> Pipeline:
-        """Create calibrated pipeline."""
-        if not self.is_fitted_:
-            raise ValueError("Calibrator must be fitted before creating pipeline")
-            
-        calibrator_component = self._create_calibrator_component()
-        
-        # Add calibrator as final step
-        new_steps = base_pipeline.steps + [("calibrator", calibrator_component)]
-        return Pipeline(new_steps)
-    
-    def get_calibration_info(self) -> dict[str, Any]:
-        """Get calibration information."""
-        return self._calibration_info.copy()
 
+# =========================
+# Task config (factory of defaults)
+# =========================
 
 @runtime_checkable
 class TaskConfigProtocol(Protocol):
     """
-    Protocol for task-specific configuration.
-    
-    This allows different ML tasks to specify their requirements
-    (metrics, calibration methods, etc.) in a standardized way.
+    Narrow purpose: surface defaults & factories without importing concrete classes here.
+    Implementations live elsewhere (e.g., classification_config.py).
     """
-    
     @property
-    def task_type(self) -> str:
-        """The type of ML task (e.g., 'quantile_regression', 'classification')."""
-        ...
-    
-    @property  
-    def primary_metric(self) -> str:
-        """Name of the primary metric for this task."""
-        ...
-    
+    def task_type(self) -> TaskType: ...
     @property
-    def requires_calibration(self) -> bool:
-        """Whether this task typically requires calibration."""
-        ...
-    
-    def get_default_evaluator(self) -> ModelEvaluatorProtocol:
-        """Get the default evaluator for this task."""
-        ...
-    
-    def get_default_calibrator(self) -> CalibratorProtocol | None:
-        """Get the default calibrator for this task (if any)."""
-        ...
+    def primary_metric_name(self) -> str: ...
+    @property
+    def default_quantiles(self) -> Sequence[float] | None: ...
+    @property
+    def prefers_calibration(self) -> bool: ...
+
+    def make_default_evaluator(self) -> ModelEvaluatorProtocol: ...
+    def make_default_calibrator(self) -> CalibratorProtocol | None: ...
+
+
+# =========================
+# Extractors (used by flows or calibrators)
+# =========================
+
+# A function that, given a fitted estimator and X, produces a typed PredictionBundle
+PredictionExtractor = Callable[[BaseEstimator, Any], PredictionBundle]
+
+
+def extract_point(est: BaseEstimator, X: Any) -> PointPreds:
+    assert isinstance(est, SupportsPredict), (
+        "Estimator does not implement predict(X)."
+    )
+    y_hat = _to_1d(np.asarray(est.predict(X)))
+    return PointPreds(y_hat=y_hat)
+
+
+def extract_proba(est: BaseEstimator, X: Any, classes: Sequence[Any] | None = None) -> ProbPreds:
+    assert isinstance(est, SupportsPredictProba), (
+        "Estimator does not implement predict_proba(X)."
+    )
+    P = np.asarray(est.predict_proba(X), dtype=float)
+    return ProbPreds(proba=P, classes_=tuple(classes) if classes else tuple(range(P.shape[1])))
+
+
+def extract_quantiles(
+    est: BaseEstimator,
+    X: Any,
+    quantiles: Sequence[float] | NDArrayF | None = None,
+) -> QuantilePreds:
+    assert isinstance(est, SupportsPredictQuantiles), (
+        "Estimator does not implement predict_quantiles(X, quantiles=None)."
+    )
+    q = np.asarray(est.predict_quantiles(X, quantiles=quantiles), dtype=float)
+    q_levels = tuple(quantiles) if quantiles is not None else tuple(range(q.shape[1]))
+    return QuantilePreds(q=q, quantiles=q_levels)
+
+
+# =========================
+# Optional (lightweight) interval surface
+# =========================
+
+@runtime_checkable
+class SupportsPredictInterval(Protocol):
+    """
+    Optional surface that calibrated wrappers may expose.
+    Returns (lo, hi) interval achieving requested coverage if provided;
+    otherwise uses trained default coverage (if any).
+    """
+    def predict_interval(
+        self, X: Any, coverage: float | None = None
+    ) -> tuple[NDArrayF, NDArrayF]: ...
+
+
+# =========================
+# Sklearn wrapper helper (mixin)
+# =========================
+
+class GetSetParamsMixin:
+    """
+    A tiny helper mixin so your wrappers remain sklearn-compatible.
+    Use it in your calibrated wrappers or custom estimators.
+    """
+    def get_params(self, deep: bool = True) -> dict[str, Any]:
+        # expose all public attributes (shallow); override for more control
+        return {
+            k: v
+            for k, v in self.__dict__.items()
+            if not k.startswith("_")
+        }
+
+    def set_params(self, **params: Any) -> "GetSetParamsMixin":
+        for k, v in params.items():
+            setattr(self, k, v)
+        return self
+
+
+# =========================
+# Utilities
+# =========================
+
+def _to_1d(a: NDArrayF) -> NDArrayF:
+    """Ravel to (n,), copying as float64."""
+    return np.asarray(a, dtype=float).reshape(-1)
+
+def ensure_monotone_quantiles(q: NDArrayF, axis: int = 1) -> bool:
+    """Quick monotonicity check for quantiles along axis (no penalization logic here)."""
+    diffs = np.diff(q, axis=axis)
+    return bool(np.all(diffs >= -1e-12))  # tiny tolerance
+
+def validate_prediction_bundle_size(preds: PredictionBundle, n: int) -> None:
+    """Raise if the bundle size doesn't match n samples."""
+    if is_point(preds):
+        if preds.y_hat.shape[0] != n:
+            raise ValueError("PointPreds length mismatch.")
+    elif is_proba(preds):
+        if preds.proba.shape[0] != n:
+            raise ValueError("ProbPreds length mismatch.")
+    elif is_quantiles(preds):
+        if preds.q.shape[0] != n:
+            raise ValueError("QuantilePreds length mismatch.")
+    elif is_interval(preds):
+        if preds.lo.shape[0] != n or preds.hi.shape[0] != n:
+            raise ValueError("IntervalPreds length mismatch.")
+    else:
+        raise TypeError("Unknown PredictionBundle kind.")
