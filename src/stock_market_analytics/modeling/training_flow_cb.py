@@ -6,11 +6,11 @@ import pandas as pd
 from metaflow import FlowSpec, step
 
 import wandb
+from stock_market_analytics.config import config
 from stock_market_analytics.modeling import processing_functions
 from stock_market_analytics.modeling.pipeline_components.calibrators import (
     PipelineWithCalibrator,
 )
-from stock_market_analytics.config import config
 from stock_market_analytics.modeling.pipeline_components.evaluators import (
     EvaluationReport,
     ModelEvaluator,

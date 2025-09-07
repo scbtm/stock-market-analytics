@@ -218,7 +218,7 @@ class ModelingConfig(BaseModel):
             ],
         }
 
-    @property 
+    @property
     def cb_model_params(self) -> dict[str, Any]:
         """CatBoost model parameters."""
         alpha_str = ",".join([str(q) for q in self.quantiles])
