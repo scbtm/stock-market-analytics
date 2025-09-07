@@ -9,13 +9,15 @@ This project implements an end-to-end stock market analytics platform designed f
 - **Scalable Data Pipelines**: Robust data collection with real-time quality validation and feature engineering workflows
 - **Production Architecture**: Modular design with clear separation of concerns
 - **Type-Safe Configuration**: Centralized Pydantic-based configuration system with validation
-- **Data Quality Assurance**: Real-time validation ensures only high-quality data reaches ML models
-- **Quality Assurance**: Comprehensive testing, type checking, and code quality controls
+- **Data Quality**: Real-time validation ensures only high-quality data reaches ML models
+- **Code Quality**: Comprehensive testing, type checking, and code quality controls
 - **MLOps Best Practices**: Versioned data flows, reproducible experiments, and automated validation
 
 The platform focuses on creating reliable, maintainable, and scalable infrastructure for financial market analysis, emphasizing code quality over quick prototypes.
 
 ## Architecture Overview
+
+The project follows a **3-layer modular architecture** designed for scalability, maintainability, and clean separation of concerns:
 
 ```
 📁 stock-market-analytics/
@@ -23,12 +25,92 @@ The platform focuses on creating reliable, maintainable, and scalable infrastruc
 │   ├── config.py                   # Centralized type-safe configuration
 │   ├── main.py                     # CLI entry point  
 │   ├── data_collection/            # Data ingestion pipeline
+│   │   ├── collectors/             # 🔧 Core: Data collection logic
+│   │   ├── processors/             # 🔧 Core: Data processing & validation  
+│   │   ├── models/                 # 🔧 Core: Data models & schemas
+│   │   ├── collection_steps.py     # 📋 Steps: Workflow step functions
+│   │   └── batch_collection_flow.py # 🎭 Flow: Orchestration layer
 │   ├── feature_engineering/       # Feature computation pipeline
+│   │   ├── feature_pipeline.py     # 🔧 Core: Hamilton feature functions
+│   │   ├── feature_steps.py        # 📋 Steps: Feature workflow steps
+│   │   └── feature_building_flow.py # 🎭 Flow: Feature orchestration
 │   └── modeling/                   # ML model training and evaluation
+│       ├── pipeline_components/    # 🔧 Core: ML components & models
+│       ├── modeling_steps.py       # 📋 Steps: Training workflow steps
+│       └── training_flow_cb.py     # 🎭 Flow: Training orchestration
 ├── tests/                          # Comprehensive test suite
 ├── Makefile                       # Development workflow automation
 └── pyproject.toml                  # Dependencies and entry points
 ```
+
+### 3-Layer Architecture Design
+
+This architecture implements a clean **separation of concerns** across three distinct layers:
+
+#### 🔧 **Core Layer** (Low-level)
+**Purpose**: Contains the fundamental business logic and domain-specific functionality
+
+- **Data Collection**: `collectors/`, `processors/`, `models/` - Raw data collection and validation logic
+- **Feature Engineering**: `feature_pipeline.py` - Pure Hamilton functions for feature computation
+- **Modeling**: `pipeline_components/` - CatBoost models, evaluators, calibrators
+
+**Characteristics**:
+- ✅ Pure business logic with minimal dependencies
+- ✅ Highly testable and reusable components  
+- ✅ No knowledge of orchestration or workflows
+- ✅ Framework-agnostic (can work with any orchestration layer)
+
+#### 📋 **Steps Layer** (Mid-level)
+**Purpose**: Provides workflow step functions that combine core components for common use cases
+
+- **Data Collection**: `collection_steps.py` - Functions like `load_tickers()`, `collect_and_process_symbol()`
+- **Feature Engineering**: `feature_steps.py` - Functions like `build_features_from_data()`, `load_stock_data()`  
+- **Modeling**: `modeling_steps.py` - Functions like `train_catboost_model()`, `evaluate_model()`
+
+**Characteristics**:
+- ✅ **Reusable**: Step functions can be used across different flows and scenarios
+- ✅ **Simple**: Clean functions without complex class hierarchies
+- ✅ **Testable**: Easy to unit test individual workflow steps
+- ✅ **Focused**: Each step function has a single, clear responsibility
+
+#### 🎭 **Flow Layer** (High-level)  
+**Purpose**: Metaflow orchestration that coordinates the entire workflow with logging and error handling
+
+- **Orchestration**: `*_flow.py` files define the complete pipeline steps
+- **Error Handling**: Centralized error handling and logging at the flow level
+- **Scalability**: Leverages Metaflow for parallel processing and cloud scaling
+
+**Characteristics**:
+- ✅ **Clean & Focused**: Flows only handle orchestration, not business logic
+- ✅ **Maintainable**: Easy to modify workflow steps without touching core logic
+- ✅ **Observable**: All logging and monitoring happens at this level
+- ✅ **Scalable**: Metaflow provides seamless local-to-cloud execution
+
+### Architecture Benefits
+
+This layered approach provides several key advantages:
+
+🔄 **Reusability**: Step functions can be used across different flows, APIs, or batch jobs
+
+🧪 **Testability**: Each layer can be independently tested
+- Core: Unit tests for business logic
+- Steps: Integration tests for workflow step functions  
+- Flows: End-to-end pipeline tests
+
+⚡ **Maintainability**: Changes are isolated to appropriate layers
+- Business logic changes → Core layer
+- Workflow step changes → Steps layer  
+- Orchestration changes → Flow layer
+
+📈 **Scalability**: Clean separation enables easy scaling strategies
+- Core components can be optimized independently
+- Steps can be deployed as microservices if needed
+- Flows handle distributed execution automatically
+
+🔧 **Flexibility**: Easy to swap implementations or add new flows
+- Add new data sources → Core layer
+- Add new workflow steps → Steps layer
+- Add new workflows → Flow layer
 
 ## Code Structure
 

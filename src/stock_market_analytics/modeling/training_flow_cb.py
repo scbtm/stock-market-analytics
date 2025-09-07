@@ -7,7 +7,7 @@ from metaflow import FlowSpec, step
 
 import wandb
 from stock_market_analytics.config import config
-from stock_market_analytics.modeling import processing_functions
+from stock_market_analytics.modeling import modeling_steps
 from stock_market_analytics.modeling.pipeline_components.calibrators import (
     PipelineWithCalibrator,
 )
@@ -118,9 +118,9 @@ class TrainingFlow(FlowSpec):
     def _prepare_training_data(self) -> dict:
         """Prepare and split data for model training."""
         data = self.data
-        data = processing_functions.split_data(df=data, time_span=TIME_SPAN)
+        data = modeling_steps.split_data(df=data, time_span=TIME_SPAN)
 
-        modeling_datasets = processing_functions.modeling_datasets(
+        modeling_datasets = modeling_steps.create_modeling_datasets(
             split_data=data,
             features=FEATURES,
             target=TARGET,

@@ -74,6 +74,7 @@ venv.bak/
 catboost_info/
 wandb/
 artifacts/
+.claude/
 
 # Log files
 *.log
