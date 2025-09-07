@@ -269,47 +269,47 @@ def plot_optuna_parallel_coordinates(
     # Create parallel coordinates plot
     # Add trial_number as the first dimension for easy identification
     dimensions = [
-        dict(
-            range=[df["trial_number"].min(), df["trial_number"].max()],
-            label="Trial",
-            values=df["trial_number"],
-        )
+        {
+            "range": [df["trial_number"].min(), df["trial_number"].max()],
+            "label": "Trial",
+            "values": df["trial_number"],
+        }
     ]
 
     # Add other dimensions
     dimensions.extend(
         [
-            dict(
-                range=[df[col].min(), df[col].max()],
-                label=col.replace("_", " ").title(),
-                values=df[col],
-            )
+            {
+                "range": [df[col].min(), df[col].max()],
+                "label": col.replace("_", " ").title(),
+                "values": df[col],
+            }
             for col in plot_dimensions
         ]
     )
 
     fig = go.Figure(
         data=go.Parcoords(
-            line=dict(
-                color=df["objective_value"],
-                colorscale="Viridis",
-                showscale=True,
-                colorbar=dict(title="Objective Value"),
-            ),
+            line={
+                "color": df["objective_value"],
+                "colorscale": "Viridis",
+                "showscale": True,
+                "colorbar": {"title": "Objective Value"},
+            },
             dimensions=dimensions,
             # Enable interactive features
-            labelfont=dict(size=12, color=palette["dark"]),
-            tickfont=dict(size=10, color=palette["dark"]),
+            labelfont={"size": 12, "color": palette["dark"]},
+            tickfont={"size": 10, "color": palette["dark"]},
         )
     )
 
     fig.update_layout(
-        title=dict(text=title, font=dict(size=16, color=palette["dark"])),
+        title={"text": title, "font": {"size": 16, "color": palette["dark"]}},
         width=width,
         height=height,
         paper_bgcolor="white",
         plot_bgcolor="white",
-        font=dict(color=palette["dark"]),
+        font={"color": palette["dark"]},
         # Enable better interactivity
         hovermode="closest",
     )
@@ -370,14 +370,14 @@ def plot_optuna_metrics_distribution(
     )
 
     fig.update_layout(
-        title=dict(text=title, font=dict(size=16, color=palette["dark"])),
+        title={"text": title, "font": {"size": 16, "color": palette["dark"]}},
         xaxis_title=metric_name.replace("_", " ").title(),
         yaxis_title="Count",
         width=width,
         height=height,
         paper_bgcolor="white",
         plot_bgcolor="white",
-        font=dict(color=palette["dark"]),
+        font={"color": palette["dark"]},
         showlegend=False,
     )
 

@@ -244,7 +244,10 @@ class BatchCollectionFlow(FlowSpec):
                     quality_validator = DataQualityValidator(symbol, processed_data)
                     validated_data = quality_validator.validate()
 
-                    if validated_data is not None and quality_validator.validation_successful:
+                    if (
+                        validated_data is not None
+                        and quality_validator.validation_successful
+                    ):
                         new_metadata["max_date_recorded"] = (
                             validated_data["date"].max().strftime("%Y-%m-%d")
                         )

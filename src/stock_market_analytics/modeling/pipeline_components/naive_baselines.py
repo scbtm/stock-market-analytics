@@ -23,21 +23,21 @@ class HistoricalQuantileBaseline(BaseEstimator, RegressorMixin):
         Quantiles to predict, e.g., [0.1, 0.5, 0.9]
     """
 
-    def __init__(self, quantiles: list[float] = [0.1, 0.25, 0.5, 0.75, 0.9]):
-        self.quantiles = quantiles
+    def __init__(self, quantiles: list[float] | None = None):
+        self.quantiles = quantiles or [0.1, 0.25, 0.5, 0.75, 0.9]
 
     def fit(self, X: Any, y: Any, **fit_params: Any) -> "HistoricalQuantileBaseline":
         _ = fit_params  # Unused but required for sklearn compatibility
         """
         Fit the baseline by computing empirical quantiles from training targets.
-        
+
         Parameters
         ----------
         X : array-like of shape (n_samples, n_features)
             Training features (ignored)
         y : array-like of shape (n_samples,)
             Training targets
-            
+
         Returns
         -------
         self : HistoricalQuantileBaseline

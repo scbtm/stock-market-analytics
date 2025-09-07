@@ -35,7 +35,10 @@ class ModelEvaluator:
         target_coverage: float = None,
     ):
         self.quantiles = quantiles or config.modeling.quantiles
-        self.interval = interval or (config.modeling.quantile_indices["LOW"], config.modeling.quantile_indices["HIGH"])
+        self.interval = interval or (
+            config.modeling.quantile_indices["LOW"],
+            config.modeling.quantile_indices["HIGH"],
+        )
         self.target_coverage = target_coverage or config.modeling.target_coverage
 
         # Convert interval indices to alpha values if needed
@@ -71,10 +74,7 @@ class ModelEvaluator:
         # Get predictions from pipeline
         q_pred = pipeline.predict(X_val)
 
-        if hasattr(y_val, "values"):
-            y_true = y_val.values
-        else:
-            y_true = np.asarray(y_val)
+        y_true = y_val.to_numpy() if hasattr(y_val, "values") else np.asarray(y_val)
 
         return eval_multiquantile(
             y_true=y_true,
@@ -110,7 +110,7 @@ class ModelEvaluator:
         # Convert inputs to arrays
         bounds = np.asarray(calibrated_predictions)
         if hasattr(y_true, "values"):
-            y_array = y_true.values.ravel()
+            y_array = y_true.to_numpy().ravel()
         else:
             y_array = np.asarray(y_true).ravel()
 

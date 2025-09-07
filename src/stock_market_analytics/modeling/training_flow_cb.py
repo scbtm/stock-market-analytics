@@ -1,6 +1,6 @@
 import os
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import pandas as pd
 from metaflow import FlowSpec, step
@@ -19,10 +19,12 @@ from stock_market_analytics.modeling.pipeline_components.pipeline_factory import
     get_baseline_pipeline,
     get_pipeline,
 )
-from stock_market_analytics.modeling.pipeline_components.predictors import (
-    CatBoostMultiQuantileModel,
-)
 from wandb.integration.metaflow import wandb_log
+
+if TYPE_CHECKING:
+    from stock_market_analytics.modeling.pipeline_components.predictors import (
+        CatBoostMultiQuantileModel,
+    )
 
 wandb.login(key=os.environ.get("WANDB_KEY"))
 

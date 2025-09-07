@@ -6,9 +6,10 @@ A production-ready machine learning pipeline for stock market analysis and predi
 
 This project implements an end-to-end stock market analytics platform designed for predictive modeling of stock prices and market behavior. The system demonstrates enterprise-grade software engineering practices through:
 
-- **Scalable Data Pipelines**: Robust data collection and feature engineering workflows
+- **Scalable Data Pipelines**: Robust data collection with real-time quality validation and feature engineering workflows
 - **Production Architecture**: Modular design with clear separation of concerns
 - **Type-Safe Configuration**: Centralized Pydantic-based configuration system with validation
+- **Data Quality Assurance**: Real-time validation ensures only high-quality data reaches ML models
 - **Quality Assurance**: Comprehensive testing, type checking, and code quality controls
 - **MLOps Best Practices**: Versioned data flows, reproducible experiments, and automated validation
 
@@ -67,7 +68,7 @@ uv run train-model run
 
 **Location**: `src/stock_market_analytics/data_collection/`
 
-The data collection module exemplifies enterprise-grade data engineering patterns:
+The data collection module exemplifies enterprise-grade data engineering patterns with production-ready data quality assurance:
 
 #### Design Patterns & Architecture
 
@@ -75,15 +76,37 @@ The data collection module exemplifies enterprise-grade data engineering pattern
 2. **Strategy Pattern**: Pluggable collectors (YFinance, future: Alpha Vantage, IEX) with unified interfaces
 3. **Data Validation**: Pydantic models (`models/collection_plans.py`) enforce schema validation and type safety
 4. **Timeline Processing**: Intelligent incremental vs. full data refresh logic
-5. **Metaflow Orchestration**: Parallel processing with automatic dependency management
+5. **Real-time Quality Validation**: Comprehensive data quality checks applied during ingestion
+6. **Metaflow Orchestration**: Parallel processing with automatic dependency management
+
+#### Data Quality Validation System
+
+The module features a sophisticated **DataQualityValidator** that ensures only high-quality data reaches downstream ML models:
+
+**Quality Checks Applied**:
+- **Price Consistency**: High ≥ Low validation for each trading period
+- **Price Positivity**: All prices must be positive (no negative values)
+- **Volume Validation**: Volume must be non-negative
+- **OHLC Relationships**: Open/close prices within high/low bounds
+- **Extreme Movement Detection**: Configurable thresholds flag potential data errors
+- **Schema Completeness**: Required columns validation with null handling
+- **Data Sufficiency**: Minimum data points validation
+
+**Quality Assurance Benefits**:
+- **ML Model Reliability**: Invalid data is automatically excluded from training datasets
+- **Data Integrity**: Systematic validation prevents corrupted data propagation  
+- **Configurable Rules**: Pydantic-based quality rules with sensible defaults
+- **Detailed Reporting**: Comprehensive validation results with specific failure reasons
+- **Graceful Degradation**: Quality failures are logged and tracked without pipeline crashes
 
 #### Key Advantages
 
 - **Type Safety**: Full Pydantic validation prevents runtime data errors
-- **Extensibility**: Easy addition of new data sources through base collector interface
-- **Reliability**: Built-in error handling, retries, and data quality checks
+- **Data Quality**: Real-time validation ensures only reliable data for ML training
+- **Extensibility**: Easy addition of new data sources and quality rules
+- **Reliability**: Built-in error handling, retries, and comprehensive quality checks
 - **Performance**: Parallel symbol processing with configurable batch sizes
-- **Monitoring**: Comprehensive metadata tracking for operational visibility
+- **Monitoring**: Detailed metadata tracking including quality validation results
 
 ### Feature Engineering Module  
 

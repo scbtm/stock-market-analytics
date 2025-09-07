@@ -16,7 +16,8 @@ from stock_market_analytics.modeling.pipeline_components.predictors import (
 feature_groups = config.modeling.feature_groups
 
 pca_groups = {
-    group.lower() + "_pca": PCA(**config.modeling.pca_group_params[group]) for group in feature_groups
+    group.lower() + "_pca": PCA(**config.modeling.pca_group_params[group])
+    for group in feature_groups
 }
 
 scaler_groups = {
@@ -66,7 +67,9 @@ transformation_pipeline = Pipeline(
 
 QUANTILES = config.modeling.quantiles
 
-quantile_regressor = CatBoostMultiQuantileModel(quantiles=QUANTILES, **config.modeling.cb_model_params)
+quantile_regressor = CatBoostMultiQuantileModel(
+    quantiles=QUANTILES, **config.modeling.cb_model_params
+)
 
 # transformation_pipeline = Pipeline(steps=[
 #     ("scaler", StandardScaler()),

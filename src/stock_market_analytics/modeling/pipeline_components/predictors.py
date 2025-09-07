@@ -28,12 +28,12 @@ class CatBoostMultiQuantileModel(BaseEstimator, RegressorMixin):
 
     def __init__(
         self,
-        quantiles: list[float] = [0.1, 0.25, 0.5, 0.75, 0.9],
+        quantiles: list[float] | None = None,
         random_state: int = 1,
         verbose: bool = False,
         **catboost_params: Any,
     ):
-        self.quantiles = quantiles
+        self.quantiles = quantiles or [0.1, 0.25, 0.5, 0.75, 0.9]
         self.random_state = random_state
         self.verbose = verbose
         self.catboost_params = catboost_params
@@ -170,7 +170,7 @@ class CatBoostMultiQuantileModel(BaseEstimator, RegressorMixin):
             raise ValueError("Model must be fitted to access best iteration")
         return getattr(self._model, "best_iteration_", None)
 
-    def get_params(self, deep: bool = True) -> dict[str, Any]:
+    def get_params(self, _deep: bool = True) -> dict[str, Any]:
         """Get parameters for this estimator.
 
         Parameters

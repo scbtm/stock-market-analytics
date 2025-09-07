@@ -1,4 +1,3 @@
-
 import polars as pl
 
 from stock_market_analytics.data_collection.models.data_quality_rules import (
@@ -10,16 +9,13 @@ from stock_market_analytics.data_collection.models.data_quality_rules import (
 class DataQualityValidator:
     """
     Processor that validates data quality for stock market data.
-    
+
     This processor applies configurable data quality rules to ensure the integrity
     of stock price data before it's stored in the consolidated dataset.
     """
 
     def __init__(
-        self,
-        symbol: str,
-        data: pl.DataFrame,
-        rules: DataQualityRules | None = None
+        self, symbol: str, data: pl.DataFrame, rules: DataQualityRules | None = None
     ):
         self.symbol = symbol
         self.data = data
@@ -30,16 +26,14 @@ class DataQualityValidator:
     def validate(self) -> pl.DataFrame | None:
         """
         Validate the data against configured quality rules.
-        
+
         Returns:
             pl.DataFrame or None: Validated data if all checks pass, None otherwise
         """
         if self.data.is_empty():
             self.validation_successful = False
             self.validation_result = DataQualityResult(
-                is_valid=False,
-                failed_checks=["empty_data"],
-                total_rows_checked=0
+                is_valid=False, failed_checks=["empty_data"], total_rows_checked=0
             )
             return None
 
@@ -61,13 +55,12 @@ class DataQualityValidator:
                     warnings=warnings,
                     total_rows_checked=len(self.data),
                     rows_with_issues=0,
-                    validation_details=validation_details
+                    validation_details=validation_details,
                 )
                 self.validation_successful = False
                 return None
 
         try:
-
             # Check 2: Price positivity
             if self.rules.check_price_positivity:
                 check_passed, issue_count = self._check_price_positivity()
@@ -102,7 +95,9 @@ class DataQualityValidator:
 
             # Check 6: Extreme price movements
             if self.rules.check_extreme_price_movements:
-                check_passed, issue_count, warning_messages = self._check_extreme_price_movements()
+                check_passed, issue_count, warning_messages = (
+                    self._check_extreme_price_movements()
+                )
                 validation_details["extreme_price_movements"] = check_passed
                 if not check_passed:
                     failed_checks.append("extreme_price_movements")
@@ -124,7 +119,7 @@ class DataQualityValidator:
                 warnings=warnings,
                 total_rows_checked=len(self.data),
                 rows_with_issues=rows_with_issues,
-                validation_details=validation_details
+                validation_details=validation_details,
             )
 
             self.validation_successful = is_valid
@@ -136,7 +131,7 @@ class DataQualityValidator:
                 is_valid=False,
                 failed_checks=["validation_error"],
                 warnings=[f"Validation error: {str(e)}"],
-                total_rows_checked=len(self.data)
+                total_rows_checked=len(self.data),
             )
             return None
 
@@ -164,8 +159,7 @@ class DataQualityValidator:
         for col in price_columns:
             # Count non-null negative or zero values
             negative_count = (
-                self.data
-                .filter(pl.col(col).is_not_null())
+                self.data.filter(pl.col(col).is_not_null())
                 .filter(pl.col(col) <= 0)
                 .shape[0]
             )
@@ -176,8 +170,7 @@ class DataQualityValidator:
     def _check_high_low_consistency(self) -> tuple[bool, int]:
         """Check that high >= low where both are not null."""
         issue_count = (
-            self.data
-            .filter(pl.col("high").is_not_null() & pl.col("low").is_not_null())
+            self.data.filter(pl.col("high").is_not_null() & pl.col("low").is_not_null())
             .filter(pl.col("high") < pl.col("low") - self.rules.price_tolerance)
             .shape[0]
         )
@@ -187,8 +180,7 @@ class DataQualityValidator:
     def _check_volume_non_negative(self) -> tuple[bool, int]:
         """Check that volume is non-negative where not null."""
         issue_count = (
-            self.data
-            .filter(pl.col("volume").is_not_null())
+            self.data.filter(pl.col("volume").is_not_null())
             .filter(pl.col("volume") < 0)
             .shape[0]
         )
@@ -199,30 +191,28 @@ class DataQualityValidator:
         """Check that open and close prices are within high/low range."""
         # Check open within high/low range
         open_issues = (
-            self.data
-            .filter(
-                pl.col("open").is_not_null() &
-                pl.col("high").is_not_null() &
-                pl.col("low").is_not_null()
+            self.data.filter(
+                pl.col("open").is_not_null()
+                & pl.col("high").is_not_null()
+                & pl.col("low").is_not_null()
             )
             .filter(
-                (pl.col("open") > pl.col("high") + self.rules.price_tolerance) |
-                (pl.col("open") < pl.col("low") - self.rules.price_tolerance)
+                (pl.col("open") > pl.col("high") + self.rules.price_tolerance)
+                | (pl.col("open") < pl.col("low") - self.rules.price_tolerance)
             )
             .shape[0]
         )
 
         # Check close within high/low range
         close_issues = (
-            self.data
-            .filter(
-                pl.col("close").is_not_null() &
-                pl.col("high").is_not_null() &
-                pl.col("low").is_not_null()
+            self.data.filter(
+                pl.col("close").is_not_null()
+                & pl.col("high").is_not_null()
+                & pl.col("low").is_not_null()
             )
             .filter(
-                (pl.col("close") > pl.col("high") + self.rules.price_tolerance) |
-                (pl.col("close") < pl.col("low") - self.rules.price_tolerance)
+                (pl.col("close") > pl.col("high") + self.rules.price_tolerance)
+                | (pl.col("close") < pl.col("low") - self.rules.price_tolerance)
             )
             .shape[0]
         )
@@ -237,21 +227,17 @@ class DataQualityValidator:
 
         # Calculate daily price changes (using close prices)
         data_with_changes = (
-            self.data
-            .filter(pl.col("close").is_not_null())
+            self.data.filter(pl.col("close").is_not_null())
             .sort("date")
-            .with_columns(
-                pl.col("close").pct_change().alias("daily_change")
-            )
+            .with_columns(pl.col("close").pct_change().alias("daily_change"))
         )
 
         if data_with_changes.is_empty():
             return True, 0, warnings
 
         # Find extreme movements
-        extreme_movements = (
-            data_with_changes
-            .filter(pl.col("daily_change").abs() > self.rules.max_daily_price_change_ratio)
+        extreme_movements = data_with_changes.filter(
+            pl.col("daily_change").abs() > self.rules.max_daily_price_change_ratio
         )
 
         issue_count = extreme_movements.shape[0]

@@ -43,8 +43,14 @@ class ConformalCalibrator(BaseEstimator, TransformerMixin):
                                   Set to False to save memory if not needed
         """
         self.target_coverage = target_coverage or config.modeling.target_coverage
-        self.low_idx = low_idx if low_idx is not None else config.modeling.quantile_indices["LOW"]
-        self.high_idx = high_idx if high_idx is not None else config.modeling.quantile_indices["HIGH"]
+        self.low_idx = (
+            low_idx if low_idx is not None else config.modeling.quantile_indices["LOW"]
+        )
+        self.high_idx = (
+            high_idx
+            if high_idx is not None
+            else config.modeling.quantile_indices["HIGH"]
+        )
         self.store_calibration_data = store_calibration_data
 
         # Will be set during fit()
@@ -74,10 +80,9 @@ class ConformalCalibrator(BaseEstimator, TransformerMixin):
         """
         # Convert inputs to numpy arrays
         X_array = np.asarray(X)
-        if hasattr(y, "values"):
-            y_array = y.values.ravel()
-        else:
-            y_array = np.asarray(y).ravel()
+        y_array = (
+            y.to_numpy().ravel() if hasattr(y, "values") else np.asarray(y).ravel()
+        )
 
         # Validate inputs
         if X_array.ndim != 2:
