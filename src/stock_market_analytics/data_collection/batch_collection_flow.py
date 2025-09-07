@@ -172,7 +172,7 @@ class BatchCollectionFlow(FlowSpec):
         All data has been collected, processed, and persisted to the data directory.
         """
         print("✅ Batch Collection Flow completed successfully!")
-        print("🎉 All stock data has been collected and updated.")
+        print("All stock data has been collected and updated.")
 
 
 if __name__ == "__main__":

@@ -29,15 +29,15 @@ The project follows a **3-layer modular architecture** designed for scalability,
 │   │   ├── processors/             # 🔧 Core: Data processing & validation  
 │   │   ├── models/                 # 🔧 Core: Data models & schemas
 │   │   ├── collection_steps.py     # 📋 Steps: Workflow step functions
-│   │   └── batch_collection_flow.py # 🎭 Flow: Orchestration layer
+│   │   └── batch_collection_flow.py # ⚙️ Flow: Orchestration layer
 │   ├── feature_engineering/       # Feature computation pipeline
 │   │   ├── feature_pipeline.py     # 🔧 Core: Hamilton feature functions
 │   │   ├── feature_steps.py        # 📋 Steps: Feature workflow steps
-│   │   └── feature_building_flow.py # 🎭 Flow: Feature orchestration
+│   │   └── feature_building_flow.py # ⚙️ Flow: Feature orchestration
 │   └── modeling/                   # ML model training and evaluation
 │       ├── pipeline_components/    # 🔧 Core: ML components & models
 │       ├── modeling_steps.py       # 📋 Steps: Training workflow steps
-│       └── training_flow_cb.py     # 🎭 Flow: Training orchestration
+│       └── training_flow_cb.py     # ⚙️ Flow: Training orchestration
 ├── tests/                          # Comprehensive test suite
 ├── Makefile                       # Development workflow automation
 └── pyproject.toml                  # Dependencies and entry points
@@ -73,7 +73,7 @@ This architecture implements a clean **separation of concerns** across three dis
 - ✅ **Testable**: Easy to unit test individual workflow steps
 - ✅ **Focused**: Each step function has a single, clear responsibility
 
-#### 🎭 **Flow Layer** (High-level)  
+#### ⚙️ **Flow Layer** (High-level)  
 **Purpose**: Metaflow orchestration that coordinates the entire workflow with logging and error handling
 
 - **Orchestration**: `*_flow.py` files define the complete pipeline steps
