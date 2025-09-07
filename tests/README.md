@@ -1,28 +1,82 @@
 # Tests Documentation
 
-This directory contains unit and integration tests for the stock market analytics project, properly organized by test type.
+This directory contains unit and integration tests for the stock market analytics project, organized to mirror the source code structure and maintain clear separation of concerns.
+
+## Core Testing Rules
+
+### 1. Mirror the Source Code Structure Exactly 📂
+The `tests/` directory structure must **exactly mirror** the `src/` directory structure. For every source module at `src/stock_market_analytics/module/submodule/file.py`, there should be a corresponding test at `tests/unit/test_module/test_submodule/test_file.py`.
+
+**Example:**
+```
+src/stock_market_analytics/modeling/pipeline_components/functions.py
+tests/unit/test_modeling/test_pipeline_components/test_functions.py
+```
+
+This makes tests highly discoverable and eliminates confusion about where to add tests for any module.
+
+### 2. Choose the Right Test Type 🎯
+- **Unit Tests (`tests/unit/`)**: Test individual functions/classes in isolation with mocked dependencies
+- **Integration Tests (`tests/integration/`)**: Test interactions between components or with external systems
+
+**Decision criteria:**
+- Has external dependencies (API calls, file I/O, database)? → Integration test
+- Pure function with no external dependencies? → Unit test
+- Tests component interactions? → Integration test
+
+### 3. Unit Test Principles 🔬
+- **Single Responsibility**: Each test focuses on one specific behavior
+- **Fast Execution**: Should run in milliseconds, not seconds
+- **Isolation**: Mock all external dependencies (APIs, file system, complex objects)
+- **Comprehensive Edge Cases**: Test null inputs, empty collections, boundary conditions, error paths
+- **Descriptive Names**: `test_function_does_what_when_condition`
+
+### 4. Integration Test Principles 🔗
+- **Real Interactions**: Test how components actually work together
+- **Mock External Systems**: Mock APIs, databases, file systems - not internal components
+- **Error Scenarios**: Verify proper handling of external system failures
+- **Contract Testing**: Ensure data flows correctly between components
+
+### 5. Effective Mocking Strategy 🎭
+- **Mock at the Boundary**: Mock external systems, not internal components
+- **Mock for Isolation**: Use mocks to isolate the unit under test
+- **Don't Over-Mock**: In integration tests, let internal components interact naturally
+- **Verify Behavior**: Assert on function calls and state changes, not just return values
+
 
 ## Structure
+
+The test structure exactly mirrors the source code structure:
 
 ```
 tests/
 ├── __init__.py
-├── conftest.py                          # Common test fixtures and configuration
-├── README.md                            # This file
-├── unit/                               # Pure unit tests (no external dependencies)
-│   ├── test_config.py                  # Configuration object tests
-│   ├── test_data_collection/           # Unit tests for data collection
-│   │   ├── test_models.py             # Data models (YFinanceCollectionPlan)
-│   │   ├── test_processors.py         # Data processors (ContinuousTimelineProcessor)
-│   │   └── test_collectors_unit.py    # Basic collector initialization tests
-│   ├── test_feature_engineering/       # Pure function tests
-│   │   └── test_feature_pipeline.py   # Core feature pipeline functions
-│   └── test_modeling/                  # Unit tests for modeling
-│       ├── test_functions.py          # Modeling utility functions
-│       └── test_processing.py         # Data processing functions
-└── integration/                       # Integration tests (external API interactions)
-    └── test_data_collection/          # Integration tests for data collection
-        └── test_collectors.py         # YFinanceCollector API interaction tests
+├── conftest.py                                    # Common test fixtures and configuration  
+├── README.md                                      # This file
+├── unit/                                         # Unit tests (isolated, fast)
+│   ├── test_config.py                           # Tests src/stock_market_analytics/config.py
+│   ├── test_data_collection/                    # Tests src/stock_market_analytics/data_collection/
+│   │   ├── test_collection_steps.py            #   └── collection_steps.py
+│   │   ├── test_collectors.py                   #   └── collectors/ (unit tests)
+│   │   ├── test_data_quality.py                #   └── processors/data_quality.py
+│   │   ├── test_models.py                       #   └── models/collection_plans.py
+│   │   └── test_processors.py                   #   └── processors/timeline.py
+│   ├── test_feature_engineering/               # Tests src/stock_market_analytics/feature_engineering/
+│   │   ├── test_feature_pipeline.py            #   ├── feature_pipeline.py
+│   │   └── test_feature_steps.py               #   └── feature_steps.py
+│   └── test_modeling/                           # Tests src/stock_market_analytics/modeling/
+│       ├── test_modeling_steps.py              #   ├── modeling_steps.py
+│       ├── test_training_flow_cb.py             #   ├── training_flow_cb.py
+│       └── test_pipeline_components/           #   └── pipeline_components/
+│           ├── test_calibrators.py             #       ├── calibrators.py
+│           ├── test_evaluators.py              #       ├── evaluators.py
+│           ├── test_functions.py               #       ├── functions.py
+│           ├── test_naive_baselines.py         #       ├── naive_baselines.py
+│           ├── test_pipeline_factory.py        #       ├── pipeline_factory.py
+│           └── test_predictors.py              #       └── predictors.py
+└── integration/                                 # Integration tests (external dependencies)
+    └── test_data_collection/                   # External API interactions
+        └── test_collectors.py                  # YFinanceCollector API tests
 ```
 
 ## Running Tests
@@ -73,7 +127,7 @@ uv run pytest tests/unit/ -v --cov=src
 # Unit tests
 uv run pytest tests/unit/test_data_collection/ -v
 uv run pytest tests/unit/test_feature_engineering/test_feature_pipeline.py -v
-uv run pytest tests/unit/test_modeling/test_functions.py -v
+uv run pytest tests/unit/test_modeling/test_pipeline_components/test_functions.py -v
 
 # Integration tests  
 uv run pytest tests/integration/test_data_collection/test_collectors.py -v
@@ -90,20 +144,31 @@ uv run pytest tests/integration/test_data_collection/test_collectors.py -v
 - ✅ Configuration property calculations
 
 **Data Collection Module**:
-- **Models (`test_models.py`)**: `YFinanceCollectionPlan` validation and conversion
+- **Steps (`test_collection_steps.py`)**: Complete collection workflow functions with comprehensive mocking
+- **Models (`test_models.py`)**: `YFinanceCollectionPlan` validation and conversion logic
 - **Processors (`test_processors.py`)**: `ContinuousTimelineProcessor` data processing workflows
-- **Collectors (`test_collectors_unit.py`)**: Basic `YFinanceCollector` initialization and protocol compliance
+- **Data Quality (`test_data_quality.py`)**: Data validation rules and quality checking
+- **Collectors (`test_collectors.py`)**: Basic `YFinanceCollector` initialization and protocol compliance
 
-**Feature Engineering (`test_feature_pipeline.py`)**:
-- ✅ Data sorting and preprocessing functions
-- ✅ Date-based feature generation
-- ✅ Technical indicators (volatility, momentum, statistical)
-- ✅ Ichimoku cloud features
-- ✅ Missing value handling and data joins
+**Feature Engineering Module**:
+- **Pipeline (`test_feature_pipeline.py`)**: Hamilton pipeline functions for feature creation
+  - ✅ Data sorting and preprocessing functions
+  - ✅ Date-based feature generation
+  - ✅ Technical indicators (volatility, momentum, statistical)
+  - ✅ Ichimoku cloud features
+  - ✅ Missing value handling and data joins
+- **Steps (`test_feature_steps.py`)**: Feature engineering workflow orchestration steps
 
-**Modeling**:
-- **Functions (`test_functions.py`)**: Conformal prediction functions, coverage metrics
-- **Processing (`test_processing.py`)**: Data splitting and metadata functions
+**Modeling Module**:
+- **Steps (`test_modeling_steps.py`)**: Complete modeling workflow orchestration
+- **Training Flow (`test_training_flow_cb.py`)**: CatBoost-specific training flow (placeholder)
+- **Pipeline Components**:
+  - **Functions (`test_functions.py`)**: Conformal prediction, evaluation metrics, plotting utilities
+  - **Calibrators (`test_calibrators.py`)**: Model calibration components (placeholder)
+  - **Evaluators (`test_evaluators.py`)**: Model evaluation components (placeholder)
+  - **Predictors (`test_predictors.py`)**: Prediction components (placeholder)
+  - **Naive Baselines (`test_naive_baselines.py`)**: Baseline model implementations (placeholder)
+  - **Pipeline Factory (`test_pipeline_factory.py`)**: Pipeline construction utilities (placeholder)
 
 ### Integration Tests (External API Interactions with Mocks)
 
