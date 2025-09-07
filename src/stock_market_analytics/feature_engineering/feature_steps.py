@@ -1,10 +1,10 @@
 """
-Simple functions that coordinate core feature engineering components and can be 
+Simple functions that coordinate core feature engineering components and can be
 reused across different flows and scenarios.
 """
 
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any
 
 import pandas as pd
 import polars as pl
@@ -13,7 +13,9 @@ from hamilton import driver
 from stock_market_analytics.feature_engineering import feature_pipeline, features_config
 
 
-def load_stock_data(base_data_path: Path, stocks_history_file: str = "stocks_history.parquet") -> pl.DataFrame:
+def load_stock_data(
+    base_data_path: Path, stocks_history_file: str = "stocks_history.parquet"
+) -> pl.DataFrame:
     """Load and validate stock data from Parquet file."""
     stocks_history_path = base_data_path / stocks_history_file
 
@@ -32,8 +34,12 @@ def load_stock_data(base_data_path: Path, stocks_history_file: str = "stocks_his
 def apply_time_filters(data: pl.DataFrame, past_horizon: int) -> pl.DataFrame:
     """Apply time-based filters to limit data lookback."""
     if past_horizon > 0:
-        max_lookback_date = data["date"].max() - pd.Timedelta(days=past_horizon)  # type: ignore
-        return data.filter(pl.col("date") >= max_lookback_date)
+        max_date = data["date"].max()
+        if max_date is not None:
+            # Convert to pandas timestamp for subtraction
+            max_date_pd = pd.Timestamp(max_date)
+            max_lookback_date = max_date_pd - pd.Timedelta(days=past_horizon)
+            return data.filter(pl.col("date") >= pl.lit(max_lookback_date))
     return data
 
 
@@ -43,9 +49,7 @@ def create_feature_pipeline() -> driver.Driver:
 
 
 def execute_feature_pipeline(
-    dr: driver.Driver, 
-    raw_data: pl.DataFrame, 
-    config_dict: Dict[str, Any]
+    dr: driver.Driver, raw_data: pl.DataFrame, config_dict: dict[str, Any]
 ) -> pl.DataFrame:
     """Execute feature pipeline with input data and configuration."""
     results = dr.execute(
@@ -56,9 +60,9 @@ def execute_feature_pipeline(
 
 
 def save_features(
-    data: pl.DataFrame, 
-    base_data_path: Path, 
-    features_file: str = "stock_history_features.parquet"
+    data: pl.DataFrame,
+    base_data_path: Path,
+    features_file: str = "stock_history_features.parquet",
 ) -> None:
     """Save engineered features to parquet file."""
     features_path = base_data_path / features_file
@@ -67,26 +71,28 @@ def save_features(
 
 def build_features_from_data(
     base_data_path: Path,
-    stocks_history_file: str = "stocks_history.parquet", 
-    features_file: str = "stock_history_features.parquet"
-) -> Dict[str, Any]:
+    stocks_history_file: str = "stocks_history.parquet",
+    features_file: str = "stock_history_features.parquet",
+) -> dict[str, Any]:
     """Complete feature building workflow from data path."""
     # Load data
     data = load_stock_data(base_data_path, stocks_history_file)
-    
+
     # Apply time filters
     filtered_data = apply_time_filters(data, features_config.past_horizon)
-    
+
     # Create and execute pipeline
     pipeline = create_feature_pipeline()
-    features = execute_feature_pipeline(pipeline, filtered_data, features_config.as_dict)
-    
+    features = execute_feature_pipeline(
+        pipeline, filtered_data, features_config.as_dict
+    )
+
     # Save features
     save_features(features, base_data_path, features_file)
-    
+
     return {
         "status": "success",
         "input_records": len(filtered_data),
         "output_records": len(features),
-        "features_file": features_file
+        "features_file": features_file,
     }

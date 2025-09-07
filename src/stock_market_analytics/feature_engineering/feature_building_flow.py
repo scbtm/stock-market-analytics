@@ -41,15 +41,15 @@ class FeatureBuildingFlow(FlowSpec):
         Build features from raw stock market data.
         """
         base_data_path = Path(os.environ["BASE_DATA_PATH"])
-        
+
         # Use service function for complete workflow
         result = feature_steps.build_features_from_data(base_data_path)
-        
-        print(f"✅ Feature engineering completed:")
+
+        print("✅ Feature engineering completed:")
         print(f"  • Processed {result['input_records']:,} input records")
         print(f"  • Generated {result['output_records']:,} feature records")
         print(f"  • Saved to {result['features_file']}")
-        
+
         self.next(self.end)
 
     @step

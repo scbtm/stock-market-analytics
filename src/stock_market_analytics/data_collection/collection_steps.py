@@ -1,5 +1,5 @@
 """
-Coordinate core data collection components and 
+Coordinate core data collection components and
 reuse across different flows and scenarios.
 """
 
@@ -12,7 +12,7 @@ import polars as pl
 from stock_market_analytics.config import config
 from stock_market_analytics.data_collection import (
     ContinuousTimelineProcessor,
-    DataQualityValidator, 
+    DataQualityValidator,
     YFinanceCollector,
 )
 
@@ -22,7 +22,7 @@ def load_tickers(base_data_path: Path) -> list[dict[str, Any]]:
     tickers_file = config.data_collection.tickers_file
     required_columns = config.data_collection.required_ticker_columns
     column_mapping = config.data_collection.ticker_column_mapping
-    
+
     tickers_path = base_data_path / tickers_file
 
     if not tickers_path.exists():
@@ -44,7 +44,7 @@ def load_metadata(base_data_path: Path) -> list[dict[str, Any]]:
     """Load and validate existing metadata from CSV file."""
     metadata_file = config.data_collection.metadata_file
     required_columns = config.data_collection.required_metadata_columns
-    
+
     metadata_path = base_data_path / metadata_file
 
     if not metadata_path.exists():
@@ -111,48 +111,68 @@ def create_collection_plans(
     return collection_plans
 
 
-def collect_and_process_symbol(collection_plan: dict[str, str]) -> dict[str, Any]:
-    """Collect and process data for a single stock symbol."""
-    symbol = collection_plan["symbol"]
-
-    # Initialize metadata record
-    new_metadata = {
+def _initialize_metadata_record(symbol: str) -> dict[str, Any]:
+    """Initialize a new metadata record for a symbol."""
+    return {
         "symbol": symbol,
         "last_ingestion": pd.Timestamp.now().normalize().date().strftime("%Y-%m-%d"),
         "max_date_recorded": None,
         "status": "collection_issue",
     }
 
+
+def _collect_raw_data(
+    collection_plan: dict[str, str],
+) -> tuple[pl.DataFrame | None, bool]:
+    """Collect raw data for a symbol."""
+    collector = YFinanceCollector(**collection_plan)
+    raw_data = collector.get_historical_data()
+    success = collector.collection_successful and not raw_data.is_empty()
+    return raw_data if success else None, success
+
+
+def _process_and_validate_data(
+    symbol: str, raw_data: pl.DataFrame
+) -> tuple[pl.DataFrame | None, str]:
+    """Process and validate collected data."""
+    # Process for continuity
+    processor = ContinuousTimelineProcessor(symbol, raw_data)
+    processed_data = processor.process()
+
+    if processed_data is None or not processor.processing_successful:
+        return None, "data_issue"
+
+    # Validate quality
+    quality_validator = DataQualityValidator(symbol, processed_data)
+    validated_data = quality_validator.validate()
+
+    if validated_data is None or not quality_validator.validation_successful:
+        return None, "data_quality_issue"
+
+    return validated_data, "active"
+
+
+def collect_and_process_symbol(collection_plan: dict[str, str]) -> dict[str, Any]:
+    """Collect and process data for a single stock symbol."""
+    symbol = collection_plan["symbol"]
+    new_metadata = _initialize_metadata_record(symbol)
+
     try:
         # Collect raw data
-        collector = YFinanceCollector(**collection_plan)
-        raw_data = collector.get_historical_data()
-
-        if not collector.collection_successful or raw_data.is_empty():
+        raw_data, collection_success = _collect_raw_data(collection_plan)
+        if not collection_success or raw_data is None:
             return {"data": None, "new_metadata": new_metadata}
 
-        # Process data for continuity and validation
-        processor = ContinuousTimelineProcessor(symbol, raw_data)
-        processed_data = processor.process()
+        # Process and validate
+        validated_data, status = _process_and_validate_data(symbol, raw_data)
+        new_metadata["status"] = status
 
-        if processed_data is not None and processor.processing_successful:
-            # Apply data quality validation
-            quality_validator = DataQualityValidator(symbol, processed_data)
-            validated_data = quality_validator.validate()
+        if validated_data is not None:
+            new_metadata["max_date_recorded"] = (
+                validated_data["date"].max().strftime("%Y-%m-%d")
+            )
 
-            if validated_data is not None and quality_validator.validation_successful:
-                new_metadata["max_date_recorded"] = (
-                    validated_data["date"].max().strftime("%Y-%m-%d")
-                )
-                new_metadata["status"] = "active"
-                return {"data": validated_data, "new_metadata": new_metadata}
-            else:
-                # Quality check failed
-                new_metadata["status"] = "data_quality_issue"
-                return {"data": None, "new_metadata": new_metadata}
-        else:
-            new_metadata["status"] = "data_issue"
-            return {"data": None, "new_metadata": new_metadata}
+        return {"data": validated_data, "new_metadata": new_metadata}
 
     except Exception:
         new_metadata["status"] = "collection_error"
@@ -187,6 +207,30 @@ def update_metadata(
     final_metadata_df.to_csv(metadata_path, index=False)
 
 
+def _combine_with_existing_data(
+    stocks_history_path: Path, new_data: pl.DataFrame
+) -> pl.DataFrame:
+    """Combine new data with existing historical data."""
+    if stocks_history_path.exists():
+        existing_data = pl.read_parquet(stocks_history_path)
+        existing_data = existing_data.select(
+            ["date", "symbol", "open", "high", "low", "close", "volume"]
+        ).cast({"volume": pl.Int64})
+        return pl.concat([existing_data, new_data])
+    return new_data
+
+
+def _clean_and_deduplicate(data: pl.DataFrame) -> pl.DataFrame:
+    """Clean and deduplicate historical data."""
+    return (
+        data.sort(["symbol", "date"], descending=[False, False])
+        .group_by(["symbol", "date"])
+        .agg(pl.all().last())
+        .sort(["symbol", "date"], descending=[False, False])
+        .select(["date", "symbol", "open", "high", "low", "close", "volume"])
+    )
+
+
 def update_historical_data(
     base_data_path: Path, collected_data: list[pl.DataFrame]
 ) -> dict[str, Any]:
@@ -196,34 +240,13 @@ def update_historical_data(
 
     stocks_history_file = config.data_collection.stocks_history_file
     stocks_history_path = base_data_path / stocks_history_file
-
-    # Combine all new data
     new_data = pl.concat(collected_data)
 
-    # Load existing data if available
-    if stocks_history_path.exists():
-        existing_data = pl.read_parquet(stocks_history_path)
-        existing_data = existing_data.select(
-            ["date", "symbol", "open", "high", "low", "close", "volume"]
-        ).cast({"volume": pl.Int64})
-        combined_data = pl.concat([existing_data, new_data])
-    else:
-        combined_data = new_data
+    # Combine and clean data
+    combined_data = _combine_with_existing_data(stocks_history_path, new_data)
+    final_data = _clean_and_deduplicate(combined_data)
 
-    # Clean and deduplicate data
-    final_data = (
-        combined_data.sort(["symbol", "date"], descending=[False, False])
-        .group_by(["symbol", "date"])
-        .agg(pl.all().last())  # Keep the most recent entry for duplicates
-        .sort(["symbol", "date"], descending=[False, False])
-    )
-
-    # Reorder columns to match storage format
-    final_data = final_data.select(
-        ["date", "symbol", "open", "high", "low", "close", "volume"]
-    )
-
-    # Save updated historical data
+    # Save updated data
     final_data.write_parquet(stocks_history_path)
 
     return {

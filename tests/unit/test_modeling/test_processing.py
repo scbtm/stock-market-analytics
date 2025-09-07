@@ -3,9 +3,9 @@
 import pandas as pd
 from datetime import date, timedelta
 
-from stock_market_analytics.modeling.processing_functions import (
+from stock_market_analytics.modeling.modeling_steps import (
     split_data,
-    metadata,
+    get_data_metadata as metadata,
 )
 
 

@@ -70,7 +70,6 @@ class BatchCollectionFlow(FlowSpec):
 
         self.next(self.build_collection_plan)
 
-
     @step
     def build_collection_plan(self) -> None:
         """
@@ -94,7 +93,6 @@ class BatchCollectionFlow(FlowSpec):
 
         # Distribute collection plans to parallel tasks
         self.next(self.collect_data, foreach="collection_plans")
-
 
     @step
     def collect_data(self) -> None:
@@ -150,10 +148,12 @@ class BatchCollectionFlow(FlowSpec):
 
         # Update metadata
         collection_steps.update_metadata(base_data_path, metadata_updates)
-        
+
         # Update historical data
-        update_result = collection_steps.update_historical_data(base_data_path, collected_data)
-        
+        update_result = collection_steps.update_historical_data(
+            base_data_path, collected_data
+        )
+
         if update_result["status"] == "success":
             print("📈 Updated historical dataset:")
             print(f"  • Added {update_result['new_records']:,} new records")
@@ -162,7 +162,6 @@ class BatchCollectionFlow(FlowSpec):
 
         print("✅ Successfully completed batch collection")
         self.next(self.end)
-
 
     @step
     def end(self) -> None:
