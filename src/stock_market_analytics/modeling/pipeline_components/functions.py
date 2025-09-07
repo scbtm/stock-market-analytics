@@ -26,6 +26,7 @@ def predict_quantiles(model: CatBoostRegressor, X: pd.DataFrame | Pool) -> np.nd
     qhat.sort(axis=1)
     return qhat
 
+
 # --- helpers ---
 def _weighted_mean(x: np.ndarray, w: np.ndarray | None) -> float:
     if w is None:
@@ -35,12 +36,13 @@ def _weighted_mean(x: np.ndarray, w: np.ndarray | None) -> float:
     w = w / np.sum(w)
     return float(np.sum(w * x))
 
-def _pinball(
-        y: np.ndarray, q: np.ndarray, alpha: float, w: np.ndarray | None = None
-        ) -> float:
 
+def _pinball(
+    y: np.ndarray, q: np.ndarray, alpha: float, w: np.ndarray | None = None
+) -> float:
     e = y - q
     return _weighted_mean(np.maximum(alpha * e, (alpha - 1.0) * e), w)
+
 
 # --- coverage & width for a chosen interval (interpolate if interval alphas not present) ---
 def _interp(alpha: float, Q: list[float], qhat: np.ndarray) -> np.ndarray:
@@ -51,7 +53,7 @@ def _interp(alpha: float, Q: list[float], qhat: np.ndarray) -> np.ndarray:
     if alpha <= Q[0] or alpha >= Q[-1]:
         raise ValueError(
             "interval alpha outside provided quantiles; add tails or change interval."
-            )
+        )
     j_hi = np.searchsorted(Q, alpha)
     j_lo = j_hi - 1
     w_hi = (alpha - Q[j_lo]) / (Q[j_hi] - Q[j_lo])
@@ -61,13 +63,14 @@ def _interp(alpha: float, Q: list[float], qhat: np.ndarray) -> np.ndarray:
 def eval_multiquantile(
     y_true: np.ndarray,
     q_pred: np.ndarray,  # shape (n_samples, n_quantiles), raw model output
-    quantiles: list[float],  # e.g., [0.10, 0.25, 0.50, 0.75, 0.90] in the same column order as q_pred
+    quantiles: list[
+        float
+    ],  # e.g., [0.10, 0.25, 0.50, 0.75, 0.90] in the same column order as q_pred
     interval: tuple[float, float] = (0.10, 0.90),  # for coverage/width tracking
     sample_weight: np.ndarray | None = None,  # optional time-weights
     lambda_cross: float = 0.0,  # >0 to discourage quantile crossing (penalty added to objective)
     return_per_quantile: bool = False,  # include per-quantile pinballs in metrics
-    ) -> tuple[float, dict[str, Any]]:
-
+) -> tuple[float, dict[str, Any]]:
     """
     Returns:
       loss: float  (scalar to minimize in Optuna)
@@ -100,8 +103,8 @@ def eval_multiquantile(
 
     loss = pinball_mean + lambda_cross * cross_pen
 
-    q_lo = _interp(alpha = interval[0], Q=Q, qhat=qhat)
-    q_hi = _interp(alpha = interval[1], Q=Q, qhat=qhat)
+    q_lo = _interp(alpha=interval[0], Q=Q, qhat=qhat)
+    q_hi = _interp(alpha=interval[1], Q=Q, qhat=qhat)
     covered = (y >= q_lo) & (y <= q_hi)
 
     coverage = _weighted_mean(covered.astype(float), sample_weight)
@@ -132,7 +135,9 @@ def eval_multiquantile(
 # --------------------------
 # Conformalized Quantile Regression (CQR) for a lower/upper pair
 # --------------------------
-def conformal_adjustment(q_lo_cal: np.ndarray, q_hi_cal: np.ndarray, y_cal: np.ndarray, alpha: float) -> float:
+def conformal_adjustment(
+    q_lo_cal: np.ndarray, q_hi_cal: np.ndarray, y_cal: np.ndarray, alpha: float
+) -> float:
     """
     Nonconformity scores s_i = max(q_lo - y, y - q_hi).
     Return the (1-alpha) empirical quantile with finite-sample correction.
@@ -146,10 +151,14 @@ def conformal_adjustment(q_lo_cal: np.ndarray, q_hi_cal: np.ndarray, y_cal: np.n
 
     return float(s_sorted[k])
 
-def apply_conformal(q_lo: np.ndarray, q_hi: np.ndarray, q_conformal: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+
+def apply_conformal(
+    q_lo: np.ndarray, q_hi: np.ndarray, q_conformal: np.ndarray
+) -> tuple[np.ndarray, np.ndarray]:
     lo = q_lo - q_conformal
     hi = q_hi + q_conformal
     return lo, hi
+
 
 # --------------------------
 # Metrics
@@ -157,12 +166,14 @@ def apply_conformal(q_lo: np.ndarray, q_hi: np.ndarray, q_conformal: np.ndarray)
 def coverage(y: np.ndarray, lo: np.ndarray, hi: np.ndarray) -> float:
     return float(np.mean((y >= lo) & (y <= hi)))
 
+
 def mean_width(lo: np.ndarray, hi: np.ndarray) -> float:
     return float(np.mean(hi - lo))
 
+
 def pinball_loss(y: np.ndarray, q_pred: np.ndarray, alpha: float) -> float:
     e = y - q_pred
-    return float(np.mean(np.maximum(alpha*e, (alpha-1)*e)))
+    return float(np.mean(np.maximum(alpha * e, (alpha - 1) * e)))
 
 
 # Configurable color palette for visualizations
@@ -258,47 +269,47 @@ def plot_optuna_parallel_coordinates(
     # Create parallel coordinates plot
     # Add trial_number as the first dimension for easy identification
     dimensions = [
-        dict(
-            range=[df["trial_number"].min(), df["trial_number"].max()],
-            label="Trial",
-            values=df["trial_number"],
-        )
+        {
+            "range": [df["trial_number"].min(), df["trial_number"].max()],
+            "label": "Trial",
+            "values": df["trial_number"],
+        }
     ]
 
     # Add other dimensions
     dimensions.extend(
         [
-            dict(
-                range=[df[col].min(), df[col].max()],
-                label=col.replace("_", " ").title(),
-                values=df[col],
-            )
+            {
+                "range": [df[col].min(), df[col].max()],
+                "label": col.replace("_", " ").title(),
+                "values": df[col],
+            }
             for col in plot_dimensions
         ]
     )
 
     fig = go.Figure(
         data=go.Parcoords(
-            line=dict(
-                color=df["objective_value"],
-                colorscale="Viridis",
-                showscale=True,
-                colorbar=dict(title="Objective Value"),
-            ),
+            line={
+                "color": df["objective_value"],
+                "colorscale": "Viridis",
+                "showscale": True,
+                "colorbar": {"title": "Objective Value"},
+            },
             dimensions=dimensions,
             # Enable interactive features
-            labelfont=dict(size=12, color=palette["dark"]),
-            tickfont=dict(size=10, color=palette["dark"]),
+            labelfont={"size": 12, "color": palette["dark"]},
+            tickfont={"size": 10, "color": palette["dark"]},
         )
     )
 
     fig.update_layout(
-        title=dict(text=title, font=dict(size=16, color=palette["dark"])),
+        title={"text": title, "font": {"size": 16, "color": palette["dark"]}},
         width=width,
         height=height,
         paper_bgcolor="white",
         plot_bgcolor="white",
-        font=dict(color=palette["dark"]),
+        font={"color": palette["dark"]},
         # Enable better interactivity
         hovermode="closest",
     )
@@ -359,14 +370,14 @@ def plot_optuna_metrics_distribution(
     )
 
     fig.update_layout(
-        title=dict(text=title, font=dict(size=16, color=palette["dark"])),
+        title={"text": title, "font": {"size": 16, "color": palette["dark"]}},
         xaxis_title=metric_name.replace("_", " ").title(),
         yaxis_title="Count",
         width=width,
         height=height,
         paper_bgcolor="white",
         plot_bgcolor="white",
-        font=dict(color=palette["dark"]),
+        font={"color": palette["dark"]},
         showlegend=False,
     )
 

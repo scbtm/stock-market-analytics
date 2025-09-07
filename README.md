@@ -6,8 +6,10 @@ A production-ready machine learning pipeline for stock market analysis and predi
 
 This project implements an end-to-end stock market analytics platform designed for predictive modeling of stock prices and market behavior. The system demonstrates enterprise-grade software engineering practices through:
 
-- **Scalable Data Pipelines**: Robust data collection and feature engineering workflows
+- **Scalable Data Pipelines**: Robust data collection with real-time quality validation and feature engineering workflows
 - **Production Architecture**: Modular design with clear separation of concerns
+- **Type-Safe Configuration**: Centralized Pydantic-based configuration system with validation
+- **Data Quality Assurance**: Real-time validation ensures only high-quality data reaches ML models
 - **Quality Assurance**: Comprehensive testing, type checking, and code quality controls
 - **MLOps Best Practices**: Versioned data flows, reproducible experiments, and automated validation
 
@@ -18,6 +20,8 @@ The platform focuses on creating reliable, maintainable, and scalable infrastruc
 ```
 📁 stock-market-analytics/
 ├── src/stock_market_analytics/     # Core application code
+│   ├── config.py                   # Centralized type-safe configuration
+│   ├── main.py                     # CLI entry point  
 │   ├── data_collection/            # Data ingestion pipeline
 │   ├── feature_engineering/       # Feature computation pipeline
 │   └── modeling/                   # ML model training and evaluation
@@ -42,9 +46,9 @@ The project follows a modular architecture with **Metaflow workflows as primary 
 
 ```toml
 [project.scripts]
+stock-market-analytics = "stock_market_analytics.main:main"
 batch-collect = "stock_market_analytics.data_collection.batch_collection_flow:BatchCollectionFlow"
 build-features = "stock_market_analytics.feature_engineering.feature_building_flow:FeatureBuildingFlow"
-tune-model = "stock_market_analytics.modeling.tuning_flow_cb:TuningFlow"
 train-model = "stock_market_analytics.modeling.training_flow_cb:TrainingFlow"
 ```
 
@@ -56,9 +60,6 @@ uv run batch-collect run
 # Execute feature engineering pipeline  
 uv run build-features run
 
-# Run hyperparameter tuning pipeline
-uv run tune-model run
-
 # Execute model training pipeline
 uv run train-model run
 ```
@@ -67,7 +68,7 @@ uv run train-model run
 
 **Location**: `src/stock_market_analytics/data_collection/`
 
-The data collection module exemplifies enterprise-grade data engineering patterns:
+The data collection module exemplifies enterprise-grade data engineering patterns with production-ready data quality assurance:
 
 #### Design Patterns & Architecture
 
@@ -75,15 +76,37 @@ The data collection module exemplifies enterprise-grade data engineering pattern
 2. **Strategy Pattern**: Pluggable collectors (YFinance, future: Alpha Vantage, IEX) with unified interfaces
 3. **Data Validation**: Pydantic models (`models/collection_plans.py`) enforce schema validation and type safety
 4. **Timeline Processing**: Intelligent incremental vs. full data refresh logic
-5. **Metaflow Orchestration**: Parallel processing with automatic dependency management
+5. **Real-time Quality Validation**: Comprehensive data quality checks applied during ingestion
+6. **Metaflow Orchestration**: Parallel processing with automatic dependency management
+
+#### Data Quality Validation System
+
+The module features a sophisticated **DataQualityValidator** that ensures only high-quality data reaches downstream ML models:
+
+**Quality Checks Applied**:
+- **Price Consistency**: High ≥ Low validation for each trading period
+- **Price Positivity**: All prices must be positive (no negative values)
+- **Volume Validation**: Volume must be non-negative
+- **OHLC Relationships**: Open/close prices within high/low bounds
+- **Extreme Movement Detection**: Configurable thresholds flag potential data errors
+- **Schema Completeness**: Required columns validation with null handling
+- **Data Sufficiency**: Minimum data points validation
+
+**Quality Assurance Benefits**:
+- **ML Model Reliability**: Invalid data is automatically excluded from training datasets
+- **Data Integrity**: Systematic validation prevents corrupted data propagation  
+- **Configurable Rules**: Pydantic-based quality rules with sensible defaults
+- **Detailed Reporting**: Comprehensive validation results with specific failure reasons
+- **Graceful Degradation**: Quality failures are logged and tracked without pipeline crashes
 
 #### Key Advantages
 
 - **Type Safety**: Full Pydantic validation prevents runtime data errors
-- **Extensibility**: Easy addition of new data sources through base collector interface
-- **Reliability**: Built-in error handling, retries, and data quality checks
+- **Data Quality**: Real-time validation ensures only reliable data for ML training
+- **Extensibility**: Easy addition of new data sources and quality rules
+- **Reliability**: Built-in error handling, retries, and comprehensive quality checks
 - **Performance**: Parallel symbol processing with configurable batch sizes
-- **Monitoring**: Comprehensive metadata tracking for operational visibility
+- **Monitoring**: Detailed metadata tracking including quality validation results
 
 ### Feature Engineering Module  
 
@@ -103,7 +126,7 @@ The feature engineering pipeline leverages **Hamilton** for functional, declarat
 
 - **Declarative Features**: Functions define features through clear input/output contracts
 - **Composable Transforms**: Small, focused functions that combine into complex features
-- **Configuration-Driven**: External config files (`features_config.py`) control feature parameters
+- **Configuration-Driven**: Centralized configuration system (`config.py`) controls all feature parameters
 - **Pipeline Visualization**: Generated diagrams show feature dependencies and computation flow
 
 #### Hamilton DAG Visualization
@@ -114,95 +137,79 @@ The Hamilton framework automatically generates this dependency graph showing the
 
 - **Data Flow**: Clear progression from raw data through preprocessing to final features
 - **Parallel Processing**: Independent feature computations that can run concurrently  
-- **Configuration Points**: Input parameters that control window sizes and feature selection
+- **Configuration Points**: Parameters from the centralized `config.py` control window sizes and feature selection
 - **Dependency Management**: Automatic resolution of feature dependencies and execution order
+- **Type Safety**: All configuration parameters are validated through Pydantic models
 
 ### Adding New Features
 
 The feature engineering pipeline uses Hamilton for functional, dependency-driven feature computation. To add a new feature, follow these steps:
 
-#### Step 1: Add Feature Function to `features.py`
+#### Step 1: Add Feature Function to `feature_pipeline.py`
 
-Create a new function in `src/stock_market_analytics/feature_engineering/features.py`:
+The feature engineering uses Hamilton framework with functions grouped by category. Add your new feature to the appropriate section in `src/stock_market_analytics/feature_engineering/feature_pipeline.py`.
+
+For example, to add a new volatility feature, add it to the `volatility_features_df` function:
 
 ```python
-def my_new_feature(dff: pl.DataFrame, window_size: int) -> pl.DataFrame:
+def volatility_features_df(
+    interpolated_df: pl.DataFrame,
+    short_window: int,
+    long_window: int,
+) -> pl.DataFrame:
     """
-    Description of your new feature.
+    Compute volatility features using Hamilton framework.
     """
-    return dff.with_columns(
-        # Your feature computation here - use .over("symbol") to ensure no data leakage
+    return interpolated_df.with_columns([
+        # ... existing features ...
+        
+        # Your new feature - use .over("symbol") to ensure no data leakage
         pl.col("log_returns_d")
-        .rolling_std(window_size)
+        .rolling_std(short_window)
         .over("symbol")
-        .shift(1)  # Optional: shift by 1 to avoid lookahead bias (depends on time of inference; current setup avoids lookahead without shifting, but it can be added to be extra-safe)
-        .alias("my_new_feature")
-    )
+        .alias("my_new_volatility_feature"),
+    ])
 ```
 
 **Key Requirements**:
-- Function name becomes the Hamilton node name (must be unique)
-- Return a DataFrame with `symbol`, `date`, and your new feature columns
+- Add features to the appropriate category function (volatility, momentum, statistical, etc.)
+- Return a DataFrame with all features in that category
 - Use `.over("symbol")` for all rolling operations to prevent cross-symbol contamination
-- Use `.shift(1)` to avoid lookahead bias in predictions
 - Include proper type hints
+- Features are automatically included in `df_features` through Hamilton's dependency resolution
 
-#### Step 2: Update `df_features` Function
+#### Step 2: Update Feature Selection in Configuration
 
-Add your new feature as a parameter and include it in the join chain:
+The `df_features` function automatically joins all feature categories. To include your new feature in the model, add it to the features list in `config.py`:
 
 ```python
-def df_features(
-    dff: pl.DataFrame,
-    # ... existing parameters ...
-    my_new_feature: pl.DataFrame,  # Add your feature here
-) -> pl.DataFrame:
-    # ... existing code ...
-    
-    # Select only the columns you need
-    my_new_feature = my_new_feature.select(
-        pl.col("symbol"), 
-        pl.col("date"), 
-        pl.col("my_new_feature")
-    )
-    
-    # Add to the join chain
-    final_df = (
-        dff.join(amihud_illiq, on=["symbol", "date"], how="inner")
-        # ... existing joins ...
-        .join(my_new_feature, on=["symbol", "date"], how="inner")  # Add here
-    )
+# In src/stock_market_analytics/config.py
+class ModelingConfig(BaseModel):
+    features: list[str] = Field(default=[
+        # ... existing features ...
+        "my_new_volatility_feature",  # Add your feature name here
+    ])
 ```
 
-#### Step 3: Add Feature to Model Configuration
+#### Step 3: Update Feature Parameters (Optional)
 
-Add your new feature to the `FEATURES` list in `src/stock_market_analytics/modeling/modeling_config.py`:
-
-```python
-FEATURES = [
-    # ... existing features ...
-    "my_new_feature",  # Add your feature name here
-]
-```
-
-#### Step 4: Update Feature Parameters (Optional)
-
-If your feature needs configurable parameters, add them to `src/stock_market_analytics/feature_engineering/features_config.py`:
+If your feature needs configurable parameters, add them to the centralized configuration in `src/stock_market_analytics/config.py`:
 
 ```python
-features_config["my_window_size"] = 30
+class FeatureEngineeringConfig(BaseModel):
+    my_window_size: int = 30  # Add your parameter here
 ```
 
 #### Why This Structure?
 
-This multi-step process exists for good reasons:
+This approach provides several advantages:
 
-1. **Hamilton Requirements**: Function names must be unique and represent outputs
-2. **Data Integrity**: DataFrame returns preserve symbol/date relationships
+1. **Modular Design**: Features are grouped by category (volatility, momentum, etc.)
+2. **Hamilton Integration**: Automatic dependency resolution and parallel execution
 3. **No Data Leakage**: `.over("symbol")` ensures computations stay within symbols
-4. **Explicit Dependencies**: Hamilton automatically tracks which features depend on which inputs
-5. **Testing**: Each feature function can be tested independently
-6. **Performance**: Hamilton optimizes the computation graph and enables parallel execution
+4. **Type Safety**: Hamilton validates all function signatures and return types
+5. **Performance**: Optimized computation graph with efficient data joins
+6. **Maintainability**: Clear separation of concerns and easy feature management
 
 #### Hamilton Visualization
 
@@ -212,8 +219,8 @@ After adding features, you can visualize the dependency graph. **Note**: Require
 # Generate visualization of the complete feature pipeline
 uv run python -c "
 from hamilton import driver
-from stock_market_analytics.feature_engineering import features, preprocessing
-dr = driver.Builder().with_modules(features, preprocessing).build()
+from stock_market_analytics.feature_engineering import feature_pipeline
+dr = driver.Builder().with_modules(feature_pipeline).build()
 dr.visualize_execution(['df_features'], './features_graph.png', bypass_validation=True)
 print('Hamilton dependency graph saved to: ./features_graph.png')
 "
@@ -236,11 +243,11 @@ To regenerate the official Hamilton dependency graph shown in this README:
 # Regenerate the official features_diagram.png
 uv run python -c "
 from hamilton import driver
-from stock_market_analytics.feature_engineering import features, preprocessing
+from stock_market_analytics.feature_engineering import feature_pipeline
 import os
 
 # Create Hamilton driver
-dr = driver.Builder().with_modules(features, preprocessing).build()
+dr = driver.Builder().with_modules(feature_pipeline).build()
 
 # Generate the visualization (overwrites existing diagram)
 output_path = 'src/stock_market_analytics/feature_engineering/features_diagram.png'
@@ -261,7 +268,7 @@ This command:
 
 **Location**: `src/stock_market_analytics/modeling/`
 
-The modeling module implements production-ready machine learning workflows for quantile regression on stock market data, featuring automated hyperparameter optimization and conformal prediction.
+The modeling module implements production-ready machine learning workflows for quantile regression on stock market data, featuring pre-configured hyperparameters and conformal prediction.
 
 #### Framework & Architecture
 
@@ -270,18 +277,14 @@ The module leverages several enterprise-grade frameworks:
 1. **CatBoost**: Gradient boosting framework optimized for:
    - **Multi-quantile regression**: Predicts uncertainty intervals (10th, 25th, 50th, 75th, 90th percentiles)
    - **Large datasets**: Efficient training on time series with hundreds of symbols
+   - **Pre-configured parameters**: Optimized hyperparameters based on extensive testing
 
-2. **Optuna**: Hyperparameter optimization with:
-   - **TPE Sampler**: Tree-structured Parzen Estimator for intelligent search
-   - **Multi-objective**: Optimizes pinball loss while preventing overfitting
-   - **Parallel execution**: Concurrent trial evaluation for faster tuning
-
-3. **Conformal Prediction**: Provides statistical guarantees:
+2. **Conformal Prediction**: Provides statistical guarantees:
    - **Coverage guarantee**: Ensures prediction intervals contain true values with specified probability
    - **Distribution-free**: Works regardless of underlying data distribution
    - **Post-hoc calibration**: Adjusts model predictions without retraining
 
-4. **W&B Integration**: Experiment tracking and monitoring:
+3. **W&B Integration**: Experiment tracking and monitoring:
    - **Automated logging**: Tracks hyperparameters, metrics, and artifacts
    - **Model versioning**: Maintains history of model iterations
    - **Visualization**: Rich dashboards for experiment comparison
@@ -290,10 +293,11 @@ The module leverages several enterprise-grade frameworks:
 
 **Configuration-Driven Design**:
 ```python
-# modeling_config.py - Central configuration
-FEATURES = ["amihud_illiq", "rsi", "momentum", ...]  # Selected features
-QUANTILES = [0.1, 0.25, 0.5, 0.75, 0.9]            # Prediction quantiles
-PARAMS = {...}                                       # Base model parameters
+# config.py - Centralized type-safe configuration
+class ModelingConfig(BaseModel):
+    features: list[str] = ["amihud_illiq", "rsi", "momentum", ...]  # Selected features
+    quantiles: list[float] = [0.1, 0.25, 0.5, 0.75, 0.9]         # Prediction quantiles
+    # ... other parameters with validation
 ```
 
 **Hamilton Integration**: 
@@ -308,29 +312,12 @@ PARAMS = {...}                                       # Base model parameters
 
 #### Key Workflows
 
-##### 1. Hyperparameter Tuning (`tune-model`)
+##### Model Training (`train-model`)
 
-Automated optimization of CatBoost hyperparameters:
-
-```bash
-# Run hyperparameter optimization
-export BASE_DATA_PATH="/path/to/your/data"
-export WANDB_KEY="your_wandb_key"
-uv run tune-model run
-```
-
-**Optimization Strategy**:
-- **Search space**: 15+ hyperparameters optimized for financial data
-- **Objective**: Minimize pinball loss across all quantiles
-- **Regularization**: Stronger penalties for noisy financial signals
-- **Early stopping**: Prevents overfitting and speeds up tuning
-
-##### 2. Model Training (`train-model`)
-
-Trains final model with optimized hyperparameters:
+Trains CatBoost model with optimized pre-configured hyperparameters:
 
 ```bash
-# Train model with best hyperparameters  
+# Train model with pre-configured hyperparameters  
 export BASE_DATA_PATH="/path/to/your/data"
 export WANDB_KEY="your_wandb_key"
 uv run train-model run
@@ -391,7 +378,6 @@ Evaluation Metrics: {
 
 **Dependencies**:
 - **CatBoost**: Multi-quantile regression model
-- **Optuna**: Hyperparameter optimization
 - **Hamilton**: Data processing pipeline  
 - **W&B**: Experiment tracking and visualization
 - **Metaflow**: Pipeline orchestration and versioning
@@ -514,13 +500,10 @@ Note: building the features for 500 tickers on 4 cores takes about 30 seconds th
 # Set up Weights & Biases for experiment tracking
 export WANDB_KEY="your_wandb_api_key"
 
-# Run hyperparameter optimization (optional, for best performance)
-uv run tune-model run
-
-# Train the final model
+# Train the model with pre-configured parameters
 uv run train-model run
 ```
-Note: Hyperparameter tuning takes 10-30 minutes depending on the number of trials. Model training completes in under 5 minutes and includes conformal calibration for uncertainty quantification.
+Note: Model training completes in under 5 minutes and includes conformal calibration for uncertainty quantification.
 
 ### Pipeline Execution Examples
 
@@ -565,19 +548,11 @@ The feature pipeline will:
 export BASE_DATA_PATH="/path/to/your/data"
 export WANDB_KEY="your_wandb_api_key"
 
-# Optional: Run hyperparameter optimization
-uv run tune-model run
-
-# Train final model with best hyperparameters
+# Train model with pre-configured parameters
 uv run train-model run
 ```
 
 The ML pipeline will:
-- **Hyperparameter Tuning** (optional):
-  - Optimize 15+ CatBoost parameters using Optuna
-  - Minimize pinball loss across multiple quantiles
-  - Use TPE sampler for efficient search
-  - Log all trials to Weights & Biases
 - **Model Training**:
   - Load engineered features from parquet
   - Split data chronologically (train/validation/test)
@@ -588,8 +563,8 @@ The ML pipeline will:
 
 **Expected Results**:
 - **Coverage**: ~80% of true values within prediction intervals
-- **Pinball Loss**: ~0.02 (optimized quantile prediction error)
-- **Training Time**: <5 minutes for model training, 10-30 minutes for tuning
+- **Pinball Loss**: ~0.02 (quantile prediction error)
+- **Training Time**: <5 minutes for complete model training and calibration
 
 ### Development Workflow
 
@@ -637,8 +612,8 @@ The pipelines support configuration through environment variables and config fil
 # Custom data paths
 export BASE_DATA_PATH="/path/to/your/data"
 
-# Feature engineering parameters (modify features_config.py)
-# Adjust window sizes, feature selections, etc.
+# Feature engineering parameters (modify config.py)
+# Adjust window sizes, feature selections, etc. with type safety
 ```
 
 #### Pipeline Debugging

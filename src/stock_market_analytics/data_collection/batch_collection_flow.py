@@ -6,23 +6,24 @@ import pandas as pd
 import polars as pl
 from metaflow import FlowSpec, step
 
+from stock_market_analytics.config import config
 from stock_market_analytics.data_collection import (
     ContinuousTimelineProcessor,
+    DataQualityValidator,
     YFinanceCollector,
 )
-from stock_market_analytics.data_collection.data_config import data_config
 
 # Constants
-TICKERS_FILE = data_config["TICKERS_FILE"]
-METADATA_FILE = data_config["METADATA_FILE"]
-STOCKS_HISTORY_FILE = data_config["STOCKS_HISTORY_FILE"]
+TICKERS_FILE = config.data_collection.tickers_file
+METADATA_FILE = config.data_collection.metadata_file
+STOCKS_HISTORY_FILE = config.data_collection.stocks_history_file
 
 # Required columns for tickers file
-REQUIRED_TICKER_COLUMNS = data_config["REQUIRED_TICKER_COLUMNS"]
-TICKER_COLUMN_MAPPING = data_config["TICKER_COLUMN_MAPPING"]
+REQUIRED_TICKER_COLUMNS = config.data_collection.required_ticker_columns
+TICKER_COLUMN_MAPPING = config.data_collection.ticker_column_mapping
 
 # Required columns for metadata file
-REQUIRED_METADATA_COLUMNS = data_config["REQUIRED_METADATA_COLUMNS"]
+REQUIRED_METADATA_COLUMNS = config.data_collection.required_metadata_columns
 
 
 class BatchCollectionFlow(FlowSpec):
@@ -239,11 +240,23 @@ class BatchCollectionFlow(FlowSpec):
                 processed_data = processor.process()
 
                 if processed_data is not None and processor.processing_successful:
-                    new_metadata["max_date_recorded"] = (
-                        processed_data["date"].max().strftime("%Y-%m-%d")
-                    )
-                    new_metadata["status"] = "active"
-                    results = {"data": processed_data, "new_metadata": new_metadata}
+                    # Apply data quality validation
+                    quality_validator = DataQualityValidator(symbol, processed_data)
+                    validated_data = quality_validator.validate()
+
+                    if (
+                        validated_data is not None
+                        and quality_validator.validation_successful
+                    ):
+                        new_metadata["max_date_recorded"] = (
+                            validated_data["date"].max().strftime("%Y-%m-%d")
+                        )
+                        new_metadata["status"] = "active"
+                        results = {"data": validated_data, "new_metadata": new_metadata}
+                    else:
+                        # Quality check failed - treat as data quality issue
+                        new_metadata["status"] = "data_quality_issue"
+                        results = {"data": None, "new_metadata": new_metadata}
                 else:
                     new_metadata["status"] = "data_issue"
                     results = {"data": None, "new_metadata": new_metadata}

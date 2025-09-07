@@ -2,9 +2,10 @@ from typing import Any
 
 import pandas as pd
 
-from stock_market_analytics.modeling.pipeline_components.configs import modeling_config
+from stock_market_analytics.config import config
 
-TARGET = modeling_config["TARGET"]
+TARGET = config.modeling.target
+
 
 def split_data(
     df: pd.DataFrame,
@@ -15,18 +16,21 @@ def split_data(
     """
 
     # Test with the most recent 6 months of data
-    df['fold'] = 'train'  # Initialize fold column
-    df.loc[df['date'] >= df['date'].max() - pd.Timedelta(days=time_span), 'fold'] = 'test'
+    df["fold"] = "train"  # Initialize fold column
+    df.loc[df["date"] >= df["date"].max() - pd.Timedelta(days=time_span), "fold"] = (
+        "test"
+    )
 
-    min_test_date = df[df['fold'] == 'test']["date"].min()
+    min_test_date = df[df["fold"] == "test"]["date"].min()
 
     min_val_date = min_test_date - pd.Timedelta(days=time_span)
 
     # Validation is 6 months prior to test
-    df.loc[(df['date'] < min_test_date) & (df['date'] >= min_val_date), 'fold'] = 'validation'
+    df.loc[(df["date"] < min_test_date) & (df["date"] >= min_val_date), "fold"] = (
+        "validation"
+    )
 
     return df
-
 
 
 def metadata(
@@ -35,16 +39,22 @@ def metadata(
     """
     Get metadata for the training, validation, and test sets.
     """
-    training_start, training_end = split_data[split_data['fold'] == 'train']["date"].min(), split_data[split_data['fold'] == 'train']["date"].max()
-    validation_start, validation_end = (
-        split_data[split_data['fold'] == 'validation']["date"].min(),
-        split_data[split_data['fold'] == 'validation']["date"].max(),
+    training_start, training_end = (
+        split_data[split_data["fold"] == "train"]["date"].min(),
+        split_data[split_data["fold"] == "train"]["date"].max(),
     )
-    test_start, test_end = split_data[split_data['fold'] == 'test']["date"].min(), split_data[split_data['fold'] == 'test']["date"].max()
+    validation_start, validation_end = (
+        split_data[split_data["fold"] == "validation"]["date"].min(),
+        split_data[split_data["fold"] == "validation"]["date"].max(),
+    )
+    test_start, test_end = (
+        split_data[split_data["fold"] == "test"]["date"].min(),
+        split_data[split_data["fold"] == "test"]["date"].max(),
+    )
 
-    training_n_rows = split_data[split_data['fold'] == 'train'].shape[0]
-    validation_n_rows = split_data[split_data['fold'] == 'validation'].shape[0]
-    test_n_rows = split_data[split_data['fold'] == 'test'].shape[0]
+    training_n_rows = split_data[split_data["fold"] == "train"].shape[0]
+    validation_n_rows = split_data[split_data["fold"] == "validation"].shape[0]
+    test_n_rows = split_data[split_data["fold"] == "test"].shape[0]
 
     # Nice string format
     date_of_run = pd.Timestamp.now()
@@ -69,18 +79,26 @@ def metadata(
 
 
 def modeling_datasets(
-        split_data: pd.DataFrame,
-        features: list[str],
-        target: str = TARGET,
-    ) -> dict[str, Any]:
-
+    split_data: pd.DataFrame,
+    features: list[str],
+    target: str = TARGET,
+) -> dict[str, Any]:
     """
     Prepare modeling datasets.
     """
 
-    xtrain, ytrain = split_data[split_data['fold'] == 'train'][features], split_data[split_data['fold'] == 'train'][target]
-    xval, yval = split_data[split_data['fold'] == 'validation'][features], split_data[split_data['fold'] == 'validation'][target]
-    xtest, ytest = split_data[split_data['fold'] == 'test'][features], split_data[split_data['fold'] == 'test'][target]
+    xtrain, ytrain = (
+        split_data[split_data["fold"] == "train"][features],
+        split_data[split_data["fold"] == "train"][target],
+    )
+    xval, yval = (
+        split_data[split_data["fold"] == "validation"][features],
+        split_data[split_data["fold"] == "validation"][target],
+    )
+    xtest, ytest = (
+        split_data[split_data["fold"] == "test"][features],
+        split_data[split_data["fold"] == "test"][target],
+    )
 
     modeling_data = {
         "xtrain": xtrain,

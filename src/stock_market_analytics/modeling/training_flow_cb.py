@@ -1,40 +1,41 @@
 import os
 from pathlib import Path
+from typing import TYPE_CHECKING, Any
 
 import pandas as pd
 from metaflow import FlowSpec, step
 
 import wandb
+from stock_market_analytics.config import config
 from stock_market_analytics.modeling import processing_functions
 from stock_market_analytics.modeling.pipeline_components.calibrators import (
     PipelineWithCalibrator,
 )
-from stock_market_analytics.modeling.pipeline_components.configs import modeling_config
 from stock_market_analytics.modeling.pipeline_components.evaluators import (
     EvaluationReport,
     ModelEvaluator,
 )
-from stock_market_analytics.modeling.pipeline_components.parameters import (
-    cb_fit_params,
-)
 from stock_market_analytics.modeling.pipeline_components.pipeline_factory import (
-    get_pipeline,
     get_baseline_pipeline,
-)
-from stock_market_analytics.modeling.pipeline_components.predictors import (
-    CatBoostMultiQuantileModel,
+    get_pipeline,
 )
 from wandb.integration.metaflow import wandb_log
+
+if TYPE_CHECKING:
+    from stock_market_analytics.modeling.pipeline_components.predictors import (
+        CatBoostMultiQuantileModel,
+    )
 
 wandb.login(key=os.environ.get("WANDB_KEY"))
 
 # Constants
-FEATURES_FILE = modeling_config["FEATURES_FILE"]
-QUANTILES = modeling_config["QUANTILES"]
-FEATURES = modeling_config["FEATURES"]
-TARGET_COVERAGE = modeling_config["TARGET_COVERAGE"]
-TARGET = modeling_config["TARGET"]
-TIME_SPAN = modeling_config["TIME_SPAN"]  # days
+FEATURES_FILE = config.modeling.features_file
+QUANTILES = config.modeling.quantiles
+FEATURES = config.modeling.features
+TARGET_COVERAGE = config.modeling.target_coverage
+TARGET = config.modeling.target
+TIME_SPAN = config.modeling.time_span  # days
+
 
 class TrainingFlow(FlowSpec):
     """
@@ -63,7 +64,7 @@ class TrainingFlow(FlowSpec):
         """
         base_data_path = Path(os.environ["BASE_DATA_PATH"])
         data = self._load_features(base_data_path)
-        #only for training we remove the nulls
+        # only for training we remove the nulls
         self.data = data.dropna()
         self.next(self.model_training)
 
@@ -84,11 +85,39 @@ class TrainingFlow(FlowSpec):
 
     @step
     def model_training(self) -> None:
+        """Main training step that orchestrates the model training process."""
         print("🧹 Preparing Feature Data...")
 
-        # Prepare data
-        data = self.data
+        # Prepare data for training
+        modeling_datasets = self._prepare_training_data()
 
+        print("🤖 Training CatBoost Quantile Regressor...")
+
+        # Train the model
+        pipeline, final_iterations = self._train_model(modeling_datasets)
+
+        # Analyze and display feature importance
+        self._analyze_feature_importance(pipeline, modeling_datasets["xtrain"])
+
+        print(f"🏁 Training completed in {final_iterations + 1} iterations.")
+
+        # Evaluate the trained model
+        loss, metrics = self._evaluate_model(pipeline, modeling_datasets)
+
+        # Prepare data for next steps
+        calibration_info = {
+            "loss": loss,
+            "metrics": metrics,
+            "modeling_datasets": modeling_datasets,
+            "pipeline": pipeline,
+        }
+
+        self.calibration_info = calibration_info
+        self.next(self.baseline_training, self.calibrate_model)
+
+    def _prepare_training_data(self) -> dict:
+        """Prepare and split data for model training."""
+        data = self.data
         data = processing_functions.split_data(df=data, time_span=TIME_SPAN)
 
         modeling_datasets = processing_functions.modeling_datasets(
@@ -97,42 +126,83 @@ class TrainingFlow(FlowSpec):
             target=TARGET,
         )
 
+        # Store the split data for later use
+        self.data = data
+        return modeling_datasets
+
+    def _train_model(self, modeling_datasets: dict) -> tuple:
+        """Train the CatBoost model with early stopping."""
         xtrain, ytrain = modeling_datasets["xtrain"], modeling_datasets["ytrain"]
         xval, yval = modeling_datasets["xval"], modeling_datasets["yval"]
 
-        print("🤖 Training CatBoost Quantile Regressor...")
-
         pipeline = get_pipeline()
-        transformations = pipeline[0]  # type: ignore
-        transformations.fit(xtrain)  # Fit PCA on training data only.
-        # This is needed as there is no gracefull way to handle this in the pipeline if we want to use early stopping.
-        _xval = transformations.transform(xval)
-        # Fit the pipeline with early stopping parameters. This need to be passed to the pipeline as follows:
-        fit_params = cb_fit_params.copy()
+
+        # Handle transformation pipeline for early stopping
+        if pipeline.named_steps.get("transformations") is not None:
+            transformations = pipeline[0]  # type: ignore
+            transformations.fit(xtrain)  # Fit PCA on training data only
+            _xval = transformations.transform(xval)
+        else:
+            _xval = xval
+
+        # Set up early stopping parameters
+        fit_params = config.modeling.cb_fit_params.copy()
         fit_params["eval_set"] = (_xval, yval)
         fit_params = {f"quantile_regressor__{k}": v for k, v in fit_params.items()}
+
+        # Train the pipeline
         pipeline.fit(xtrain, ytrain, **fit_params)
 
-        quantile_regressor: CatBoostMultiQuantileModel = pipeline.named_steps["quantile_regressor"]  # type: ignore
+        # Extract final iteration count
+        quantile_regressor: CatBoostMultiQuantileModel = pipeline.named_steps[
+            "quantile_regressor"
+        ]  # type: ignore
         final_iterations = quantile_regressor.best_iteration_
-        print(f"🏁 Training completed in {final_iterations} iterations.")
 
-        # Evaluation metrics. The pipeline is now fitted with the best model and ready for inference. (although calibration is pending)
+        return pipeline, final_iterations
+
+    def _analyze_feature_importance(self, pipeline: Any, xtrain: Any) -> None:
+        """Analyze and display feature importance from the trained model."""
+        quantile_regressor: CatBoostMultiQuantileModel = pipeline.named_steps[
+            "quantile_regressor"
+        ]  # type: ignore
+        feature_importance_df = quantile_regressor._model.get_feature_importance(
+            prettified=True
+        )
+
+        # Map feature indices to names
+        if pipeline.named_steps.get("transformations") is not None:
+            transformations = pipeline[0]  # type: ignore
+            indx_to_col_name = {
+                f"{i}": col
+                for i, col in enumerate(transformations.get_feature_names_out())
+            }
+        else:
+            indx_to_col_name = {f"{i}": col for i, col in enumerate(xtrain.columns)}
+
+        # Map feature indices to names
+        feature_importance_df = feature_importance_df.copy()
+        feature_importance_df.loc[:, "Feature Id"] = feature_importance_df.loc[
+            :, "Feature Id"
+        ].map(indx_to_col_name)
+        feature_importance_df = feature_importance_df.rename(
+            columns={"Feature Id": "Feature", "Importances": "Importance"}
+        )
+        feature_importance_df = feature_importance_df.sort_values(
+            by="Importance", ascending=False
+        ).reset_index(drop=True)
+
+        print("🏆 Feature Importances:")
+        print(feature_importance_df)
+
+    def _evaluate_model(self, pipeline: Any, modeling_datasets: dict) -> tuple:
+        """Evaluate the trained model on validation data."""
+        xval, yval = modeling_datasets["xval"], modeling_datasets["yval"]
+
         evaluator = ModelEvaluator()
         loss, metrics = evaluator.evaluate_training(pipeline, xval, yval)
 
-        # Pass information to next step
-        calibration_info = {
-            "loss": loss,
-            "metrics": metrics,
-            "modeling_datasets": modeling_datasets,
-            "pipeline": pipeline
-        }
-
-        self.data = data  # Pass the original data with fold column for logging
-
-        self.calibration_info = calibration_info
-        self.next(self.baseline_training, self.calibrate_model)
+        return loss, metrics
 
     @step
     def baseline_training(self) -> None:
@@ -140,42 +210,42 @@ class TrainingFlow(FlowSpec):
         Train baseline quantile regressors for comparison.
         """
         print("📊 Training baseline quantile regressors...")
-        
+
         calibration_info = self.calibration_info
         modeling_datasets = calibration_info["modeling_datasets"]
-        
+
         xtrain, ytrain = modeling_datasets["xtrain"], modeling_datasets["ytrain"]
         xval, yval = modeling_datasets["xval"], modeling_datasets["yval"]
-        
+
         evaluator = ModelEvaluator()
-        
+
         # Train and evaluate different baselines
         baselines = ["historical"]
         baseline_results = {}
-        
+
         for baseline_name in baselines:
             print(f"🔄 Training {baseline_name} baseline...")
-            
+
             # Get baseline pipeline
             baseline_pipeline = get_baseline_pipeline(baseline_name)
-            
+
             # Train the baseline (no early stopping needed for simple baselines)
             baseline_pipeline.fit(xtrain, ytrain)
-            
+
             # Evaluate on validation set
             loss, metrics = evaluator.evaluate_training(baseline_pipeline, xval, yval)
-            
+
             baseline_results[baseline_name] = {
                 "pipeline": baseline_pipeline,
                 "loss": loss,
-                "metrics": metrics
+                "metrics": metrics,
             }
-            
+
             print(f"✅ {baseline_name} baseline - Loss: {loss:.4f}")
-        
+
         # Store baseline results
         self.baseline_results = baseline_results
-        
+
         # Continue to join step
         self.next(self.join_results)
 
@@ -185,7 +255,7 @@ class TrainingFlow(FlowSpec):
         models=True,
         others=True,
         settings=wandb.Settings(project="stock-market-analytics"),
-        )
+    )
     def calibrate_model(self) -> None:
         """
         Perform conformal adjustment on the trained model.
@@ -204,10 +274,10 @@ class TrainingFlow(FlowSpec):
 
         # Create calibrated pipeline for production use
         print("🔧 Creating calibrated pipeline...")
-        calibrated_pipeline, calibrator = PipelineWithCalibrator.create_calibrated_pipeline(
-            base_pipeline=pipeline,
-            X_cal=xcal,
-            y_cal=ycal
+        calibrated_pipeline, calibrator = (
+            PipelineWithCalibrator.create_calibrated_pipeline(
+                base_pipeline=pipeline, X_cal=xcal, y_cal=ycal
+            )
         )
 
         # Evaluate calibrated predictions (independent of calibrator)
@@ -218,7 +288,7 @@ class TrainingFlow(FlowSpec):
 
         # Get median predictions for pinball loss
         raw_predictions = pipeline.predict(xtest)
-        mid_idx = modeling_config["MID"]
+        mid_idx = config.modeling.quantile_indices["MID"]
         median_predictions = raw_predictions[:, mid_idx]
 
         conformal_results = evaluator.evaluate_calibrated_predictions(
@@ -237,45 +307,47 @@ class TrainingFlow(FlowSpec):
         training_metrics = calibration_info["metrics"]
 
         # Log results to wandb
-        self.calibrated_pipeline = calibrated_pipeline  # Production-ready pipeline with conformal calibration
+        self.calibrated_pipeline = (
+            calibrated_pipeline  # Production-ready pipeline with conformal calibration
+        )
         self.training_metrics = training_metrics
         self.data = data
         self.final_metrics = final_metrics
 
         self.next(self.join_results)
 
-    @step 
+    @step
     def join_results(self, inputs: list) -> None:
         """
         Join results from CatBoost training and baseline training branches.
         """
         print("🔀 Joining training results...")
-        
+
         # Merge artifacts from both branches
         # Find the calibrate_model input (has calibrated_pipeline)
         # Find the baseline_training input (has baseline_results)
-        
+
         catboost_input = None
         baseline_input = None
-        
+
         for inp in inputs:
-            if hasattr(inp, 'calibrated_pipeline'):
+            if hasattr(inp, "calibrated_pipeline"):
                 catboost_input = inp
-            if hasattr(inp, 'baseline_results'):
+            if hasattr(inp, "baseline_results"):
                 baseline_input = inp
-        
+
         if catboost_input is None or baseline_input is None:
             raise ValueError("Could not find both CatBoost and baseline results")
-        
-        # Copy all CatBoost results  
+
+        # Copy all CatBoost results
         self.calibrated_pipeline = catboost_input.calibrated_pipeline
         self.training_metrics = catboost_input.training_metrics
         self.data = catboost_input.data
         self.final_metrics = catboost_input.final_metrics
-        
+
         # Add baseline results
         self.baseline_results = baseline_input.baseline_results
-        
+
         print("✅ Results joined successfully")
         self.next(self.end)
 
@@ -290,7 +362,7 @@ class TrainingFlow(FlowSpec):
         # Display formatted evaluation results
         evaluation_results = {
             "training": {"metrics": self.training_metrics},
-            "conformal": self.final_metrics
+            "conformal": self.final_metrics,
         }
         EvaluationReport.print_summary(evaluation_results)
 
@@ -304,42 +376,65 @@ class TrainingFlow(FlowSpec):
         print(f"Target coverage: {calibrator_info['target_coverage']:.1%}")
 
         # Display baseline comparison
-        if hasattr(self, 'baseline_results'):
-            print(f"\n📊 Baseline Model Comparison:")
-            print(f"{'Model':<15} {'Validation Loss':<15} {'Coverage':<12} {'Width':<12}")
-            print(f"{'-'*15} {'-'*15} {'-'*12} {'-'*12}")
-            
+        if hasattr(self, "baseline_results"):
+            print("\n📊 Baseline Model Comparison:")
+            print(
+                f"{'Model':<15} {'Validation Loss':<15} {'Coverage':<12} {'Width':<12}"
+            )
+            print(f"{'-' * 15} {'-' * 15} {'-' * 12} {'-' * 12}")
+
             # CatBoost results
-            catboost_loss = self.training_metrics.get('pinball_mean', 0.0)
-            catboost_coverage = self.training_metrics.get('coverage_10_90', 0.0) 
-            catboost_width = self.training_metrics.get('mean_width', 0.0)
-            print(f"{'CatBoost':<15} {catboost_loss:<15.4f} {catboost_coverage:<12.3f} {catboost_width:<12.3f}")
-            
+            catboost_loss = self.training_metrics.get("pinball_mean", 0.0)
+            catboost_coverage = self.training_metrics.get("coverage_10_90", 0.0)
+            catboost_width = self.training_metrics.get("mean_width", 0.0)
+            print(
+                f"{'CatBoost':<15} {catboost_loss:<15.4f} {catboost_coverage:<12.3f} {catboost_width:<12.3f}"
+            )
+
             # Baseline results
             for baseline_name, baseline_data in self.baseline_results.items():
-                loss = baseline_data['loss']
-                metrics = baseline_data['metrics']
-                coverage = metrics.get('coverage_10_90', 0.0)
-                width = metrics.get('mean_width', 0.0)
-                print(f"{baseline_name.capitalize():<15} {loss:<15.4f} {coverage:<12.3f} {width:<12.3f}")
-            
+                loss = baseline_data["loss"]
+                metrics = baseline_data["metrics"]
+                coverage = metrics.get("coverage_10_90", 0.0)
+                width = metrics.get("mean_width", 0.0)
+                print(
+                    f"{baseline_name.capitalize():<15} {loss:<15.4f} {coverage:<12.3f} {width:<12.3f}"
+                )
+
             # Performance comparison
-            best_baseline_loss = min([data['loss'] for data in self.baseline_results.values()])
-            catboost_loss_val = self.training_metrics.get('pinball_mean', float('inf'))
-            
+            best_baseline_loss = min(
+                [data["loss"] for data in self.baseline_results.values()]
+            )
+            catboost_loss_val = self.training_metrics.get("pinball_mean", float("inf"))
+
             if catboost_loss_val < best_baseline_loss:
-                improvement = ((best_baseline_loss - catboost_loss_val) / best_baseline_loss + epsilon) * 100
-                print(f"\n🎯 CatBoost improvement over best baseline: {improvement:.1f}%")
+                improvement = (
+                    (best_baseline_loss - catboost_loss_val) / best_baseline_loss
+                    + epsilon
+                ) * 100
+                print(
+                    f"\n🎯 CatBoost improvement over best baseline: {improvement:.1f}%"
+                )
             else:
-                degradation = ((catboost_loss_val - best_baseline_loss) / best_baseline_loss + epsilon) * 100
-                print(f"\n⚠️  CatBoost performance vs best baseline: -{degradation:.1f}%")
+                degradation = (
+                    (catboost_loss_val - best_baseline_loss) / best_baseline_loss
+                    + epsilon
+                ) * 100
+                print(
+                    f"\n⚠️  CatBoost performance vs best baseline: -{degradation:.1f}%"
+                )
 
         # Usage example
-        print(f"\n💡 Usage:")
-        print(f"# For raw quantile predictions: Use main pipeline")
-        print(f"# For conformal bounds: self.calibrated_pipeline.predict(X)")
-        print(f"# For baseline comparisons: self.baseline_results[<baseline_name>]['pipeline'].predict(X)")
-        print(f"# Returns: array of shape (n_samples, 2) for conformal, (n_samples, n_quantiles) for others")
+        print("\n💡 Usage:")
+        print("# For raw quantile predictions: Use main pipeline")
+        print("# For conformal bounds: self.calibrated_pipeline.predict(X)")
+        print(
+            "# For baseline comparisons: self.baseline_results[<baseline_name>]['pipeline'].predict(X)"
+        )
+        print(
+            "# Returns: array of shape (n_samples, 2) for conformal, (n_samples, n_quantiles) for others"
+        )
+
 
 if __name__ == "__main__":
     TrainingFlow()

@@ -15,6 +15,7 @@ dependencies = [
     "pydantic>=2.11.7",
     "scikit-learn>=1.7.1",
     "sf-hamilton[visualization]>=1.88.0",
+    "umap-learn>=0.5.0",
     "wandb>=0.21.3",
     "yfinance>=0.2.65",
 ]
@@ -34,11 +35,11 @@ dev = [
     "pyright>=1.1.404",
     "pytest-cov>=6.2.1",
     "ruff>=0.12.10",
+    "sf-hamilton-lsp>=0.1.0",
 ]
 
 [project.scripts]
 stock-market-analytics = "stock_market_analytics.main:main"
 batch-collect = "stock_market_analytics.data_collection.batch_collection_flow:BatchCollectionFlow"
 build-features = "stock_market_analytics.feature_engineering.feature_building_flow:FeatureBuildingFlow"
-tune-model = "stock_market_analytics.modeling.tuning_flow_cb:TuningFlow"
 train-model = "stock_market_analytics.modeling.training_flow_cb:TrainingFlow"
