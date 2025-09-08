@@ -10,8 +10,12 @@ from .predictors import (
 from .baseline_predictors import (
     HistoricalQuantileBaseline,
 )
+from .factories import (
+    QuantileRegressionModelFactory,
+)
 
 __all__ = [
     "CatBoostMultiQuantileModel",
     "HistoricalQuantileBaseline",
+    "QuantileRegressionModelFactory",
 ]

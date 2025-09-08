@@ -53,7 +53,11 @@ from .protocol_functions import (
 )
 
 # Concrete implementations  
-from .prediction import CatBoostMultiQuantileModel, HistoricalQuantileBaseline
+from .prediction import (
+    CatBoostMultiQuantileModel, 
+    HistoricalQuantileBaseline,
+    QuantileRegressionModelFactory,
+)
 from .evaluation import (
     QuantileRegressionEvaluator,
 )
@@ -61,10 +65,13 @@ from .calibration import (
     QuantileIntervalCalibrator,
     CalibratedQuantileWrapper,
 )
-from .factories import (
+from .data_management import (
     TimeSeriesDataSplitter,
-    QuantileRegressionModelFactory,
+)
+from .workflows import (
     QuantileRegressionTaskConfig,
+    create_preprocessing_pipeline,
+    get_pipeline,
 )
 
 __all__ = [
@@ -105,8 +112,12 @@ __all__ = [
     "QuantileIntervalCalibrator",
     "CalibratedQuantileWrapper",
     
-    # Factories and splitters
+    # Data management
     "TimeSeriesDataSplitter",
+    
+    # Workflows and factories  
     "QuantileRegressionModelFactory",
     "QuantileRegressionTaskConfig",
+    "create_preprocessing_pipeline",
+    "get_pipeline",
 ]
