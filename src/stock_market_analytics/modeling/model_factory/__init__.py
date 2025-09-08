@@ -32,6 +32,13 @@ try:
 except ImportError:
     pass
 
+try:
+    from .calibration import (
+        ConformalCalibrator,
+    )
+except ImportError:
+    pass
+
 __all__ = [
     # Core protocols
     "QuantilePredictor",
@@ -47,4 +54,5 @@ __all__ = [
     "CatBoostMultiQuantileModel",
     "HistoricalQuantileBaseline", 
     "QuantileRegressionEvaluator",
+    "ConformalCalibrator",
 ]

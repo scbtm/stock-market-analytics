@@ -32,29 +32,5 @@ def create_catboost_pool(X: Any, y: Any = None) -> Pool:
     return Pool(X, y, cat_features=cat_features)
 
 
-def predict_quantiles_catboost(model: CatBoostRegressor, X: Any) -> np.ndarray:
-    """
-    Make quantile predictions using a CatBoost model.
-    
-    Args:
-        model: Trained CatBoost regressor configured for quantile regression
-        X: Input features (DataFrame, array, or Pool)
-        
-    Returns:
-        Array of shape (n_samples, n_quantiles) with monotonic quantile predictions
-    """
-    if isinstance(X, Pool):
-        pool = X
-    else:
-        pool = create_catboost_pool(X)
-
-    predictions = model.predict(pool)
-    predictions = np.asarray(predictions)
-    
-    # Ensure proper shape
-    if predictions.ndim == 1:
-        predictions = predictions.reshape(-1, 1)
-    
-    # Enforce non-crossing quantiles (simple sort)
-    predictions.sort(axis=1)
-    return predictions
+# predict_quantiles_catboost function removed - it was unnecessary abstraction
+# The logic is now inline in CatBoostMultiQuantileModel.predict_quantiles()

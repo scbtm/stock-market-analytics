@@ -11,7 +11,7 @@ from sklearn.base import BaseEstimator, RegressorMixin
 from sklearn.utils.validation import check_X_y
 
 from ..protocols import QuantilePredictor
-from .prediction_functions import create_catboost_pool, predict_quantiles_catboost
+from .prediction_functions import create_catboost_pool
 
 
 class CatBoostMultiQuantileModel(BaseEstimator, RegressorMixin, QuantilePredictor):
@@ -29,6 +29,9 @@ class CatBoostMultiQuantileModel(BaseEstimator, RegressorMixin, QuantilePredicto
         self.verbose = verbose
         self.catboost_params = catboost_params
         self._model = None
+        
+        # Calibration state - calibrator does the work, we just hold reference
+        self._calibrator = None
 
     def fit(self, X: Any, y: Any, **fit_params: Any) -> "CatBoostMultiQuantileModel":
         """Fit the CatBoost multi-quantile model."""
@@ -55,13 +58,26 @@ class CatBoostMultiQuantileModel(BaseEstimator, RegressorMixin, QuantilePredicto
         return self
 
     def predict_quantiles(self, X: Any, quantiles: Sequence[float]) -> np.ndarray:
-        """Generate multi-quantile predictions."""
+        """Generate multi-quantile predictions (calibrated if calibrator is fitted)."""
         if self._model is None:
             raise ValueError("Model must be fitted before making predictions")
 
+        # Get raw predictions from CatBoost - inline the simple logic
         # Note: CatBoost MultiQuantile ignores the quantiles parameter 
         # and returns predictions for all trained quantiles
-        return predict_quantiles_catboost(self._model, X)
+        pool = create_catboost_pool(X)
+        raw_predictions = np.asarray(self._model.predict(pool))
+        
+        # Ensure proper shape
+        if raw_predictions.ndim == 1:
+            raw_predictions = raw_predictions.reshape(-1, 1)
+        
+        # Enforce non-crossing quantiles
+        raw_predictions.sort(axis=1)
+        
+        # Return raw predictions - calibration only applies to intervals
+        # Individual quantiles don't get "calibrated" in conformal prediction
+        return raw_predictions
 
     def predict(self, X: Any) -> np.ndarray:
         """Generate point predictions (median quantile)."""
@@ -78,3 +94,53 @@ class CatBoostMultiQuantileModel(BaseEstimator, RegressorMixin, QuantilePredicto
             median_idx = len(self.quantiles) // 2
             
         return quantile_preds[:, median_idx]
+    
+    def calibrate(self, X_cal: Any, y_cal: Any, calibrator) -> None:
+        """
+        Calibrate the model using the provided calibrator.
+        
+        Args:
+            X_cal: Calibration features
+            y_cal: Calibration targets  
+            calibrator: Calibrator instance with fit method (e.g., ConformalCalibrator)
+        """
+        if self._model is None:
+            raise ValueError("Model must be fitted before calibration")
+        
+        # Get quantile predictions on calibration set
+        q_cal = self.predict_quantiles(X_cal, self.quantiles)
+        
+        # Fit the calibrator - it does all the work
+        calibrator.fit(y_cal, q_cal, self.quantiles)
+        
+        # Store reference to fitted calibrator
+        self._calibrator = calibrator
+        
+        print(f"Model calibrated with {type(calibrator).__name__}")
+    
+    def predict_intervals(self, X: Any) -> np.ndarray:
+        """
+        Predict calibrated intervals.
+        
+        Args:
+            X: Input features
+            
+        Returns:
+            Array of shape (n_samples, 2) with [lower, upper] bounds
+        """
+        if self._calibrator is None or not self._calibrator.is_fitted:
+            raise ValueError("Model must be calibrated before predicting intervals. Call calibrate() first.")
+        
+        # Get raw quantile predictions - inline simple logic
+        pool = create_catboost_pool(X)
+        raw_predictions = np.asarray(self._model.predict(pool))
+        
+        # Ensure proper shape
+        if raw_predictions.ndim == 1:
+            raw_predictions = raw_predictions.reshape(-1, 1)
+        
+        # Enforce non-crossing quantiles
+        raw_predictions.sort(axis=1)
+        
+        # Let calibrator generate intervals
+        return self._calibrator.predict_intervals(raw_predictions, self.quantiles)
