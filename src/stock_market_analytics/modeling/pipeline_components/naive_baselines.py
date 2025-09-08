@@ -1,16 +1,18 @@
 """Naive baseline quantile regressors for comparison with advanced models."""
 
-from typing import Any
+from typing import Any, Sequence
 
 import numpy as np
+import numpy.typing as npt
 from sklearn.base import BaseEstimator, RegressorMixin
 from sklearn.utils.validation import check_array, check_X_y
 
-# from sklearn.linear_model import QuantileRegressor
-# from sklearn.preprocessing import StandardScaler
+from .protocols import SupportsPredictQuantiles
+
+NDArrayF = npt.NDArray[np.float64]
 
 
-class HistoricalQuantileBaseline(BaseEstimator, RegressorMixin):
+class HistoricalQuantileBaseline(BaseEstimator, RegressorMixin, SupportsPredictQuantiles):
     """
     Naive baseline that predicts historical quantiles from training data.
 
@@ -77,6 +79,41 @@ class HistoricalQuantileBaseline(BaseEstimator, RegressorMixin):
         predictions = np.tile(self.empirical_quantiles_, (n_samples, 1))
 
         return predictions
+
+    def predict_quantiles(
+        self,
+        X: Any,
+        quantiles: Sequence[float] | NDArrayF | None = None
+    ) -> NDArrayF:
+        """
+        Predict quantiles using historical empirical quantiles.
+        
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Input features (ignored)
+        quantiles : Sequence[float] | NDArrayF | None
+            Quantiles to predict. If None, uses model's internal quantiles.
+            
+        Returns
+        -------
+        predictions : NDArrayF of shape (n_samples, n_quantiles)
+            Quantile predictions (same for all samples)
+        """
+        if quantiles is not None:
+            # Check if requested quantiles match model's quantiles
+            requested = np.asarray(quantiles, dtype=float)
+            model_quantiles = np.asarray(self.quantiles, dtype=float)
+            
+            if not np.array_equal(requested, model_quantiles):
+                raise ValueError(
+                    f"Requested quantiles {requested.tolist()} do not match "
+                    f"model's trained quantiles {model_quantiles.tolist()}. "
+                    "Historical baseline cannot predict arbitrary quantiles."
+                )
+        
+        # Use regular predict method which returns quantiles
+        return self.predict(X)
 
     def score(self, X: Any, y: Any, sample_weight: Any = None) -> float:
         """Return R^2 score for median quantile prediction."""

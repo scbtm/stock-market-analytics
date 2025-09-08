@@ -3,15 +3,20 @@ to make them compatible with scikit-learn's API (fit, predict, get_params, set_p
 
 # Scikit-learn compatible CatBoost multi-quantile regressor wrapper.
 
-from typing import Any
+from typing import Any, Sequence
 
 import numpy as np
+import numpy.typing as npt
 from catboost import CatBoostRegressor, Pool
 from sklearn.base import BaseEstimator, RegressorMixin
 from sklearn.utils.validation import check_array, check_X_y
 
+from .protocols import SupportsPredictQuantiles
 
-class CatBoostMultiQuantileModel(BaseEstimator, RegressorMixin):
+NDArrayF = npt.NDArray[np.float64]
+
+
+class CatBoostMultiQuantileModel(BaseEstimator, RegressorMixin, SupportsPredictQuantiles):
     """Scikit-learn compatible wrapper for CatBoost multi-quantile regression.
 
     Parameters
@@ -66,7 +71,9 @@ class CatBoostMultiQuantileModel(BaseEstimator, RegressorMixin):
         params["loss_function"] = f"MultiQuantile:alpha={alpha_str}"
         params["random_state"] = self.random_state
         params["verbose"] = self.verbose
-        params["use_best_model"] = True  # Enable best model tracking
+        # Only enable best model tracking if use_best_model is explicitly set to True
+        if params.get("use_best_model", False):
+            params["use_best_model"] = True
 
         # Create and fit model
         self._model = CatBoostRegressor(**params)
@@ -124,6 +131,41 @@ class CatBoostMultiQuantileModel(BaseEstimator, RegressorMixin):
         predictions.sort(axis=1)
 
         return predictions
+
+    def predict_quantiles(
+        self,
+        X: Any,
+        quantiles: Sequence[float] | NDArrayF | None = None
+    ) -> NDArrayF:
+        """
+        Predict quantiles using the fitted model.
+        
+        Parameters
+        ----------
+        X : array-like of shape (n_samples, n_features)
+            Input features
+        quantiles : Sequence[float] | NDArrayF | None
+            Quantiles to predict. If None, uses model's internal quantiles.
+            
+        Returns
+        -------
+        predictions : NDArrayF of shape (n_samples, n_quantiles)
+            Quantile predictions
+        """
+        if quantiles is not None:
+            # Check if requested quantiles match model's quantiles
+            requested = np.asarray(quantiles, dtype=float)
+            model_quantiles = np.asarray(self.quantiles, dtype=float)
+            
+            if not np.array_equal(requested, model_quantiles):
+                raise ValueError(
+                    f"Requested quantiles {requested.tolist()} do not match "
+                    f"model's trained quantiles {model_quantiles.tolist()}. "
+                    "CatBoost multi-quantile models cannot predict arbitrary quantiles."
+                )
+        
+        # Use regular predict method which returns quantiles
+        return self.predict(X)
 
     def transform(self, X: Any) -> np.ndarray:
         """Alias for predict to support transformer interface inside pipelines."""

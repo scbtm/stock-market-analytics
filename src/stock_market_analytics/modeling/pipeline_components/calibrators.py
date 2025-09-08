@@ -1,283 +1,247 @@
+"""
+Protocol-compliant calibrators for uncertainty quantification.
+
+This module provides calibrators that implement the CalibratorProtocol,
+enabling consistent interfaces for conformal prediction and other calibration methods.
+"""
+
+from typing import Any, Mapping
+
 import numpy as np
-import pandas as pd
-from sklearn.base import BaseEstimator, TransformerMixin
-from sklearn.pipeline import Pipeline
+import numpy.typing as npt
+from sklearn.base import BaseEstimator
 
 from stock_market_analytics.config import config
 from stock_market_analytics.modeling.pipeline_components.functions import (
     apply_conformal,
     conformal_adjustment,
 )
+from .protocols import (
+    CalibratorProtocol,
+    CalibrationKind,
+    TaskType,
+    PredKind,
+    PredictionExtractor,
+    extract_quantiles,
+    GetSetParamsMixin,
+    is_quantiles,
+)
+
+NDArrayF = npt.NDArray[np.float64]
 
 
-class ConformalCalibrator(BaseEstimator, TransformerMixin):
+class QuantileIntervalCalibrator(CalibratorProtocol):
     """
-    Scikit-learn compatible conformal calibrator for quantile regression models.
-
-    This calibrator implements Conformalized Quantile Regression (CQR) and can be
-    used as the final step in a scikit-learn pipeline. It stores calibration data
-    during fit() and applies conformal adjustments during predict().
-
-    The calibrator returns only the conformally adjusted bounds (lower, upper)
-    when predict() is called, making it suitable for direct use in production.
+    Protocol-compliant conformal calibrator for quantile regression.
+    
+    This calibrator implements Conformalized Quantile Regression (CQR) and produces
+    interval predictions with statistical coverage guarantees.
     """
-
+    
+    calibration_kind: CalibrationKind = "quantile_interval"
+    task_type: TaskType = "quantile_regression"
+    input_kind: tuple[PredKind, ...] = ("quantiles",)
+    output_kind: tuple[PredKind, ...] = ("interval",)
+    
     def __init__(
         self,
-        target_coverage: float = None,
-        low_idx: int = None,
-        high_idx: int = None,
-        store_calibration_data: bool = True,
+        target_coverage: float | None = None,
+        low_quantile: float = 0.1,
+        high_quantile: float = 0.9,
     ):
         """
-        Initialize the conformal calibrator.
-
+        Initialize the quantile interval calibrator.
+        
         Args:
             target_coverage: Target coverage level (e.g., 0.8 for 80% coverage)
-                           Defaults to config.modeling.target_coverage
-            low_idx: Index of the lower quantile in model predictions
-                    Defaults to config.modeling.quantile_indices["LOW"]
-            high_idx: Index of the upper quantile in model predictions
-                     Defaults to config.modeling.quantile_indices["HIGH"]
-            store_calibration_data: Whether to store calibration predictions
-                                  Set to False to save memory if not needed
+            low_quantile: Lower quantile for interval construction
+            high_quantile: Upper quantile for interval construction
         """
         self.target_coverage = target_coverage or config.modeling.target_coverage
-        self.low_idx = (
-            low_idx if low_idx is not None else config.modeling.quantile_indices["LOW"]
-        )
-        self.high_idx = (
-            high_idx
-            if high_idx is not None
-            else config.modeling.quantile_indices["HIGH"]
-        )
-        self.store_calibration_data = store_calibration_data
-
-        # Will be set during fit()
-        self.conformal_quantile_ = None
+        self.low_quantile = low_quantile
+        self.high_quantile = high_quantile
         self.alpha_ = 1 - self.target_coverage
+        self.conformal_quantile_ = None
         self.is_fitted_ = False
-
-        # Optional storage for debugging/analysis
-        self.calibration_predictions_ = None
-        self.calibration_targets_ = None
-
-    def fit(self, X: pd.DataFrame | np.ndarray, y: pd.DataFrame | np.ndarray):
+    
+    def fit(
+        self,
+        base_estimator: BaseEstimator,
+        X_cal: Any,
+        y_cal: Any,
+        *,
+        extract: PredictionExtractor | None = None,
+        **kwargs: Any,
+    ) -> "QuantileIntervalCalibrator":
         """
-        Fit the conformal calibrator using calibration data.
-
-        This method expects that X contains predictions from the upstream model
-        (i.e., quantile predictions with shape (n_samples, n_quantiles)).
-        The calibrator will compute the conformal quantile based on these predictions
-        and the true targets y.
-
+        Fit the calibrator using calibration data.
+        
         Args:
-            X: Model predictions on calibration set, shape (n_samples, n_quantiles)
-            y: True targets for calibration set, shape (n_samples,) or (n_samples, 1)
-
+            base_estimator: Fitted base estimator that can predict quantiles
+            X_cal: Calibration features
+            y_cal: Calibration targets
+            extract: Optional custom extractor function
+            **kwargs: Additional parameters
+            
         Returns:
-            self: Returns self for method chaining
+            self: Fitted calibrator
         """
-        # Convert inputs to numpy arrays
-        X_array = np.asarray(X)
-        y_array = (
-            y.to_numpy().ravel() if hasattr(y, "values") else np.asarray(y).ravel()
-        )
-
-        # Validate inputs
-        if X_array.ndim != 2:
+        # Extract predictions using protocol-compliant approach
+        if extract is None:
+            # Use default quantile extraction with model's quantiles
+            if hasattr(base_estimator, 'quantiles'):
+                quantiles = base_estimator.quantiles
+                preds = extract_quantiles(base_estimator, X_cal, quantiles)
+            else:
+                preds = extract_quantiles(base_estimator, X_cal)
+        else:
+            preds = extract(base_estimator, X_cal)
+        
+        if not is_quantiles(preds):
             raise ValueError(
-                f"X must be 2D array with shape (n_samples, n_quantiles), got shape {X_array.shape}"
+                f"Calibrator expects quantile predictions, got {preds.kind}"
             )
-
-        if len(y_array) != X_array.shape[0]:
+        
+        # Convert targets to array
+        y_array = np.asarray(y_cal, dtype=float).ravel()
+        
+        # Find indices for low and high quantiles
+        quantile_list = list(preds.quantiles)
+        try:
+            low_idx = quantile_list.index(self.low_quantile)
+            high_idx = quantile_list.index(self.high_quantile)
+        except ValueError as e:
             raise ValueError(
-                f"X and y must have same number of samples. X: {X_array.shape[0]}, y: {len(y_array)}"
-            )
-
-        if self.low_idx >= X_array.shape[1] or self.high_idx >= X_array.shape[1]:
-            raise ValueError(
-                f"Quantile indices out of bounds. X has {X_array.shape[1]} quantiles, "
-                f"but low_idx={self.low_idx}, high_idx={self.high_idx}"
-            )
-
-        # Extract the relevant quantiles for conformal adjustment
-        q_lo_cal = X_array[:, self.low_idx]
-        q_hi_cal = X_array[:, self.high_idx]
-
+                f"Required quantiles {self.low_quantile}, {self.high_quantile} "
+                f"not found in model predictions {quantile_list}"
+            ) from e
+        
+        # Extract quantile predictions for calibration
+        q_lo_cal = preds.q[:, low_idx]
+        q_hi_cal = preds.q[:, high_idx]
+        
         # Compute conformal quantile
         self.conformal_quantile_ = conformal_adjustment(
             q_lo_cal, q_hi_cal, y_array, alpha=self.alpha_
         )
-
-        # Optionally store calibration data for analysis
-        if self.store_calibration_data:
-            self.calibration_predictions_ = X_array.copy()
-            self.calibration_targets_ = y_array.copy()
-
+        
         self.is_fitted_ = True
         return self
-
-    def transform(self, X: pd.DataFrame | np.ndarray) -> np.ndarray:
+    
+    def wrap(self, base_estimator: BaseEstimator) -> BaseEstimator:
         """
-        Apply conformal adjustment to predictions.
-
-        Args:
-            X: Model predictions, shape (n_samples, n_quantiles)
-
+        Return a sklearn-compatible estimator that performs calibrated predictions.
+        
         Returns:
-            Conformally adjusted bounds, shape (n_samples, 2)
-            Column 0: Lower bound, Column 1: Upper bound
+            CalibratedQuantileWrapper: Wrapper that exposes predict_interval method
         """
         if not self.is_fitted_:
-            raise ValueError(
-                "Calibrator must be fitted before transform. Call fit() first."
-            )
-
-        X_array = np.asarray(X)
-
-        if X_array.ndim != 2:
-            raise ValueError(
-                f"X must be 2D array with shape (n_samples, n_quantiles), got shape {X_array.shape}"
-            )
-
-        if self.low_idx >= X_array.shape[1] or self.high_idx >= X_array.shape[1]:
-            raise ValueError(
-                f"Quantile indices out of bounds. X has {X_array.shape[1]} quantiles, "
-                f"but low_idx={self.low_idx}, high_idx={self.high_idx}"
-            )
-
-        # Extract the relevant quantiles
-        q_lo = X_array[:, self.low_idx]
-        q_hi = X_array[:, self.high_idx]
-
-        # Apply conformal adjustment
-        lo_conformal, hi_conformal = apply_conformal(
-            q_lo, q_hi, self.conformal_quantile_
+            raise ValueError("Calibrator must be fitted before wrapping.")
+        
+        return CalibratedQuantileWrapper(
+            base_estimator=base_estimator,
+            conformal_quantile=self.conformal_quantile_,
+            low_quantile=self.low_quantile,
+            high_quantile=self.high_quantile,
+            target_coverage=self.target_coverage,
         )
-
-        # Return as 2-column array: [lower_bounds, upper_bounds]
-        return np.column_stack([lo_conformal, hi_conformal])
-
-    def predict(self, X: pd.DataFrame | np.ndarray) -> np.ndarray:
-        """
-        Predict conformally adjusted bounds.
-
-        This method is an alias for transform() to provide a more intuitive
-        interface when the calibrator is used as the final step in a pipeline.
-
-        Args:
-            X: Model predictions, shape (n_samples, n_quantiles)
-
-        Returns:
-            Conformally adjusted bounds, shape (n_samples, 2)
-            Column 0: Lower bound, Column 1: Upper bound
-        """
-        return self.transform(X)
-
-    def get_conformal_info(self) -> dict:
-        """
-        Get information about the fitted conformal calibrator.
-
-        Returns:
-            Dictionary containing calibrator information
-        """
-        if not self.is_fitted_:
-            raise ValueError("Calibrator must be fitted first.")
-
+    
+    def info(self) -> Mapping[str, Any]:
+        """Get information about the fitted calibrator."""
         info = {
+            "calibration_kind": self.calibration_kind,
+            "task_type": self.task_type,
             "target_coverage": self.target_coverage,
+            "low_quantile": self.low_quantile,
+            "high_quantile": self.high_quantile,
             "alpha": self.alpha_,
-            "conformal_quantile": self.conformal_quantile_,
-            "low_idx": self.low_idx,
-            "high_idx": self.high_idx,
             "is_fitted": self.is_fitted_,
         }
-
-        if self.store_calibration_data and self.calibration_predictions_ is not None:
-            info.update(
-                {
-                    "calibration_samples": len(self.calibration_targets_),
-                    "calibration_quantiles": self.calibration_predictions_.shape[1],
-                }
-            )
-
+        
+        if self.is_fitted_:
+            info["conformal_quantile"] = self.conformal_quantile_
+        
         return info
 
 
-class PipelineWithCalibrator:
+class CalibratedQuantileWrapper(BaseEstimator, GetSetParamsMixin):
     """
-    Helper class to create and manage pipelines with conformal calibration.
-
-    This class provides utilities to add a fitted calibrator to an existing pipeline
-    and manage the two-stage fitting process (model first, then calibrator).
+    Sklearn-compatible wrapper for calibrated quantile predictions.
+    
+    This wrapper maintains the original model's quantile prediction capability
+    while adding calibrated interval predictions.
     """
-
-    @staticmethod
-    def add_calibrator_to_pipeline(
-        base_pipeline: Pipeline,
-        calibrator: ConformalCalibrator,
-        calibrator_name: str = "conformal_calibrator",
-    ) -> Pipeline:
+    
+    def __init__(
+        self,
+        base_estimator: BaseEstimator,
+        conformal_quantile: float,
+        low_quantile: float,
+        high_quantile: float,
+        target_coverage: float,
+    ):
+        self.base_estimator = base_estimator
+        self.conformal_quantile = conformal_quantile
+        self.low_quantile = low_quantile
+        self.high_quantile = high_quantile
+        self.target_coverage = target_coverage
+    
+    def predict(self, X: Any) -> NDArrayF:
+        """Predict calibrated intervals (lo, hi)."""
+        return self.predict_interval(X)
+    
+    def predict_quantiles(
+        self, 
+        X: Any, 
+        quantiles: Any | None = None
+    ) -> NDArrayF:
+        """Pass through to base estimator's quantile predictions."""
+        if hasattr(self.base_estimator, 'predict_quantiles'):
+            return self.base_estimator.predict_quantiles(X, quantiles)
+        else:
+            # Fallback for models that don't implement the protocol
+            return self.base_estimator.predict(X)
+    
+    def predict_interval(
+        self, 
+        X: Any, 
+        coverage: float | None = None
+    ) -> NDArrayF:
         """
-        Add a fitted calibrator as the final step of an existing pipeline.
-
+        Predict calibrated intervals with guaranteed coverage.
+        
         Args:
-            base_pipeline: The base pipeline (should be already fitted)
-            calibrator: A fitted ConformalCalibrator instance
-            calibrator_name: Name for the calibrator step
-
+            X: Input features
+            coverage: Coverage level (uses fitted coverage if None)
+            
         Returns:
-            New pipeline with calibrator added
+            Array of shape (n_samples, 2) with [lo, hi] intervals
         """
-        if not calibrator.is_fitted_:
-            raise ValueError("Calibrator must be fitted before adding to pipeline.")
-
-        # Create new pipeline steps
-        new_steps = base_pipeline.steps + [(calibrator_name, calibrator)]
-
-        # Create new pipeline
-        calibrated_pipeline = Pipeline(new_steps)
-
-        # Copy fitted state from base pipeline
-        for step_name, step_transformer in base_pipeline.named_steps.items():
-            calibrated_pipeline.named_steps[step_name] = step_transformer
-
-        return calibrated_pipeline
-
-    @staticmethod
-    def create_calibrated_pipeline(
-        base_pipeline: Pipeline,
-        X_cal: pd.DataFrame | np.ndarray,
-        y_cal: pd.DataFrame | np.ndarray,
-        calibrator_params: dict = None,
-    ) -> tuple[Pipeline, ConformalCalibrator]:
-        """
-        Create a calibrated pipeline by fitting a calibrator on calibration data.
-
-        Args:
-            base_pipeline: Fitted base pipeline that produces quantile predictions
-            X_cal: Calibration features
-            y_cal: Calibration targets
-            calibrator_params: Parameters for ConformalCalibrator initialization
-
-        Returns:
-            Tuple of (calibrated_pipeline, fitted_calibrator)
-        """
-        calibrator_params = calibrator_params or {}
-
-        # Create and fit calibrator
-        calibrator = ConformalCalibrator(**calibrator_params)
-
-        # Get predictions from base pipeline for calibration
-        cal_predictions = base_pipeline.predict(X_cal)
-
-        # Fit calibrator
-        calibrator.fit(cal_predictions, y_cal)
-
-        # Add calibrator to pipeline
-        calibrated_pipeline = PipelineWithCalibrator.add_calibrator_to_pipeline(
-            base_pipeline, calibrator
+        if coverage is not None and coverage != self.target_coverage:
+            raise ValueError(
+                f"Coverage {coverage} differs from fitted coverage {self.target_coverage}. "
+                "Re-fit calibrator with different target coverage."
+            )
+        
+        # Get base quantile predictions
+        q_preds = self.predict_quantiles(X)
+        
+        # Find quantile indices
+        if hasattr(self.base_estimator, 'quantiles'):
+            quantiles = list(self.base_estimator.quantiles)
+            low_idx = quantiles.index(self.low_quantile)
+            high_idx = quantiles.index(self.high_quantile)
+        else:
+            # Assume standard quantile ordering for backward compatibility
+            low_idx = 0  # First quantile
+            high_idx = -1  # Last quantile
+        
+        q_lo = q_preds[:, low_idx]
+        q_hi = q_preds[:, high_idx]
+        
+        # Apply conformal adjustment
+        lo_conformal, hi_conformal = apply_conformal(
+            q_lo, q_hi, self.conformal_quantile
         )
-
-        return calibrated_pipeline, calibrator
+        
+        return np.column_stack([lo_conformal, hi_conformal])

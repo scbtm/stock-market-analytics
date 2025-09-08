@@ -16,7 +16,6 @@ from dataclasses import dataclass
 from typing import (
     Any,
     Callable,
-    Iterable,
     Literal,
     Mapping,
     Protocol,
@@ -27,7 +26,6 @@ from typing import (
 
 import numpy as np
 import numpy.typing as npt
-import pandas as pd
 from sklearn.base import BaseEstimator
 
 
@@ -80,29 +78,51 @@ class SupportsPredictQuantiles(Protocol):
 @dataclass(frozen=True)
 class PointPreds:
     kind: Literal["point"] = "point"
-    y_hat: NDArrayF = np.empty(0)  # (n_samples,)
+    y_hat: NDArrayF = None  # (n_samples,)
+    
+    def __post_init__(self):
+        if self.y_hat is None:
+            object.__setattr__(self, 'y_hat', np.empty(0, dtype=float))
 
 
 @dataclass(frozen=True)
 class ProbPreds:
     kind: Literal["proba"] = "proba"
-    proba: NDArrayF = np.empty((0, 0))          # (n_samples, n_classes)
-    classes_: Sequence[Any] = ()                # Ordering of columns in `proba`
+    proba: NDArrayF = None          # (n_samples, n_classes)
+    classes_: Sequence[Any] = None  # Ordering of columns in `proba`
+    
+    def __post_init__(self):
+        if self.proba is None:
+            object.__setattr__(self, 'proba', np.empty((0, 0), dtype=float))
+        if self.classes_ is None:
+            object.__setattr__(self, 'classes_', ())
 
 
 @dataclass(frozen=True)
 class QuantilePreds:
     kind: Literal["quantiles"] = "quantiles"
-    q: NDArrayF = np.empty((0, 0))              # (n_samples, n_quantiles)
-    quantiles: Sequence[float] = ()             # same order as columns in `q`
+    q: NDArrayF = None              # (n_samples, n_quantiles)
+    quantiles: Sequence[float] = None  # same order as columns in `q`
+    
+    def __post_init__(self):
+        if self.q is None:
+            object.__setattr__(self, 'q', np.empty((0, 0), dtype=float))
+        if self.quantiles is None:
+            object.__setattr__(self, 'quantiles', ())
 
 
 @dataclass(frozen=True)
 class IntervalPreds:
     kind: Literal["interval"] = "interval"
-    lo: NDArrayF = np.empty(0)                  # (n_samples,)
-    hi: NDArrayF = np.empty(0)                  # (n_samples,)
-    target_coverage: float | None = None        # e.g., 0.80
+    lo: NDArrayF = None                  # (n_samples,)
+    hi: NDArrayF = None                  # (n_samples,)
+    target_coverage: float | None = None # e.g., 0.80
+    
+    def __post_init__(self):
+        if self.lo is None:
+            object.__setattr__(self, 'lo', np.empty(0, dtype=float))
+        if self.hi is None:
+            object.__setattr__(self, 'hi', np.empty(0, dtype=float))
 
 
 PredictionBundle = PointPreds | ProbPreds | QuantilePreds | IntervalPreds
@@ -121,19 +141,12 @@ def is_interval(p: PredictionBundle) -> TypeGuard[IntervalPreds]: return p.kind 
 
 @runtime_checkable
 class EvaluationResultProtocol(Protocol):
-    @property
-    def task_type(self) -> TaskType: ...
-    @property
-    def primary_metric_name(self) -> str: ...
-    @property
-    def primary_metric_value(self) -> float: ...
-    @property
-    def metrics(self) -> Mapping[str, Any]: ...
-    @property
-    def n_samples(self) -> int: ...
-    # Optional: artifacts/curves (ROC pts, PR pts, residual histograms, etc.)
-    @property
-    def artifacts(self) -> Mapping[str, Any]: ...
+    task_type: TaskType
+    primary_metric_name: str
+    primary_metric_value: float
+    metrics: Mapping[str, Any]
+    n_samples: int
+    artifacts: Mapping[str, Any]
 
 
 @dataclass(frozen=True)
@@ -143,7 +156,11 @@ class EvaluationResult(EvaluationResultProtocol):
     primary_metric_value: float
     metrics: Mapping[str, Any]
     n_samples: int
-    artifacts: Mapping[str, Any] = None  # type: ignore[assignment]
+    artifacts: Mapping[str, Any] | None = None
+    
+    def __post_init__(self):
+        if self.artifacts is None:
+            object.__setattr__(self, 'artifacts', {})
 
 
 # =========================
@@ -314,6 +331,95 @@ class GetSetParamsMixin:
         for k, v in params.items():
             setattr(self, k, v)
         return self
+
+
+# =========================
+# Data splitting protocol
+# =========================
+
+@dataclass(frozen=True)
+class DataSplit:
+    """Container for a data split with metadata."""
+    name: str                                    # e.g., "train", "val", "test", "fold_1", "outer_train"
+    indices: NDArrayF                            # Row indices for this split
+    metadata: Mapping[str, Any] | None = None    # Optional metadata (date ranges, etc.)
+
+
+@runtime_checkable
+class DataSplitterProtocol(Protocol):
+    """
+    Protocol for data splitting strategies.
+    
+    Supports various splitting scenarios:
+    - Simple train/val/test
+    - K-fold cross-validation  
+    - Time series splits (expanding window, sliding window)
+    - Nested cross-validation
+    - Custom splits with arbitrary fold names
+    """
+    
+    def split_data(
+        self, 
+        data: Any,
+        target: Any | None = None,
+        groups: Any | None = None,
+        **kwargs: Any
+    ) -> list[DataSplit]:
+        """
+        Split data into multiple named splits.
+        
+        Args:
+            data: Input data (DataFrame, array, etc.)
+            target: Optional target variable for stratified splits
+            groups: Optional group labels for group-based splits
+            **kwargs: Additional splitter-specific parameters
+            
+        Returns:
+            List of DataSplit objects, each containing:
+            - name: Split identifier ("train", "val", "test", "fold_1", etc.)
+            - indices: Row indices for this split
+            - metadata: Optional split-specific information
+        """
+        ...
+    
+    @property
+    def split_names(self) -> list[str]:
+        """Return the expected split names this splitter produces."""
+        ...
+
+
+# =========================
+# Model factory protocol  
+# =========================
+
+@runtime_checkable
+class ModelFactoryProtocol(Protocol):
+    """Protocol for creating different model types with consistent interfaces."""
+    
+    def create_model(
+        self, 
+        model_type: str, 
+        **kwargs: Any
+    ) -> BaseEstimator:
+        """
+        Create a model of the specified type.
+        
+        Args:
+            model_type: Model identifier (e.g., "catboost", "linear", "historical")
+            **kwargs: Model-specific parameters
+            
+        Returns:
+            Fitted or unfitted BaseEstimator
+        """
+        ...
+    
+    def get_available_models(self) -> list[str]:
+        """Return list of available model types."""
+        ...
+    
+    def get_model_info(self, model_type: str) -> Mapping[str, Any]:
+        """Get metadata about a specific model type."""
+        ...
 
 
 # =========================
