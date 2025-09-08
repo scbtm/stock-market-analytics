@@ -6,10 +6,10 @@ This module provides calibrators and calibration functions for uncertainty quant
 
 from .calibrators import (
     QuantileIntervalCalibrator,
-    PipelineWithCalibrator,
+    CalibratedQuantileWrapper,
 )
 
 __all__ = [
     "QuantileIntervalCalibrator",
-    "PipelineWithCalibrator", 
+    "CalibratedQuantileWrapper",
 ]

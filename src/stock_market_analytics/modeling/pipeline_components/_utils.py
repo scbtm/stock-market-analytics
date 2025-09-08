@@ -14,6 +14,7 @@ from .protocols import (
     SupportsPredict,
     SupportsPredictProba, 
     SupportsPredictQuantiles,
+    PredictionExtractor,
     PointPreds,
     ProbPreds,
     QuantilePreds,

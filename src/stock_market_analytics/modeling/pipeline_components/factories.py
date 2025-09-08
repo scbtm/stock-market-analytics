@@ -22,7 +22,7 @@ from stock_market_analytics.modeling.pipeline_components.protocols import (
     TaskType,
 )
 from stock_market_analytics.modeling.pipeline_components.prediction.predictors import CatBoostMultiQuantileModel
-from stock_market_analytics.modeling.pipeline_components.baseline.naive_baselines import HistoricalQuantileBaseline
+from stock_market_analytics.modeling.pipeline_components.prediction.baseline_predictors import HistoricalQuantileBaseline
 from stock_market_analytics.modeling.pipeline_components.evaluation.evaluators import QuantileRegressionEvaluator
 from stock_market_analytics.modeling.pipeline_components.calibration.calibrators import QuantileIntervalCalibrator
 

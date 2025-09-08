@@ -53,15 +53,13 @@ from ._utils import (
 )
 
 # Concrete implementations  
-from .prediction import CatBoostMultiQuantileModel
-from .baseline import HistoricalQuantileBaseline
+from .prediction import CatBoostMultiQuantileModel, HistoricalQuantileBaseline
 from .evaluation import (
     QuantileRegressionEvaluator,
-    ModelEvaluator,
 )
 from .calibration import (
     QuantileIntervalCalibrator,
-    PipelineWithCalibrator,
+    CalibratedQuantileWrapper,
 )
 from .factories import (
     TimeSeriesDataSplitter,
@@ -101,12 +99,11 @@ __all__ = [
     "HistoricalQuantileBaseline",
     
     # Evaluators
-    "QuantileRegressionEvaluator", 
-    "ModelEvaluator",
+    "QuantileRegressionEvaluator",
     
     # Calibrators
     "QuantileIntervalCalibrator",
-    "PipelineWithCalibrator",
+    "CalibratedQuantileWrapper",
     
     # Factories and splitters
     "TimeSeriesDataSplitter",
