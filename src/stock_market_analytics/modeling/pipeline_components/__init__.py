@@ -1,123 +1,52 @@
 """
-Pipeline components for stock market analytics modeling.
+Simplified pipeline components for stock market analytics.
 
-This module provides protocol-compliant components for flexible ML experimentation:
-- Protocols for model interfaces and evaluation
-- Predictors with quantile regression capabilities
-- Evaluators for model performance assessment
-- Calibrators for uncertainty quantification
-- Data splitters and model factories for experimentation
+Focus on practical experimentation tools rather than over-abstracted protocols.
 """
 
-# Core protocols
+# Core simplified protocols
 from .protocols import (
-    # Capability protocols
-    SupportsPredict,
-    SupportsPredictProba,
-    SupportsPredictQuantiles,
-    SupportsPredictInterval,
-    
-    # Prediction bundles
-    PredictionBundle,
-    PointPreds,
-    ProbPreds,
-    QuantilePreds,
-    IntervalPreds,
-    
-    # Evaluation
-    EvaluationResult,
-    ModelEvaluatorProtocol,
-    
-    # Calibration
-    CalibratorProtocol,
-    
-    # Data and model management
-    DataSplitterProtocol,
-    DataSplit,
-    ModelFactoryProtocol,
-    TaskConfigProtocol,
-    
-    # Type guards
-    is_point,
-    is_proba,
-    is_quantiles,
-    is_interval,
+    QuantilePredictor,
+    Evaluator, 
+    DataSplitter,
+    NDArrayF,
 )
 
-# Utilities
+# Utilities  
 from .protocol_functions import (
-    PredictionExtractor,
-    extract_point,
-    extract_proba,
-    extract_quantiles,
+    validate_quantiles,
+    compute_quantile_loss,
 )
 
-# Concrete implementations  
-from .prediction import (
-    CatBoostMultiQuantileModel, 
-    HistoricalQuantileBaseline,
-    QuantileRegressionModelFactory,
-)
-from .evaluation import (
-    QuantileRegressionEvaluator,
-)
-from .calibration import (
-    QuantileIntervalCalibrator,
-    CalibratedQuantileWrapper,
-)
-from .data_management import (
-    TimeSeriesDataSplitter,
-)
-from .workflows import (
-    QuantileRegressionTaskConfig,
-    create_preprocessing_pipeline,
-    get_pipeline,
-)
+# Import existing implementations (these will need simplification too)
+try:
+    from .prediction import (
+        CatBoostMultiQuantileModel, 
+        HistoricalQuantileBaseline,
+    )
+except ImportError:
+    pass
+
+try:
+    from .evaluation import (
+        QuantileRegressionEvaluator,
+    )
+except ImportError:
+    pass
 
 __all__ = [
-    # Protocols
-    "SupportsPredict",
-    "SupportsPredictProba", 
-    "SupportsPredictQuantiles",
-    "SupportsPredictInterval",
-    "PredictionBundle",
-    "PointPreds",
-    "ProbPreds", 
-    "QuantilePreds",
-    "IntervalPreds",
-    "EvaluationResult",
-    "ModelEvaluatorProtocol",
-    "CalibratorProtocol",
-    "DataSplitterProtocol",
-    "DataSplit",
-    "ModelFactoryProtocol",
-    "TaskConfigProtocol",
-    "PredictionExtractor",
-    "extract_point",
-    "extract_proba",
-    "extract_quantiles",
-    "is_point",
-    "is_proba",
-    "is_quantiles",
-    "is_interval",
+    # Core protocols
+    "QuantilePredictor",
+    "Evaluator", 
+    "DataSplitter",
+    "NDArrayF",
     
-    # Predictors
+    # Utilities
+    "validate_quantiles",
+    "compute_quantile_loss",
+    
+    # Models (if available)
     "CatBoostMultiQuantileModel",
-    "HistoricalQuantileBaseline",
-    
-    # Evaluators
+    "HistoricalQuantileBaseline", 
     "QuantileRegressionEvaluator",
-    
-    # Calibrators
-    "QuantileIntervalCalibrator",
-    "CalibratedQuantileWrapper",
-    
-    # Data management
-    "TimeSeriesDataSplitter",
-    
-    # Workflows and factories  
-    "QuantileRegressionModelFactory",
-    "QuantileRegressionTaskConfig",
-    "create_preprocessing_pipeline",
-    "get_pipeline",
 ]

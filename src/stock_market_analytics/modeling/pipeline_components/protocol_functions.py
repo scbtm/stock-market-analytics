@@ -1,60 +1,22 @@
 """
-Cross-cutting utility functions for pipeline components.
+Simple utility functions for pipeline components.
 
-This module contains utility functions that are used across multiple domains
-(evaluation, calibration, prediction) and don't belong to any single component.
+Only the essentials - no over-abstracted extraction helpers.
 """
 
-from typing import Any, Sequence
 import numpy as np
 import numpy.typing as npt
-from sklearn.base import BaseEstimator
-
-from .protocols import (
-    SupportsPredict,
-    SupportsPredictProba, 
-    SupportsPredictQuantiles,
-    PredictionExtractor,
-    PointPreds,
-    ProbPreds,
-    QuantilePreds,
-)
 
 NDArrayF = npt.NDArray[np.float64]
 
+def validate_quantiles(quantiles: list[float]) -> None:
+    """Basic validation for quantile values."""
+    if not all(0 <= q <= 1 for q in quantiles):
+        raise ValueError("Quantiles must be between 0 and 1")
+    if quantiles != sorted(quantiles):
+        raise ValueError("Quantiles must be sorted")
 
-def _to_1d(a: NDArrayF) -> NDArrayF:
-    """Ravel to (n,), copying as float64."""
-    return np.asarray(a, dtype=float).reshape(-1)
-
-
-def extract_point(est: BaseEstimator, X: Any) -> PointPreds:
-    """Extract point predictions from an estimator."""
-    assert isinstance(est, SupportsPredict), (
-        "Estimator does not implement predict(X)."
-    )
-    y_hat = _to_1d(np.asarray(est.predict(X)))
-    return PointPreds(y_hat=y_hat)
-
-
-def extract_proba(est: BaseEstimator, X: Any, classes: Sequence[Any] | None = None) -> ProbPreds:
-    """Extract probability predictions from an estimator."""
-    assert isinstance(est, SupportsPredictProba), (
-        "Estimator does not implement predict_proba(X)."
-    )
-    P = np.asarray(est.predict_proba(X), dtype=float)
-    return ProbPreds(proba=P, classes_=tuple(classes) if classes else tuple(range(P.shape[1])))
-
-
-def extract_quantiles(
-    est: BaseEstimator,
-    X: Any,
-    quantiles: Sequence[float] | NDArrayF | None = None,
-) -> QuantilePreds:
-    """Extract quantile predictions from an estimator."""
-    assert isinstance(est, SupportsPredictQuantiles), (
-        "Estimator does not implement predict_quantiles(X, quantiles=None)."
-    )
-    q = np.asarray(est.predict_quantiles(X, quantiles=quantiles), dtype=float)
-    q_levels = tuple(quantiles) if quantiles is not None else tuple(range(q.shape[1]))
-    return QuantilePreds(q=q, quantiles=q_levels)
+def compute_quantile_loss(y_true: NDArrayF, y_pred: NDArrayF, quantile: float) -> float:
+    """Compute quantile loss for a single quantile."""
+    residual = y_true - y_pred
+    return np.mean(np.where(residual >= 0, quantile * residual, (quantile - 1) * residual))
