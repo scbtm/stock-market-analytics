@@ -13,10 +13,8 @@ from .protocols import (
 )
 
 # Utilities  
-from .protocol_functions import (
-    validate_quantiles,
-    compute_quantile_loss,
-)
+from .prediction.prediction_functions import validate_quantiles
+from .evaluation.evaluation_functions import compute_quantile_loss
 
 # Import existing implementations (these will need simplification too)
 try:

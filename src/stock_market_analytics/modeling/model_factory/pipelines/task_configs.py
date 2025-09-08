@@ -6,12 +6,12 @@ and factory methods for different modeling scenarios.
 """
 
 from stock_market_analytics.config import config
-from stock_market_analytics.modeling.pipeline_components.protocols import (
+from stock_market_analytics.modeling.model_factory.protocols import (
     TaskConfigProtocol,
     TaskType,
 )
-from stock_market_analytics.modeling.pipeline_components.evaluation.evaluators import QuantileRegressionEvaluator
-from stock_market_analytics.modeling.pipeline_components.calibration.calibrators import QuantileIntervalCalibrator
+from stock_market_analytics.modeling.model_factory.evaluation.evaluators import QuantileRegressionEvaluator
+from stock_market_analytics.modeling.model_factory.calibration.calibrators import QuantileIntervalCalibrator
 
 
 class QuantileRegressionTaskConfig(TaskConfigProtocol):

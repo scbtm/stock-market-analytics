@@ -11,7 +11,7 @@ import numpy.typing as npt
 import pandas as pd
 
 from stock_market_analytics.config import config
-from stock_market_analytics.modeling.pipeline_components.protocols import (
+from stock_market_analytics.modeling.model_factory.protocols import (
     DataSplitterProtocol,
     DataSplit,
 )

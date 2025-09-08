@@ -7,7 +7,7 @@ import numpy.typing as npt
 from sklearn.base import BaseEstimator, RegressorMixin
 from sklearn.utils.validation import check_array, check_X_y
 
-from stock_market_analytics.modeling.pipeline_components.protocols import SupportsPredictQuantiles
+from stock_market_analytics.modeling.model_factory.protocols import SupportsPredictQuantiles
 
 NDArrayF = npt.NDArray[np.float64]
 

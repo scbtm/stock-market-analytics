@@ -8,6 +8,15 @@ model performance, including pinball loss, coverage metrics, and calibration err
 from typing import Any
 
 import numpy as np
+import numpy.typing as npt
+
+NDArrayF = npt.NDArray[np.float64]
+
+
+def compute_quantile_loss(y_true: NDArrayF, y_pred: NDArrayF, quantile: float) -> float:
+    """Compute quantile loss for a single quantile."""
+    residual = y_true - y_pred
+    return np.mean(np.where(residual >= 0, quantile * residual, (quantile - 1) * residual))
 
 
 def _weighted_mean(x: np.ndarray, w: np.ndarray | None) -> float:

@@ -12,7 +12,7 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 
 from stock_market_analytics.config import config
-from stock_market_analytics.modeling.pipeline_components.prediction import (
+from stock_market_analytics.modeling.model_factory.prediction import (
     CatBoostMultiQuantileModel,
     HistoricalQuantileBaseline,
 )

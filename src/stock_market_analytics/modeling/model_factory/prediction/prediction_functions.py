@@ -11,6 +11,14 @@ from catboost import CatBoostRegressor, Pool
 from typing import Any
 
 
+def validate_quantiles(quantiles: list[float]) -> None:
+    """Basic validation for quantile values."""
+    if not all(0 <= q <= 1 for q in quantiles):
+        raise ValueError("Quantiles must be between 0 and 1")
+    if quantiles != sorted(quantiles):
+        raise ValueError("Quantiles must be sorted")
+
+
 def detect_categorical_features(X: Any) -> np.ndarray | None:
     """Detect categorical features from DataFrame."""
     if hasattr(X, "dtypes"):

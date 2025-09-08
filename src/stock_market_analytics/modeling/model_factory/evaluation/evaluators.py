@@ -8,7 +8,7 @@ from typing import Sequence
 import numpy as np
 import numpy.typing as npt
 from ..protocols import Evaluator
-from ..protocol_functions import compute_quantile_loss
+from .evaluation_functions import compute_quantile_loss
 
 NDArrayF = npt.NDArray[np.float64]
 
