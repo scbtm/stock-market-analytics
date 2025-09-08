@@ -12,10 +12,10 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 
 from stock_market_analytics.config import config
-from stock_market_analytics.modeling.pipeline_components.prediction.factories import QuantileRegressionModelFactory
-
-# Use the protocol-compliant model factory
-model_factory = QuantileRegressionModelFactory()
+from stock_market_analytics.modeling.pipeline_components.prediction import (
+    CatBoostMultiQuantileModel,
+    HistoricalQuantileBaseline,
+)
 
 
 def create_preprocessing_pipeline():
@@ -41,8 +41,23 @@ def get_pipeline(model_type: str = "catboost", **model_params) -> Pipeline:
     # Create preprocessing pipeline
     preprocessing = create_preprocessing_pipeline()
     
-    # Create model using factory (it handles all the logic)
-    model = model_factory.create_model(model_type, **model_params)
+    # Create model directly - no factory needed for 2 models
+    if model_type == "catboost":
+        # Merge default quantiles and config parameters
+        cb_params = config.modeling.cb_model_params.copy()
+        cb_params.update(model_params)
+        if "quantiles" not in cb_params:
+            cb_params["quantiles"] = config.modeling.quantiles
+        model = CatBoostMultiQuantileModel(**cb_params)
+    
+    elif model_type == "historical":
+        hist_params = model_params.copy()
+        if "quantiles" not in hist_params:
+            hist_params["quantiles"] = config.modeling.quantiles
+        model = HistoricalQuantileBaseline(**hist_params)
+    
+    else:
+        raise ValueError(f"Unknown model_type: {model_type}. Available: ['catboost', 'historical']")
     
     # Create complete pipeline
     return Pipeline([
