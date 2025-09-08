@@ -25,7 +25,7 @@ from stock_market_analytics.modeling.pipeline_components.protocols import (
     GetSetParamsMixin,
     is_quantiles,
 )
-from stock_market_analytics.modeling.pipeline_components._utils import (
+from stock_market_analytics.modeling.pipeline_components.protocol_functions import (
     extract_quantiles,
 )
 

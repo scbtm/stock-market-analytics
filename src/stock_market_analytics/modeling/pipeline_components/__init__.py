@@ -45,7 +45,7 @@ from .protocols import (
 )
 
 # Utilities
-from ._utils import (
+from .protocol_functions import (
     PredictionExtractor,
     extract_point,
     extract_proba,
