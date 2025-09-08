@@ -12,7 +12,7 @@ from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import StandardScaler
 
 from stock_market_analytics.config import config
-from .factories import QuantileRegressionModelFactory
+from stock_market_analytics.modeling.pipeline_components.factories import QuantileRegressionModelFactory
 
 # Use the protocol-compliant model factory
 model_factory = QuantileRegressionModelFactory()

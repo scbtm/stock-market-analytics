@@ -9,10 +9,10 @@ from typing import Any
 import pandas as pd
 
 from stock_market_analytics.config import config
-from stock_market_analytics.modeling.pipeline_components.calibrators import (
+from stock_market_analytics.modeling.pipeline_components.calibration.calibrators import (
     PipelineWithCalibrator,
 )
-from stock_market_analytics.modeling.pipeline_components.evaluators import (
+from stock_market_analytics.modeling.pipeline_components.evaluation.evaluators import (
     ModelEvaluator,
 )
 from stock_market_analytics.modeling.pipeline_components.pipeline_factory import (

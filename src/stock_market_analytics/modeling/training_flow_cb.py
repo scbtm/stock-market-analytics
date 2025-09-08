@@ -5,7 +5,7 @@ from metaflow import FlowSpec, step
 
 import wandb
 from stock_market_analytics.modeling import modeling_steps
-from stock_market_analytics.modeling.pipeline_components.evaluators import (
+from stock_market_analytics.modeling.pipeline_components.evaluation.evaluators import (
     EvaluationReport,
 )
 from wandb.integration.metaflow import wandb_log

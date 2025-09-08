@@ -11,7 +11,7 @@ from catboost import CatBoostRegressor, Pool
 from sklearn.base import BaseEstimator, RegressorMixin
 from sklearn.utils.validation import check_array, check_X_y
 
-from .protocols import SupportsPredictQuantiles
+from stock_market_analytics.modeling.pipeline_components.protocols import SupportsPredictQuantiles
 
 NDArrayF = npt.NDArray[np.float64]
 

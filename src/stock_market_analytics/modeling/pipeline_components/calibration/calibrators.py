@@ -12,19 +12,21 @@ import numpy.typing as npt
 from sklearn.base import BaseEstimator
 
 from stock_market_analytics.config import config
-from stock_market_analytics.modeling.pipeline_components.functions import (
+from stock_market_analytics.modeling.pipeline_components.calibration.calibration_functions import (
     apply_conformal,
     conformal_adjustment,
 )
-from .protocols import (
+from stock_market_analytics.modeling.pipeline_components.protocols import (
     CalibratorProtocol,
     CalibrationKind,
     TaskType,
     PredKind,
     PredictionExtractor,
-    extract_quantiles,
     GetSetParamsMixin,
     is_quantiles,
+)
+from stock_market_analytics.modeling.pipeline_components._utils import (
+    extract_quantiles,
 )
 
 NDArrayF = npt.NDArray[np.float64]

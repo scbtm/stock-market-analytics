@@ -37,12 +37,6 @@ from .protocols import (
     ModelFactoryProtocol,
     TaskConfigProtocol,
     
-    # Utilities
-    PredictionExtractor,
-    extract_point,
-    extract_proba,
-    extract_quantiles,
-    
     # Type guards
     is_point,
     is_proba,
@@ -50,16 +44,24 @@ from .protocols import (
     is_interval,
 )
 
-# Concrete implementations
-from .predictors import CatBoostMultiQuantileModel
-from .naive_baselines import HistoricalQuantileBaseline
-from .evaluators import (
-    QuantileRegressionEvaluator,
-    EvaluationReport,
+# Utilities
+from ._utils import (
+    PredictionExtractor,
+    extract_point,
+    extract_proba,
+    extract_quantiles,
 )
-from .calibrators import (
+
+# Concrete implementations  
+from .prediction import CatBoostMultiQuantileModel
+from .baseline import HistoricalQuantileBaseline
+from .evaluation import (
+    QuantileRegressionEvaluator,
+    ModelEvaluator,
+)
+from .calibration import (
     QuantileIntervalCalibrator,
-    CalibratedQuantileWrapper,
+    PipelineWithCalibrator,
 )
 from .factories import (
     TimeSeriesDataSplitter,
@@ -100,11 +102,11 @@ __all__ = [
     
     # Evaluators
     "QuantileRegressionEvaluator", 
-    "EvaluationReport",
+    "ModelEvaluator",
     
     # Calibrators
     "QuantileIntervalCalibrator",
-    "CalibratedQuantileWrapper",
+    "PipelineWithCalibrator",
     
     # Factories and splitters
     "TimeSeriesDataSplitter",

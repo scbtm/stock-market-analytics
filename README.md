@@ -464,6 +464,89 @@ Evaluation Metrics: {
 - **W&B**: Experiment tracking and visualization
 - **Metaflow**: Pipeline orchestration and versioning
 
+#### Domain-Driven Pipeline Components Architecture
+
+**Location**: `src/stock_market_analytics/modeling/pipeline_components/`
+
+The modeling module implements a **domain-driven architecture** where ML components are organized by their business domain rather than technical function. This design promotes clean separation of concerns, maintainable code, and true component interchangeability.
+
+##### Architecture Philosophy
+
+**Domain Ownership**: Each ML "actor" (predictor, evaluator, calibrator) owns its complete domain including both the main classes and their helper functions. This prevents the common anti-pattern of mixing unrelated utilities in shared files.
+
+**Protocol-Driven Design**: All components implement well-defined protocols, enabling true interchangeability and easy experimentation without sacrificing type safety or production readiness.
+
+**Import Clarity**: Absolute import paths immediately reveal which domain a function belongs to, making the codebase self-documenting and easier to navigate.
+
+##### Domain Structure
+
+```
+pipeline_components/
+├── protocols.py                    # Pure protocol definitions only
+├── _utils.py                      # Minimal cross-cutting utilities
+├── evaluation/                    # 📊 Evaluation Domain  
+│   ├── evaluators.py             #   → Evaluator classes
+│   └── evaluation_functions.py   #   → Metrics, coverage, pinball loss
+├── calibration/                   # 🎯 Calibration Domain
+│   ├── calibrators.py            #   → Calibrator classes  
+│   └── calibration_functions.py  #   → Conformal prediction algorithms
+├── prediction/                    # 🤖 Prediction Domain
+│   ├── predictors.py             #   → Model classes (CatBoost, etc.)
+│   └── prediction_functions.py   #   → Model-specific utilities
+├── baseline/                      # 📈 Baseline Domain
+│   ├── naive_baselines.py        #   → Simple baseline predictors
+│   └── __init__.py
+├── factories.py                   # 🏭 Cross-domain component creation
+└── pipeline_factory.py           # ⚙️ Pipeline assembly
+```
+
+##### Domain Boundaries
+
+**🔍 Evaluation Domain** (`evaluation/`):
+- **Responsibility**: Assessing model performance with proper metrics
+- **Components**: Multi-quantile evaluators, coverage analysis, calibration error measurement
+- **Helper Functions**: `eval_multiquantile()`, `pinball_loss()`, `coverage()`, `mean_width()`
+- **Import Example**: `from stock_market_analytics.modeling.pipeline_components.evaluation.evaluation_functions import coverage`
+
+**🎯 Calibration Domain** (`calibration/`):
+- **Responsibility**: Uncertainty quantification and statistical coverage guarantees  
+- **Components**: Conformal prediction calibrators, uncertainty wrappers
+- **Helper Functions**: `conformal_adjustment()`, `apply_conformal()`
+- **Import Example**: `from stock_market_analytics.modeling.pipeline_components.calibration.calibration_functions import conformal_adjustment`
+
+**🤖 Prediction Domain** (`prediction/`):
+- **Responsibility**: Making predictions with various model types
+- **Components**: CatBoost multi-quantile models, other ML predictors
+- **Helper Functions**: `predict_quantiles()`, model-specific utilities
+- **Import Example**: `from stock_market_analytics.modeling.pipeline_components.prediction.prediction_functions import predict_quantiles`
+
+**📈 Baseline Domain** (`baseline/`):
+- **Responsibility**: Simple baseline models for comparison
+- **Components**: Historical quantile baselines, naive predictors
+- **Import Example**: `from stock_market_analytics.modeling.pipeline_components.baseline import HistoricalQuantileBaseline`
+
+##### Architecture Benefits
+
+**🔄 Domain Ownership**: Each domain manages its own complexity without leaking into others. Adding evaluation metrics doesn't affect calibration code.
+
+**📖 Self-Documenting**: Import paths immediately reveal business context:
+```python
+# Crystal clear which domain each function comes from
+from ...evaluation.evaluation_functions import pinball_loss
+from ...calibration.calibration_functions import conformal_adjustment  
+from ...prediction.prediction_functions import predict_quantiles
+```
+
+**⚡ Independent Evolution**: Domains can grow and change independently. New evaluation metrics, calibration methods, or prediction models can be added without cross-domain contamination.
+
+**🧪 Easy Experimentation**: Protocol-driven design enables swapping components (different evaluators, calibrators, predictors) without code changes in the orchestration layer.
+
+**🏗️ Production Ready**: Clean separation eliminates architectural debt that commonly accumulates in ML projects. Each domain has clear boundaries and responsibilities.
+
+**🎛️ Interchangeable Components**: True plug-and-play architecture where evaluators work with any predictor, calibrators work with any base model, etc.
+
+This domain-driven approach transforms the modeling module from a collection of utility functions into a coherent system of interacting business domains, making it both more maintainable and more powerful for ML experimentation.
+
 
 ## CI/CD Pipeline
 

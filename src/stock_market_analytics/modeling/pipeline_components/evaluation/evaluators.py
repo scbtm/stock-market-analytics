@@ -11,12 +11,12 @@ import numpy as np
 import numpy.typing as npt
 
 from stock_market_analytics.config import config
-from stock_market_analytics.modeling.pipeline_components.functions import (
+from stock_market_analytics.modeling.pipeline_components.evaluation.evaluation_functions import (
     coverage,
     eval_multiquantile,
     mean_width,
 )
-from .protocols import (
+from stock_market_analytics.modeling.pipeline_components.protocols import (
     EvaluationResult,
     ModelEvaluatorProtocol,
     PredictionBundle,

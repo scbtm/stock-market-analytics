@@ -265,35 +265,6 @@ class TaskConfigProtocol(Protocol):
 PredictionExtractor = Callable[[BaseEstimator, Any], PredictionBundle]
 
 
-def extract_point(est: BaseEstimator, X: Any) -> PointPreds:
-    assert isinstance(est, SupportsPredict), (
-        "Estimator does not implement predict(X)."
-    )
-    y_hat = _to_1d(np.asarray(est.predict(X)))
-    return PointPreds(y_hat=y_hat)
-
-
-def extract_proba(est: BaseEstimator, X: Any, classes: Sequence[Any] | None = None) -> ProbPreds:
-    assert isinstance(est, SupportsPredictProba), (
-        "Estimator does not implement predict_proba(X)."
-    )
-    P = np.asarray(est.predict_proba(X), dtype=float)
-    return ProbPreds(proba=P, classes_=tuple(classes) if classes else tuple(range(P.shape[1])))
-
-
-def extract_quantiles(
-    est: BaseEstimator,
-    X: Any,
-    quantiles: Sequence[float] | NDArrayF | None = None,
-) -> QuantilePreds:
-    assert isinstance(est, SupportsPredictQuantiles), (
-        "Estimator does not implement predict_quantiles(X, quantiles=None)."
-    )
-    q = np.asarray(est.predict_quantiles(X, quantiles=quantiles), dtype=float)
-    q_levels = tuple(quantiles) if quantiles is not None else tuple(range(q.shape[1]))
-    return QuantilePreds(q=q, quantiles=q_levels)
-
-
 # =========================
 # Optional (lightweight) interval surface
 # =========================
@@ -426,9 +397,6 @@ class ModelFactoryProtocol(Protocol):
 # Utilities
 # =========================
 
-def _to_1d(a: NDArrayF) -> NDArrayF:
-    """Ravel to (n,), copying as float64."""
-    return np.asarray(a, dtype=float).reshape(-1)
 
 def ensure_monotone_quantiles(q: NDArrayF, axis: int = 1) -> bool:
     """Quick monotonicity check for quantiles along axis (no penalization logic here)."""

@@ -14,17 +14,17 @@ import pandas as pd
 from sklearn.base import BaseEstimator
 
 from stock_market_analytics.config import config
-from .protocols import (
+from stock_market_analytics.modeling.pipeline_components.protocols import (
     DataSplitterProtocol,
     DataSplit,
     ModelFactoryProtocol,
     TaskConfigProtocol,
     TaskType,
 )
-from .predictors import CatBoostMultiQuantileModel
-from .naive_baselines import HistoricalQuantileBaseline
-from .evaluators import QuantileRegressionEvaluator
-from .calibrators import QuantileIntervalCalibrator
+from stock_market_analytics.modeling.pipeline_components.prediction.predictors import CatBoostMultiQuantileModel
+from stock_market_analytics.modeling.pipeline_components.baseline.naive_baselines import HistoricalQuantileBaseline
+from stock_market_analytics.modeling.pipeline_components.evaluation.evaluators import QuantileRegressionEvaluator
+from stock_market_analytics.modeling.pipeline_components.calibration.calibrators import QuantileIntervalCalibrator
 
 NDArrayF = npt.NDArray[np.float64]
 
