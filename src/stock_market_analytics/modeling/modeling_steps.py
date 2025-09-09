@@ -16,26 +16,26 @@ import numpy as np
 import polars as pl
 from sklearn.pipeline import Pipeline
 
-from ..config import config
-from .model_factory.estimation.estimators import (
+from stock_market_analytics.config import config
+from stock_market_analytics.modeling.model_factory.estimation.estimators import (
     CatBoostQuantileRegressor,
     BaselineEstimator,
 )
-from .model_factory.evaluation.evaluators import (
+from stock_market_analytics.modeling.model_factory.evaluation.evaluators import (
     QuantileRegressionEvaluator,
     FinancialRegressionEvaluator,
     BacktestEvaluator,
 )
-from .model_factory.data_management.splitters import (
+from stock_market_analytics.modeling.model_factory.data_management.splitters import (
     TimeSeriesSplitter,
     WalkForwardSplitter,
 )
-from .model_factory.data_management.postprocessors import (
+from stock_market_analytics.modeling.model_factory.data_management.postprocessors import (
     ReturnConstraintProcessor,
     QuantileConsistencyProcessor,
     CompositePredictionProcessor,
 )
-from .model_factory.calibration.calibrators import (
+from stock_market_analytics.modeling.model_factory.calibration.calibrators import (
     QuantileConformalCalibrator,
 )
 

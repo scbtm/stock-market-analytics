@@ -8,8 +8,8 @@ and provide standardized metrics for different modeling tasks.
 import numpy as np
 from typing import Dict, List
 
-from ..protocols import ModelEvaluator, QuantileEvaluator
-from .evaluation_functions import (
+from stock_market_analytics.modeling.model_factory.protocols import ModelEvaluator, QuantileEvaluator
+from stock_market_analytics.modeling.model_factory.evaluation.evaluation_functions import (
     mean_absolute_error,
     mean_squared_error,
     root_mean_squared_error,

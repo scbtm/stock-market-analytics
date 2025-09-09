@@ -11,7 +11,7 @@ import numpy as np
 import polars as pl
 from sklearn.model_selection import train_test_split
 
-from ..protocols import DataSplitter
+from stock_market_analytics.modeling.model_factory.protocols import DataSplitter
 
 
 class TimeSeriesSplitter:

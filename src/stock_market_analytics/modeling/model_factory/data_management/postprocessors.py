@@ -10,7 +10,7 @@ from typing import Any
 import numpy as np
 from sklearn.base import BaseEstimator, TransformerMixin
 
-from ..protocols import PostProcessor
+from stock_market_analytics.modeling.model_factory.protocols import PostProcessor
 
 
 class ReturnConstraintProcessor(BaseEstimator, TransformerMixin):

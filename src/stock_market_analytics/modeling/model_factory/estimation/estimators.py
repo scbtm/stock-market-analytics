@@ -12,8 +12,8 @@ import numpy as np
 import polars as pl
 from sklearn.base import BaseEstimator, RegressorMixin, ClassifierMixin
 
-from ..protocols import SklearnCompatibleEstimator, QuantileEstimator
-from .estimation_functions import (
+from stock_market_analytics.modeling.model_factory.protocols import SklearnCompatibleEstimator, QuantileEstimator
+from stock_market_analytics.modeling.model_factory.estimation.estimation_functions import (
     create_catboost_pool,
     prepare_features_for_sklearn,
     feature_importance_to_dict,

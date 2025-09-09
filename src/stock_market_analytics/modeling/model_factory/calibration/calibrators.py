@@ -11,8 +11,8 @@ import numpy as np
 import polars as pl
 from sklearn.base import BaseEstimator, TransformerMixin
 
-from ..protocols import QuantileCalibrator, ProbabilityCalibrator
-from .calibration_functions import (
+from stock_market_analytics.modeling.model_factory.protocols import QuantileCalibrator, ProbabilityCalibrator
+from stock_market_analytics.modeling.model_factory.calibration.calibration_functions import (
     conformity_scores,
     quantile_conformal_bounds,
     normalized_conformity_scores,
