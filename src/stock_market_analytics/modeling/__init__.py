@@ -26,7 +26,7 @@ from .model_factory.evaluation.evaluators import (
 )
 
 # Export splitters from model_factory
-from .model_factory.data_management.splitters import (
+from .model_factory.data_management.preprocessors import (
     TimeSeriesSplitter,
     WalkForwardSplitter,
     StratifiedTimeSeriesSplitter,

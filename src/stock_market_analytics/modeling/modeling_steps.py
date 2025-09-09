@@ -26,7 +26,7 @@ from stock_market_analytics.modeling.model_factory.evaluation.evaluators import 
     FinancialRegressionEvaluator,
     BacktestEvaluator,
 )
-from stock_market_analytics.modeling.model_factory.data_management.splitters import (
+from stock_market_analytics.modeling.model_factory.data_management.preprocessors import (
     TimeSeriesSplitter,
     WalkForwardSplitter,
 )

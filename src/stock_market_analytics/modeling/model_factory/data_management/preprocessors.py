@@ -110,7 +110,7 @@ class PanelHorizonSplitter:
         self,
         df: pd.DataFrame,
         *,
-        fractions: tuple[float, float, float, float] = (0.64, 0.16, 0.10, 0.10),
+        fractions: tuple[float, float, float, float] = (0.7, 0.10, 0.10, 0.10),
         cut_dates: Optional[tuple[pd.Timestamp, pd.Timestamp, pd.Timestamp]] = None,
         return_frames: bool = False,
     ) -> Mapping[str, pd.DataFrame] | Mapping[str, np.ndarray]:
