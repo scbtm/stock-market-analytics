@@ -5,215 +5,117 @@ This module provides mathematical functions and utilities needed to perform
 various calibration tasks on model predictions.
 """
 
+from __future__ import annotations
 import numpy as np
-from typing import Tuple
+from typing import Iterable, Tuple
 
+# ---------- Validation ----------
 
-def pinball_loss(y_true: np.ndarray, y_pred: np.ndarray, quantile: float) -> float:
-    """
-    Calculate the pinball loss for quantile predictions.
-    
-    Args:
-        y_true: True target values
-        y_pred: Predicted quantile values
-        quantile: The quantile level (e.g., 0.1 for 10th percentile)
-        
-    Returns:
-        Mean pinball loss
-    """
-    errors = y_true - y_pred
-    loss = np.where(errors >= 0, quantile * errors, (quantile - 1) * errors)
-    return np.mean(loss)
+def check_alpha(alpha: float) -> None:
+    if not (0.0 < alpha < 1.0):
+        raise ValueError("alpha must be in (0, 1).")
 
+def ensure_1d(a: np.ndarray) -> np.ndarray:
+    a = np.asarray(a)
+    if a.ndim != 1:
+        a = a.reshape(-1)
+    return a
 
-def coverage_score(y_true: np.ndarray, y_lower: np.ndarray, y_upper: np.ndarray) -> float:
-    """
-    Calculate empirical coverage for prediction intervals.
-    
-    Args:
-        y_true: True target values
-        y_lower: Lower bounds of prediction intervals
-        y_upper: Upper bounds of prediction intervals
-        
-    Returns:
-        Empirical coverage rate (proportion of observations within intervals)
-    """
-    coverage = np.mean((y_true >= y_lower) & (y_true <= y_upper))
-    return float(coverage)
+def check_same_length(*arrays: Iterable[np.ndarray]) -> None:
+    lengths = [len(ensure_1d(a)) for a in arrays]
+    if len(set(lengths)) != 1:
+        raise ValueError(f"All arrays must have the same length, got lengths={lengths}.")
 
+def ensure_sorted_unique_quantiles(q: Iterable[float]) -> np.ndarray:
+    q = np.asarray(q, dtype=float).reshape(-1)
+    if np.any((q < 0) | (q > 1)):
+        raise ValueError("Quantiles must be within [0, 1].")
+    uq = np.unique(q)
+    if uq.size != q.size:
+        raise ValueError("Quantiles must be strictly unique.")
+    return np.sort(q)
 
-def interval_width(y_lower: np.ndarray, y_upper: np.ndarray) -> np.ndarray:
-    """
-    Calculate prediction interval widths.
-    
-    Args:
-        y_lower: Lower bounds of prediction intervals
-        y_upper: Upper bounds of prediction intervals
-        
-    Returns:
-        Array of interval widths
-    """
-    return y_upper - y_lower
+# ---------- Core math ----------
 
+def finite_sample_quantile(scores: np.ndarray, level: float) -> float:
+    """
+    Conservative empirical quantile: the k-th order statistic with
+    k = ceil((n+1)*level). This matches split conformal's finite-sample guarantee.
+    """
+    scores = ensure_1d(np.asarray(scores, dtype=float))
+    if scores.size == 0:
+        raise ValueError("Cannot take quantile of empty scores.")
+    if not (0.0 <= level <= 1.0):
+        raise ValueError("level must be in [0, 1].")
+    n = scores.size
+    k = int(np.ceil((n + 1) * level))
+    k = min(max(k, 1), n)  # clamp to [1, n]
+    # kth order statistic (1-indexed) is element at index k-1 after partition
+    return float(np.partition(scores, k - 1)[k - 1])
 
-def mean_interval_width(y_lower: np.ndarray, y_upper: np.ndarray) -> float:
-    """
-    Calculate mean prediction interval width.
-    
-    Args:
-        y_lower: Lower bounds of prediction intervals
-        y_upper: Upper bounds of prediction intervals
-        
-    Returns:
-        Mean interval width
-    """
-    return float(np.mean(interval_width(y_lower, y_upper)))
+# ---------- Conformity scores ----------
 
-
-def conformity_scores(y_true: np.ndarray, y_pred: np.ndarray) -> np.ndarray:
-    """
-    Calculate conformity scores for conformal prediction.
-    
-    Args:
-        y_true: True target values
-        y_pred: Point predictions
-        
-    Returns:
-        Array of conformity scores (absolute residuals)
-    """
+def conformity_abs_residuals(y_true: np.ndarray, y_pred: np.ndarray) -> np.ndarray:
+    y_true = ensure_1d(y_true)
+    y_pred = ensure_1d(y_pred)
+    check_same_length(y_true, y_pred)
     return np.abs(y_true - y_pred)
 
-
-def quantile_conformal_bounds(
-    conformity_scores: np.ndarray, 
-    alpha: float, 
-    y_pred: np.ndarray
-) -> Tuple[np.ndarray, np.ndarray]:
-    """
-    Calculate conformal prediction bounds using quantile method.
-    
-    Args:
-        conformity_scores: Array of conformity scores from calibration set
-        alpha: Miscoverage level (e.g., 0.1 for 90% coverage)
-        y_pred: Point predictions for test set
-        
-    Returns:
-        Tuple of (lower_bounds, upper_bounds)
-    """
-    n = len(conformity_scores)
-    quantile_level = np.ceil((n + 1) * (1 - alpha)) / n
-    quantile_value = np.quantile(conformity_scores, quantile_level)
-    
-    lower_bounds = y_pred - quantile_value
-    upper_bounds = y_pred + quantile_value
-    
-    return lower_bounds, upper_bounds
-
-
-def normalized_conformity_scores(
-    y_true: np.ndarray, 
-    y_pred: np.ndarray, 
-    y_std: np.ndarray
+def conformity_normalized_abs(
+    y_true: np.ndarray, y_pred: np.ndarray, y_std: np.ndarray, eps: float = 1e-8
 ) -> np.ndarray:
-    """
-    Calculate normalized conformity scores for conformal prediction.
-    
-    Args:
-        y_true: True target values
-        y_pred: Point predictions
-        y_std: Predicted standard deviations or uncertainty estimates
-        
-    Returns:
-        Array of normalized conformity scores
-    """
-    return np.abs(y_true - y_pred) / np.maximum(y_std, 1e-8)  # Avoid division by zero
+    y_true = ensure_1d(y_true)
+    y_pred = ensure_1d(y_pred)
+    y_std  = ensure_1d(y_std)
+    check_same_length(y_true, y_pred, y_std)
+    denom = np.maximum(y_std, eps)
+    return np.abs(y_true - y_pred) / denom
 
+def cqr_interval_scores(y_true: np.ndarray, y_lo: np.ndarray, y_hi: np.ndarray) -> np.ndarray:
+    """Romano et al. (2019): max( y_lo - y, y - y_hi ); nonnegative by def."""
+    y_true = ensure_1d(y_true); y_lo = ensure_1d(y_lo); y_hi = ensure_1d(y_hi)
+    check_same_length(y_true, y_lo, y_hi)
+    if np.any(y_lo > y_hi):
+        raise ValueError("Found y_lo > y_hi in CQR scores.")
+    return np.maximum(y_lo - y_true, y_true - y_hi)
 
-def conditional_coverage_by_group(
-    y_true: np.ndarray, 
-    y_lower: np.ndarray, 
-    y_upper: np.ndarray, 
-    groups: np.ndarray
-) -> dict[str, float]:
-    """
-    Calculate conditional coverage for different groups.
-    
-    Args:
-        y_true: True target values
-        y_lower: Lower bounds of prediction intervals
-        y_upper: Upper bounds of prediction intervals
-        groups: Group identifiers for each sample
-        
-    Returns:
-        Dictionary mapping group labels to coverage rates
-    """
-    coverage_by_group = {}
-    unique_groups = np.unique(groups)
-    
-    for group in unique_groups:
-        mask = groups == group
-        if np.sum(mask) > 0:
-            group_coverage = coverage_score(
-                y_true[mask], y_lower[mask], y_upper[mask]
-            )
-            coverage_by_group[str(group)] = group_coverage
-    
-    return coverage_by_group
+# ---------- Intervals ----------
 
+def symmetric_interval_from_radius(y_hat: np.ndarray, radius: float | np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
+    y_hat = ensure_1d(y_hat)
+    r = np.asarray(radius, dtype=float)
+    if r.ndim == 0:
+        r = np.full_like(y_hat, float(r))
+    check_same_length(y_hat, r)
+    return y_hat - r, y_hat + r
 
-def adaptive_conformal_threshold(
-    residuals: np.ndarray, 
-    alpha: float, 
-    gamma: float = 0.005
-) -> float:
-    """
-    Calculate adaptive threshold for online conformal prediction.
-    
-    Args:
-        residuals: Historical conformity scores
-        alpha: Target miscoverage level
-        gamma: Learning rate for adaptation
-        
-    Returns:
-        Adaptive threshold value
-    """
-    n = len(residuals)
-    if n == 0:
-        return 0.0
-    
-    # Adaptive threshold based on recent performance
-    recent_weight = min(1.0, gamma * n)
-    base_quantile = np.quantile(residuals, 1 - alpha)
-    
-    # Adjust based on recent miscoverage
-    recent_residuals = residuals[-max(1, int(0.1 * n)):]
-    recent_quantile = np.quantile(recent_residuals, 1 - alpha)
-    
-    threshold = (1 - recent_weight) * base_quantile + recent_weight * recent_quantile
-    return float(threshold)
+# ---------- Quantile calibration (per τ) ----------
 
+def residuals_for_quantile(y_true: np.ndarray, y_pred_tau: np.ndarray) -> np.ndarray:
+    """Residuals for τ-quantile: r_i^τ = y_i - ŷ_τ(x_i)."""
+    y_true = ensure_1d(y_true); y_pred_tau = ensure_1d(y_pred_tau)
+    check_same_length(y_true, y_pred_tau)
+    return y_true - y_pred_tau
 
-def isotonic_regression_calibration(
-    y_scores: np.ndarray, 
-    y_true: np.ndarray
-) -> Tuple[np.ndarray, np.ndarray]:
+def residual_shift_for_tau(residuals_tau: np.ndarray, tau: float) -> float:
     """
-    Perform isotonic regression for probability calibration.
-    
-    Args:
-        y_scores: Uncalibrated prediction scores
-        y_true: True binary labels
-        
-    Returns:
-        Tuple of (sorted_scores, calibrated_probabilities)
+    Conservative shift ŝ_τ = empirical quantile of residuals at level τ
+    using finite-sample 'higher' quantile. Calibrated quantile = ŷ_τ + ŝ_τ.
     """
-    from sklearn.isotonic import IsotonicRegression
-    
-    iso_reg = IsotonicRegression(out_of_bounds='clip')
-    sorted_indices = np.argsort(y_scores)
-    sorted_scores = y_scores[sorted_indices]
-    sorted_labels = y_true[sorted_indices]
-    
-    calibrated_probs = iso_reg.fit_transform(sorted_scores, sorted_labels)
-    
-    return sorted_scores, calibrated_probs
+    return finite_sample_quantile(residuals_tau, tau)
+
+def apply_quantile_shifts(y_pred_quantiles: np.ndarray, shifts: np.ndarray) -> np.ndarray:
+    y_pred_quantiles = np.asarray(y_pred_quantiles, dtype=float)
+    shifts = ensure_1d(shifts)
+    if y_pred_quantiles.ndim != 2:
+        raise ValueError("y_pred_quantiles must have shape (n_samples, n_quantiles).")
+    if y_pred_quantiles.shape[1] != shifts.size:
+        raise ValueError("shifts length must equal n_quantiles.")
+    return y_pred_quantiles + shifts[None, :]
+
+def enforce_monotone_across_quantiles(yq: np.ndarray) -> np.ndarray:
+    """Make each row nondecreasing along τ via cumulative max (post-hoc repair)."""
+    yq = np.asarray(yq, dtype=float)
+    if yq.ndim != 2:
+        raise ValueError("yq must be 2D.")
+    return np.maximum.accumulate(yq, axis=1)
