@@ -13,16 +13,14 @@ from stock_market_analytics.modeling.model_factory.data_management.splitting_fun
     _apply_segment_masks,
     _xy,
 )
-# =========================
-# Purged, Embargoed time CV
-# =========================
+
 class PurgedTimeSeriesSplit:
     """
-    Purged & embargoed time-series CV for panel data with fixed forecast horizon (in calendar days).
-    Test folds are contiguous in time (by date). Training folds exclude any sample whose
-    label window [t, t+horizon) overlaps the test union, then an additional symmetric embargo.
+    Purged & embargoed time-series CV for panel data with fixed forecast horizon.
+    Past-only by default: training samples must lie strictly BEFORE the test window
+    (with an embargo buffer and no label-window overlap).
 
-    Compatible with sklearn API: split(X, y=None, groups=None), but X must carry a date Series.
+    train_side: 'past' (default) or 'past_and_future' (old behavior).
     """
 
     def __init__(
@@ -31,17 +29,22 @@ class PurgedTimeSeriesSplit:
         date: Optional[pd.Series] = None,
         horizon_days: int = 5,
         embargo_days: Optional[int] = None,
-        test_span_days: Optional[int] = None,   # if None, splits the unique date grid into n_splits
+        test_span_days: Optional[int] = None,
+        min_train_fraction: float = 0.05,      # optional safety
     ):
         if n_splits < 2:
             raise ValueError("n_splits must be >= 2.")
+
         self.n_splits = n_splits
         self.h = int(horizon_days)
         self.embargo = int(embargo_days if embargo_days is not None else self.h)
         self.test_span_days = test_span_days
+        self.min_train_fraction = float(min_train_fraction)
         self._date = _as_dt(date) if date is not None else None
 
-    def split(self, X: pd.DataFrame, y: Optional[pd.Series] = None, groups: Optional[pd.Series] = None) -> Iterator[tuple[np.ndarray, np.ndarray]]:
+    def split(
+        self, X: pd.DataFrame, y: Optional[pd.Series] = None, groups: Optional[pd.Series] = None
+    ) -> Iterator[tuple[np.ndarray, np.ndarray]]:
         if self._date is None:
             if "date" not in X.columns:
                 raise ValueError("X must contain a 'date' column when 'date' not provided at init.")
@@ -49,16 +52,12 @@ class PurgedTimeSeriesSplit:
         else:
             d = _as_dt(self._date)
 
-        # Unique date grid and fold allocations
         u = _unique_sorted_dates(d)
         if self.test_span_days is None:
-            # Split date grid into n_splits contiguous blocks
             idx = np.linspace(0, len(u), self.n_splits + 1, dtype=int)
             test_windows = [(u[idx[i]], u[idx[i+1]-1]) for i in range(self.n_splits)]
         else:
-            # rolling fixed-span windows
             span = pd.Timedelta(days=int(self.test_span_days))
-            # choose evenly spaced starting anchors
             anchors = np.linspace(0, len(u) - 1, self.n_splits, dtype=int)
             test_windows = []
             for a in anchors:
@@ -66,28 +65,119 @@ class PurgedTimeSeriesSplit:
                 end = min(u[-1], start + span)
                 test_windows.append((start, end))
 
-        # Precompute arrays
-        # n = len(d)
         dates: np.ndarray = np.asanyarray(d.values)
-        horizon: np.ndarray = np.array([np.datetime64(pd.Timestamp(t) + pd.Timedelta(days=self.h)) for t in d])
+        n = len(d)
+        end_i = np.array([np.datetime64(pd.Timestamp(t) + pd.Timedelta(days=self.h)) for t in d])
 
         for (t_start, t_end) in test_windows:
-            # Test membership: t in [t_start, t_end]
+            # test_mask = (dates >= np.datetime64(t_start)) & (dates <= np.datetime64(t_end))
+
+            # # Embargoed union of test label windows
+            # union_start = np.datetime64(t_start) - np.timedelta64(self.embargo, 'D')
+            # union_end   = np.datetime64(t_end)   + np.timedelta64(self.h + self.embargo, 'D')
+
+            # # Purge label-window overlap with the union
+            # start_i = dates
+            # overlap = (start_i < union_end) & (end_i > union_start)
+
+            # # Base: not test, not overlapping
+            # base_train = (~test_mask) & (~overlap)
+
+            # side_mask = end_i <= union_start
+
+            # train_mask = base_train & side_mask
+
+            # # Optional: drop folds with too-small train set
+            # if train_mask.sum() < self.min_train_fraction * n:
+            #     continue
+
             test_mask = (dates >= np.datetime64(t_start)) & (dates <= np.datetime64(t_end))
 
-            # Union of test label windows is [t_start, t_end + h)
-            union_start = np.datetime64(t_start) - np.timedelta64(self.embargo, 'D')
-            union_end   = np.datetime64(t_end) + np.timedelta64(self.h + self.embargo, 'D')
+            # Strictly causal train: date <= t_start - (embargo + horizon)
+            cutoff = np.datetime64(t_start) - gap
+            train_mask = (dates <= cutoff) & (~test_mask)
 
-            # Purge criterion for a train sample with interval [t_i, t_i+h):
-            # overlap iff (t_i < union_end) & (t_i+h > union_start)
-            start_i = dates
-            end_i   = horizon
-            overlap = (start_i < union_end) & (end_i > union_start)
-
-            train_mask = (~test_mask) & (~overlap)
+            # Safety: drop fold if too small train
+            if train_mask.sum() < self.min_train_fraction * n:
+                continue
 
             yield np.nonzero(train_mask)[0], np.nonzero(test_mask)[0]
+
+# =========================
+# Purged, Embargoed time CV
+# =========================
+# class PurgedTimeSeriesSplit:
+#     """
+#     Purged & embargoed time-series CV for panel data with fixed forecast horizon (in calendar days).
+#     Test folds are contiguous in time (by date). Training folds exclude any sample whose
+#     label window [t, t+horizon) overlaps the test union, then an additional symmetric embargo.
+
+#     Compatible with sklearn API: split(X, y=None, groups=None), but X must carry a date Series.
+#     """
+
+#     def __init__(
+#         self,
+#         n_splits: int = 5,
+#         date: Optional[pd.Series] = None,
+#         horizon_days: int = 5,
+#         embargo_days: Optional[int] = None,
+#         test_span_days: Optional[int] = None,   # if None, splits the unique date grid into n_splits
+#     ):
+#         if n_splits < 2:
+#             raise ValueError("n_splits must be >= 2.")
+#         self.n_splits = n_splits
+#         self.h = int(horizon_days)
+#         self.embargo = int(embargo_days if embargo_days is not None else self.h)
+#         self.test_span_days = test_span_days
+#         self._date = _as_dt(date) if date is not None else None
+
+#     def split(self, X: pd.DataFrame, y: Optional[pd.Series] = None, groups: Optional[pd.Series] = None) -> Iterator[tuple[np.ndarray, np.ndarray]]:
+#         if self._date is None:
+#             if "date" not in X.columns:
+#                 raise ValueError("X must contain a 'date' column when 'date' not provided at init.")
+#             d = _as_dt(X["date"])
+#         else:
+#             d = _as_dt(self._date)
+
+#         # Unique date grid and fold allocations
+#         u = _unique_sorted_dates(d)
+#         if self.test_span_days is None:
+#             # Split date grid into n_splits contiguous blocks
+#             idx = np.linspace(0, len(u), self.n_splits + 1, dtype=int)
+#             test_windows = [(u[idx[i]], u[idx[i+1]-1]) for i in range(self.n_splits)]
+#         else:
+#             # rolling fixed-span windows
+#             span = pd.Timedelta(days=int(self.test_span_days))
+#             # choose evenly spaced starting anchors
+#             anchors = np.linspace(0, len(u) - 1, self.n_splits, dtype=int)
+#             test_windows = []
+#             for a in anchors:
+#                 start = u[a]
+#                 end = min(u[-1], start + span)
+#                 test_windows.append((start, end))
+
+#         # Precompute arrays
+#         # n = len(d)
+#         dates: np.ndarray = np.asanyarray(d.values)
+#         horizon: np.ndarray = np.array([np.datetime64(pd.Timestamp(t) + pd.Timedelta(days=self.h)) for t in d])
+
+#         for (t_start, t_end) in test_windows:
+#             # Test membership: t in [t_start, t_end]
+#             test_mask = (dates >= np.datetime64(t_start)) & (dates <= np.datetime64(t_end))
+
+#             # Union of test label windows is [t_start, t_end + h)
+#             union_start = np.datetime64(t_start) - np.timedelta64(self.embargo, 'D')
+#             union_end   = np.datetime64(t_end) + np.timedelta64(self.h + self.embargo, 'D')
+
+#             # Purge criterion for a train sample with interval [t_i, t_i+h):
+#             # overlap iff (t_i < union_end) & (t_i+h > union_start)
+#             start_i = dates
+#             end_i   = horizon
+#             overlap = (start_i < union_end) & (end_i > union_start)
+
+#             train_mask = (~test_mask) & (~overlap)
+
+#             yield np.nonzero(train_mask)[0], np.nonzero(test_mask)[0]
 
 
 # =========================
