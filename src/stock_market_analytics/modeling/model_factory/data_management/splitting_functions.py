@@ -8,11 +8,16 @@ def _as_dt(s: pd.Series) -> pd.Series:
         s = pd.to_datetime(s, utc=False)
     return s
 
-def _unique_sorted_dates(d: pd.Series) -> np.ndarray:
+def _unique_sorted_dates(d: pd.Series) -> np.ndarray: # type: ignore
     return np.asarray(pd.Index(d).unique().sort_values())
 
-def _cut_by_fractions(unique_dates: np.ndarray, fracs: tuple[float, float, float, float]) -> tuple[pd.Timestamp, pd.Timestamp, pd.Timestamp]:
-    """Return (train_end, val_end, cal_end) date cutoffs using cumulative fractions."""
+def _cut_by_fractions( # type: ignore
+        unique_dates: np.ndarray,
+        fracs: tuple[float, float, float, float]
+        ) -> tuple[pd.Timestamp, pd.Timestamp, pd.Timestamp]: 
+    """
+    Return (train_end, val_end, cal_end) date cutoffs using cumulative fractions.
+    """
     if not np.isclose(sum(fracs), 1.0):
         raise ValueError("fractions must sum to 1.")
     n = len(unique_dates)
@@ -24,7 +29,7 @@ def _cut_by_fractions(unique_dates: np.ndarray, fracs: tuple[float, float, float
     i_cal_end   = max(int(np.floor(n * (f_train + f_val + f_cal))) - 1, i_val_end + 1)
     return unique_dates[i_train_end], unique_dates[i_val_end], unique_dates[i_cal_end]
 
-def _validate(df: pd.DataFrame, date_col: str, symbol_col: str) -> pd.DataFrame:
+def _validate(df: pd.DataFrame, date_col: str, symbol_col: str) -> pd.DataFrame: # type: ignore
     if date_col not in df.columns:
         raise ValueError(f"'{date_col}' column missing.")
     
@@ -55,14 +60,14 @@ def _purge_around(
     union_end   = w_end + np.timedelta64(h + embargo, 'D')
     return union_start, union_end
 
-def _no_overlap_with(union0, union1, dates: np.ndarray, end_i: np.ndarray) -> np.ndarray:
+def _no_overlap_with(union0: np.datetime64, union1: np.datetime64, dates: np.ndarray, end_i: np.ndarray) -> np.ndarray:
     # keep samples whose [t, t+h) lies completely outside [union0, union1]
     
     start_i = dates
     
     return ~((start_i < union1) & (end_i > union0))
 
-def _apply_segment_masks(
+def _apply_segment_masks( # type: ignore
     df: pd.DataFrame,
     train_end: pd.Timestamp,
     val_end: pd.Timestamp,
@@ -104,7 +109,7 @@ def _apply_segment_masks(
         "test_idx" : np.flatnonzero(test_mask),
         }
 
-def _xy(frame: pd.DataFrame, feature_cols: list[str], target_col: str) -> tuple[pd.DataFrame, pd.Series]:
+def _xy(frame: pd.DataFrame, feature_cols: list[str], target_col: str) -> tuple[pd.DataFrame, pd.Series]: # type: ignore
     X = frame[feature_cols].copy()
     y = frame[target_col].copy()
     return X, y
