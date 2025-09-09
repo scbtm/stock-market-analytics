@@ -38,7 +38,7 @@ def _validate(df: pd.DataFrame, date_col: str, symbol_col: str) -> pd.DataFrame:
     
     df = df.copy()
     df[date_col] = _as_dt(df[date_col])
-    return df.sort_values([date_col, symbol_col]).reset_index(drop=True)
+    return df
 
 
 def _purge_around(
@@ -113,3 +113,20 @@ def _xy(frame: pd.DataFrame, feature_cols: list[str], target_col: str) -> tuple[
     X = frame[feature_cols].copy()
     y = frame[target_col].copy()
     return X, y
+
+def _build_test_windows(u: np.ndarray, n_splits: int, test_span_days: Optional[int] = None) -> list[tuple[pd.Timestamp, pd.Timestamp]]:
+        if test_span_days is None:
+            # equal partitions of the unique-date grid
+            idx = np.linspace(0, len(u), n_splits + 1, dtype=int)
+            wins = [(u[idx[i]], u[idx[i+1]-1]) for i in range(n_splits)]
+        else:
+            span = pd.Timedelta(days=test_span_days)
+            anchors = np.linspace(0, len(u) - 1, n_splits, dtype=int)
+            wins = []
+            for a in anchors:
+                start = u[a]
+                end = min(u[-1], start + span)
+                wins.append((start, end))
+        # ensure chronological order
+        wins.sort(key=lambda t: t[0])
+        return wins

@@ -12,6 +12,7 @@ from stock_market_analytics.modeling.model_factory.data_management.splitting_fun
     _validate,
     _apply_segment_masks,
     _xy,
+    _build_test_windows
 )
 
 class PurgedTimeSeriesSplit:
@@ -42,55 +43,25 @@ class PurgedTimeSeriesSplit:
         self.min_train_fraction = float(min_train_fraction)
         self._date = _as_dt(date) if date is not None else None
 
-    def split(
-        self, X: pd.DataFrame, y: Optional[pd.Series] = None, groups: Optional[pd.Series] = None
-    ) -> Iterator[tuple[np.ndarray, np.ndarray]]:
+    def split(self, X: pd.DataFrame, y: Optional[pd.Series] = None, groups: Optional[pd.Series] = None) -> Iterator[tuple[np.ndarray, np.ndarray]]:
+        # Resolve date series
         if self._date is None:
             if "date" not in X.columns:
-                raise ValueError("X must contain a 'date' column when 'date' not provided at init.")
+                raise ValueError("X must contain a 'date' column if 'date' not provided at init.")
             d = _as_dt(X["date"])
         else:
-            d = _as_dt(self._date)
+            d = self._date
 
         u = _unique_sorted_dates(d)
-        if self.test_span_days is None:
-            idx = np.linspace(0, len(u), self.n_splits + 1, dtype=int)
-            test_windows = [(u[idx[i]], u[idx[i+1]-1]) for i in range(self.n_splits)]
-        else:
-            span = pd.Timedelta(days=int(self.test_span_days))
-            anchors = np.linspace(0, len(u) - 1, self.n_splits, dtype=int)
-            test_windows = []
-            for a in anchors:
-                start = u[a]
-                end = min(u[-1], start + span)
-                test_windows.append((start, end))
+        test_windows = _build_test_windows(u, self.n_splits, self.test_span_days)
 
-        dates: np.ndarray = np.asanyarray(d.values)
-        n = len(d)
-        end_i = np.array([np.datetime64(pd.Timestamp(t) + pd.Timedelta(days=self.h)) for t in d])
+        dates: np.ndarray = np.asarray(d.values)  # numpy datetime64[D]
+        n = len(dates)
+
+        # Strict causal cutoff per fold
+        gap = np.timedelta64(self.embargo + self.h, 'D')  # (embargo + horizon)
 
         for (t_start, t_end) in test_windows:
-            # test_mask = (dates >= np.datetime64(t_start)) & (dates <= np.datetime64(t_end))
-
-            # # Embargoed union of test label windows
-            # union_start = np.datetime64(t_start) - np.timedelta64(self.embargo, 'D')
-            # union_end   = np.datetime64(t_end)   + np.timedelta64(self.h + self.embargo, 'D')
-
-            # # Purge label-window overlap with the union
-            # start_i = dates
-            # overlap = (start_i < union_end) & (end_i > union_start)
-
-            # # Base: not test, not overlapping
-            # base_train = (~test_mask) & (~overlap)
-
-            # side_mask = end_i <= union_start
-
-            # train_mask = base_train & side_mask
-
-            # # Optional: drop folds with too-small train set
-            # if train_mask.sum() < self.min_train_fraction * n:
-            #     continue
-
             test_mask = (dates >= np.datetime64(t_start)) & (dates <= np.datetime64(t_end))
 
             # Strictly causal train: date <= t_start - (embargo + horizon)
@@ -102,6 +73,67 @@ class PurgedTimeSeriesSplit:
                 continue
 
             yield np.nonzero(train_mask)[0], np.nonzero(test_mask)[0]
+
+    # def split(
+    #     self, X: pd.DataFrame, y: Optional[pd.Series] = None, groups: Optional[pd.Series] = None
+    # ) -> Iterator[tuple[np.ndarray, np.ndarray]]:
+    #     if self._date is None:
+    #         if "date" not in X.columns:
+    #             raise ValueError("X must contain a 'date' column when 'date' not provided at init.")
+    #         d = _as_dt(X["date"])
+    #     else:
+    #         d = _as_dt(self._date)
+
+    #     u = _unique_sorted_dates(d)
+    #     if self.test_span_days is None:
+    #         idx = np.linspace(0, len(u), self.n_splits + 1, dtype=int)
+    #         test_windows = [(u[idx[i]], u[idx[i+1]-1]) for i in range(self.n_splits)]
+    #     else:
+    #         span = pd.Timedelta(days=int(self.test_span_days))
+    #         anchors = np.linspace(0, len(u) - 1, self.n_splits, dtype=int)
+    #         test_windows = []
+    #         for a in anchors:
+    #             start = u[a]
+    #             end = min(u[-1], start + span)
+    #             test_windows.append((start, end))
+
+    #     dates: np.ndarray = np.asanyarray(d.values)
+    #     n = len(d)
+    #     end_i = np.array([np.datetime64(pd.Timestamp(t) + pd.Timedelta(days=self.h)) for t in d])
+
+    #     for (t_start, t_end) in test_windows:
+    #         # test_mask = (dates >= np.datetime64(t_start)) & (dates <= np.datetime64(t_end))
+
+    #         # # Embargoed union of test label windows
+    #         # union_start = np.datetime64(t_start) - np.timedelta64(self.embargo, 'D')
+    #         # union_end   = np.datetime64(t_end)   + np.timedelta64(self.h + self.embargo, 'D')
+
+    #         # # Purge label-window overlap with the union
+    #         # start_i = dates
+    #         # overlap = (start_i < union_end) & (end_i > union_start)
+
+    #         # # Base: not test, not overlapping
+    #         # base_train = (~test_mask) & (~overlap)
+
+    #         # side_mask = end_i <= union_start
+
+    #         # train_mask = base_train & side_mask
+
+    #         # # Optional: drop folds with too-small train set
+    #         # if train_mask.sum() < self.min_train_fraction * n:
+    #         #     continue
+
+    #         test_mask = (dates >= np.datetime64(t_start)) & (dates <= np.datetime64(t_end))
+
+    #         # Strictly causal train: date <= t_start - (embargo + horizon)
+    #         cutoff = np.datetime64(t_start) - gap
+    #         train_mask = (dates <= cutoff) & (~test_mask)
+
+    #         # Safety: drop fold if too small train
+    #         if train_mask.sum() < self.min_train_fraction * n:
+    #             continue
+
+    #         yield np.nonzero(train_mask)[0], np.nonzero(test_mask)[0]
 
 # =========================
 # Purged, Embargoed time CV
