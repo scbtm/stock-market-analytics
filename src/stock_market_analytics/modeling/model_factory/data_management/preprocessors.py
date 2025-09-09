@@ -120,7 +120,7 @@ class PanelHorizonSplitter:
         Either pass `cut_dates=(train_end, val_end, cal_end)` or `fractions` (sum=1).
         Embargo around boundaries defaults to `horizon_days`.
         """
-        df = self._validate(df)
+        df = _validate(df, self.date_col, self.symbol_col)
         u = _unique_sorted_dates(df[self.date_col])
 
         if cut_dates is None:
@@ -179,7 +179,7 @@ class PanelHorizonSplitter:
         Return a PurgedTimeSeriesSplit object bound to df's date column.
         Use in sklearn GridSearchCV / randomized HPO for leakage-safe scoring.
         """
-        df = _validate(df)
+        df = _validate(df, self.date_col, self.symbol_col)
         return PurgedTimeSeriesSplit(
             n_splits=n_splits,
             date=df[self.date_col],

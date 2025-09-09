@@ -4,6 +4,7 @@ Calibrator implementations for post-hoc prediction processing.
 This module contains calibrator classes that implement the calibration protocols
 and can be integrated into sklearn pipelines.
 """
+from __future__ import annotations
 
 from typing import Any
 
@@ -26,7 +27,6 @@ from stock_market_analytics.modeling.model_factory.calibration.calibration_funct
     ensure_1d,
 )
 
-from __future__ import annotations
 from typing import Any, List, Optional
 import numpy as np
 import polars as pl

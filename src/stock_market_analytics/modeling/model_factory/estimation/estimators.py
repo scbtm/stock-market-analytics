@@ -15,11 +15,9 @@ from sklearn.utils.validation import check_array, check_X_y
 from sklearn.metrics import r2_score
 
 
-from stock_market_analytics.modeling.model_factory.protocols import QuantileEstimator
 from stock_market_analytics.modeling.model_factory.estimation.estimation_functions import (
     detect_categorical_features,
     create_catboost_pool,
-    feature_importance_to_dict,
 )
 
 from catboost import CatBoostRegressor
