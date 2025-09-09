@@ -7,13 +7,13 @@ for various machine learning estimators and model implementations.
 
 import numpy as np
 import pandas as pd
-from typing import Any, Dict, List, Tuple, Union
+from typing import Any, Sequence
 from catboost import Pool
 
 
 def detect_categorical_features(
     X: pd.DataFrame,
-) -> List[str]:
+) -> Sequence[str | int]:
     """
     Detect categorical features in a Pandas DataFrame.
 
@@ -22,12 +22,13 @@ def detect_categorical_features(
     Returns:
         List of categorical feature names
     """
-    if hasattr(X, "dtypes"):  # Pandas DataFrame
+    if isinstance(X, pd.DataFrame):  # Pandas DataFrame
         categorical_cols = X.select_dtypes(
             include=["category", "object"]
         ).columns.tolist()
         return categorical_cols
-    return []
+    else:
+        return []
 
 
 def create_catboost_pool(

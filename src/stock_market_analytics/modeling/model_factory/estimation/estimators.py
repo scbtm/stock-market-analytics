@@ -11,7 +11,7 @@ from typing import Any, Dict, List
 import numpy as np
 import pandas as pd
 from sklearn.base import BaseEstimator, RegressorMixin
-from sklearn.utils.validation import check_array, check_X_y
+from sklearn.utils.validation import check_array
 from sklearn.metrics import r2_score
 
 
@@ -73,7 +73,7 @@ class CatBoostMultiQuantileModel(BaseEstimator, RegressorMixin):
         self : CatBoostMultiQuantileModel
             Fitted estimator
         """
-        X, y = check_X_y(X, y, accept_sparse=False)
+        #X, y = check_X_y(X, y, accept_sparse=False, dtype=None)
 
         # Build CatBoost parameters
         params = self.catboost_params.copy()
@@ -84,21 +84,15 @@ class CatBoostMultiQuantileModel(BaseEstimator, RegressorMixin):
         params["loss_function"] = f"MultiQuantile:alpha={alpha_str}"
         params["random_state"] = self.random_state
         params["verbose"] = self.verbose
-        params["use_best_model"] = True  # Enable best model tracking
+        params["use_best_model"] = True if "eval_set" in fit_params else False  # Enable best model tracking
 
         # Create and fit model
         self._model = CatBoostRegressor(**params)
 
-        # Detect categorical features if X is DataFrame
-        cat_features = detect_categorical_features(X)
-
-        if cat_features:
-            self.cat_features_ = cat_features
-
-        train_pool = create_catboost_pool(X, y, cat_features)
+        train_pool = create_catboost_pool(X, y)
         if "eval_set" in fit_params:
             X_val, y_val = fit_params["eval_set"]
-            eval_pool = create_catboost_pool(X_val, y_val, cat_features)
+            eval_pool = create_catboost_pool(X_val, y_val)
             fit_params["eval_set"] = eval_pool
         self._model.fit(train_pool, **fit_params)
 
@@ -121,14 +115,10 @@ class CatBoostMultiQuantileModel(BaseEstimator, RegressorMixin):
         predictions : ndarray of shape (n_samples, n_quantiles)
             Multi-quantile predictions
         """
-        X = check_array(X, accept_sparse=False)
-
         if self._model is None:
             raise ValueError("Model must be fitted before making predictions")
 
-        cat_features = self.cat_features_
-
-        pool = create_catboost_pool(X, cat_features=cat_features)
+        pool = create_catboost_pool(X)
         predictions = self._model.predict(pool)
         predictions = np.asarray(predictions)
 

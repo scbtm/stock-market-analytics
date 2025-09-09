@@ -173,21 +173,42 @@ class ConformalizedQuantileCalibrator(BaseEstimator, TransformerMixin):
         if self.enforce_monotonic:
             Yq_cal = enforce_monotone_across_quantiles(Yq_cal)
         return Yq_cal
-
+    
     def predict(self, y_pred_quantiles: np.ndarray, alpha: float = 0.1) -> np.ndarray:
-        """
-        Convenience: return [lower, upper] interval for miscoverage alpha
-        derived from calibrated quantiles at τ_l=α/2 and τ_u=1-α/2.
-        """
         check_alpha(alpha)
-        Yq_cal = self.predict_quantiles(y_pred_quantiles)
+        Yq_cal = self.predict_quantiles(y_pred_quantiles)  # (n_samples, n_quantiles)
         q = self.quantiles
         tau_lo, tau_hi = alpha / 2.0, 1.0 - alpha / 2.0
 
-        # Interpolate along τ if exact taus aren't present.
-        lo = np.interp(tau_lo, q, Yq_cal)
-        hi = np.interp(tau_hi, q, Yq_cal)
+        # exact-column fast path
+        idx_lo = np.where(np.isclose(q, tau_lo, atol=1e-12))[0]
+        idx_hi = np.where(np.isclose(q, tau_hi, atol=1e-12))[0]
+        if idx_lo.size:
+            lo = Yq_cal[:, idx_lo[0]]
+        else:
+            lo = np.array([np.interp(tau_lo, q, row) for row in Yq_cal], dtype=float)
+        if idx_hi.size:
+            hi = Yq_cal[:, idx_hi[0]]
+        else:
+            hi = np.array([np.interp(tau_hi, q, row) for row in Yq_cal], dtype=float)
+
         return np.column_stack((lo, hi))
+
+
+    # def predict(self, y_pred_quantiles: np.ndarray, alpha: float = 0.1) -> np.ndarray:
+    #     """
+    #     Convenience: return [lower, upper] interval for miscoverage alpha
+    #     derived from calibrated quantiles at τ_l=α/2 and τ_u=1-α/2.
+    #     """
+    #     check_alpha(alpha)
+    #     Yq_cal = self.predict_quantiles(y_pred_quantiles)
+    #     q = self.quantiles
+    #     tau_lo, tau_hi = alpha / 2.0, 1.0 - alpha / 2.0
+
+    #     # Interpolate along τ if exact taus aren't present.
+    #     lo = np.interp(tau_lo, q, Yq_cal)
+    #     hi = np.interp(tau_hi, q, Yq_cal)
+    #     return np.column_stack((lo, hi))
 
 
 # class QuantileConformalCalibrator(BaseEstimator, TransformerMixin):
