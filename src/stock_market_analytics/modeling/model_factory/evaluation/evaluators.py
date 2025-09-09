@@ -17,40 +17,41 @@ from stock_market_analytics.modeling.model_factory.evaluation.evaluation_functio
     prediction_interval_coverage_probability,
     mean_interval_width,
     normalized_interval_width,
+    crps_from_quantiles,
+    monotonicity_violation_rate,
+    ensure_sorted_unique_quantiles,
+    validate_xyq_shapes,
+    align_predictions_to_quantiles,
 )
 
 
 
+
+# -------------------------
+# Evaluator
+# -------------------------
+
 class QuantileRegressionEvaluator:
     """
     Evaluator for quantile regression tasks.
-    
+
     Provides metrics specific to quantile predictions including
-    pinball loss, coverage, and interval scores.
+    pinball loss, coverage, interval scores, CRPS, and crossing diagnostics.
     """
-    
+
     def __init__(self, quantiles: List[float]):
         """
         Initialize the quantile regression evaluator.
-        
+
         Args:
             quantiles: List of quantile levels being predicted
         """
-        self.quantiles = np.array(sorted(quantiles))
-        
+        self.quantiles = ensure_sorted_unique_quantiles(np.array(quantiles, dtype=float))
+
     def evaluate(self, y_true: np.ndarray, y_pred: np.ndarray) -> Dict[str, float]:
-        """
-        Standard evaluation interface (not used for quantile evaluation).
-        
-        Args:
-            y_true: True values
-            y_pred: Point predictions (not used)
-            
-        Returns:
-            Empty dictionary
-        """
+        # Intentionally empty for point predictions in a QR context.
         return {}
-    
+
     def evaluate_quantiles(
         self, 
         y_true: np.ndarray, 
@@ -59,41 +60,42 @@ class QuantileRegressionEvaluator:
     ) -> Dict[str, float]:
         """
         Evaluate quantile predictions.
-        
-        Args:
-            y_true: True target values
-            y_pred_quantiles: Predicted quantiles (n_samples, n_quantiles)
-            quantiles: List of quantiles corresponding to predictions
-            
-        Returns:
-            Dictionary of quantile-specific metrics
         """
-        quantiles_array = np.array(quantiles)
-        
-        # Basic quantile metrics
-        pinball_losses = pinball_loss_vectorized(y_true, y_pred_quantiles, quantiles_array)
-        coverage = quantile_coverage(y_true, y_pred_quantiles, quantiles_array)
-        
-        metrics = {
-            'mean_pinball_loss': float(np.mean(pinball_losses)),
-            'median_pinball_loss': float(np.median(pinball_losses)),
-            'max_pinball_loss': float(np.max(pinball_losses)),
-            'mean_coverage': float(np.mean(coverage)),
-            'coverage_deviation': float(np.mean(np.abs(coverage - quantiles_array))),
+        validate_xyq_shapes(y_true, np.asarray(y_pred_quantiles), np.asarray(quantiles))
+        # Align to the provided quantiles (and check they are sane)
+        yq, q_sorted, _ = align_predictions_to_quantiles(y_pred_quantiles, np.array(quantiles, dtype=float))
+
+        # Basic metrics
+        pinball = pinball_loss_vectorized(y_true, yq, q_sorted)
+        cov = quantile_coverage(y_true, yq, q_sorted)
+        qld = quantile_loss_differential(y_true, yq, q_sorted)
+        crps = crps_from_quantiles(y_true, yq, q_sorted)
+
+        # Crossing diagnostics
+        cross_rate, cross_count = monotonicity_violation_rate(yq)
+
+        metrics: Dict[str, float] = {
+            'mean_pinball_loss' : float(np.mean(pinball)),
+            'median_pinball_loss': float(np.median(pinball)),
+            'max_pinball_loss'  : float(np.max(pinball)),
+            'mean_coverage'     : float(np.mean(cov)),
+            'coverage_deviation': float(np.mean(np.abs(cov - q_sorted))),
+            'crps'              : crps,
+            'monotonicity_violation_rate': float(cross_rate),
+            'monotonicity_violated_rows' : float(cross_count),  # count
         }
-        
-        # Individual quantile metrics
-        for i, q in enumerate(quantiles):
-            metrics[f'pinball_loss_q{int(q*100)}'] = float(pinball_losses[i])
-            metrics[f'coverage_q{int(q*100)}'] = float(coverage[i])
-            metrics[f'coverage_error_q{int(q*100)}'] = float(abs(coverage[i] - q))
-        
-        # Differential loss metrics
-        diff_metrics = quantile_loss_differential(y_true, y_pred_quantiles, quantiles_array)
-        metrics.update(diff_metrics)
-        
+
+        # Per-quantile
+        for i, q in enumerate(q_sorted):
+            pct = int(round(q * 100))
+            metrics[f'pinball_loss_q{pct}'] = float(pinball[i])
+            metrics[f'coverage_q{pct}']     = float(cov[i])
+            metrics[f'coverage_error_q{pct}'] = float(abs(cov[i] - q))
+
+        # Differential bundle
+        metrics.update(qld)
         return metrics
-    
+
     def evaluate_intervals(
         self, 
         y_true: np.ndarray, 
@@ -103,42 +105,150 @@ class QuantileRegressionEvaluator:
     ) -> Dict[str, float]:
         """
         Evaluate prediction intervals.
-        
-        Args:
-            y_true: True values
-            y_lower: Lower bounds of prediction intervals
-            y_upper: Upper bounds of prediction intervals
-            alpha: Miscoverage level
-            
-        Returns:
-            Dictionary of interval metrics
         """
-        metrics = {
-            'interval_score': interval_score(y_true, y_lower, y_upper, alpha),
-            'coverage_probability': prediction_interval_coverage_probability(y_true, y_lower, y_upper),
-            'mean_interval_width': mean_interval_width(y_lower, y_upper),
+        return {
+            'interval_score'           : interval_score(y_true, y_lower, y_upper, alpha),
+            'coverage_probability'     : prediction_interval_coverage_probability(y_true, y_lower, y_upper),
+            'mean_interval_width'      : mean_interval_width(y_lower, y_upper),
             'normalized_interval_width': normalized_interval_width(y_lower, y_upper, y_true),
         }
-        
-        return metrics
-    
+
     def get_metric_names(self) -> List[str]:
-        """Get names of metrics computed by this evaluator."""
-        base_metrics = [
+        names = [
             'mean_pinball_loss', 'median_pinball_loss', 'max_pinball_loss',
-            'mean_coverage', 'coverage_deviation', 'mean_coverage_error',
-            'max_coverage_error', 'coverage_bias'
+            'mean_coverage', 'coverage_deviation',
+            'mean_coverage_error', 'max_coverage_error', 'coverage_bias',
+            'crps', 'monotonicity_violation_rate', 'monotonicity_violated_rows',
         ]
-        
-        # Add individual quantile metrics
         for q in self.quantiles:
-            base_metrics.extend([
-                f'pinball_loss_q{int(q*100)}',
-                f'coverage_q{int(q*100)}',
-                f'coverage_error_q{int(q*100)}'
-            ])
+            pct = int(round(float(q) * 100))
+            names += [
+                f'pinball_loss_q{pct}',
+                f'coverage_q{pct}',
+                f'coverage_error_q{pct}',
+            ]
+        return names
+
+
+
+# class QuantileRegressionEvaluator:
+#     """
+#     Evaluator for quantile regression tasks.
+    
+#     Provides metrics specific to quantile predictions including
+#     pinball loss, coverage, and interval scores.
+#     """
+    
+#     def __init__(self, quantiles: List[float]):
+#         """
+#         Initialize the quantile regression evaluator.
         
-        return base_metrics
+#         Args:
+#             quantiles: List of quantile levels being predicted
+#         """
+#         self.quantiles = np.array(sorted(quantiles))
+        
+#     def evaluate(self, y_true: np.ndarray, y_pred: np.ndarray) -> Dict[str, float]:
+#         """
+#         Standard evaluation interface (not used for quantile evaluation).
+        
+#         Args:
+#             y_true: True values
+#             y_pred: Point predictions (not used)
+            
+#         Returns:
+#             Empty dictionary
+#         """
+#         return {}
+    
+#     def evaluate_quantiles(
+#         self, 
+#         y_true: np.ndarray, 
+#         y_pred_quantiles: np.ndarray, 
+#         quantiles: List[float]
+#     ) -> Dict[str, float]:
+#         """
+#         Evaluate quantile predictions.
+        
+#         Args:
+#             y_true: True target values
+#             y_pred_quantiles: Predicted quantiles (n_samples, n_quantiles)
+#             quantiles: List of quantiles corresponding to predictions
+            
+#         Returns:
+#             Dictionary of quantile-specific metrics
+#         """
+#         quantiles_array = np.array(quantiles)
+        
+#         # Basic quantile metrics
+#         pinball_losses = pinball_loss_vectorized(y_true, y_pred_quantiles, quantiles_array)
+#         coverage = quantile_coverage(y_true, y_pred_quantiles, quantiles_array)
+        
+#         metrics = {
+#             'mean_pinball_loss': float(np.mean(pinball_losses)),
+#             'median_pinball_loss': float(np.median(pinball_losses)),
+#             'max_pinball_loss': float(np.max(pinball_losses)),
+#             'mean_coverage': float(np.mean(coverage)),
+#             'coverage_deviation': float(np.mean(np.abs(coverage - quantiles_array))),
+#         }
+        
+#         # Individual quantile metrics
+#         for i, q in enumerate(quantiles):
+#             metrics[f'pinball_loss_q{int(q*100)}'] = float(pinball_losses[i])
+#             metrics[f'coverage_q{int(q*100)}'] = float(coverage[i])
+#             metrics[f'coverage_error_q{int(q*100)}'] = float(abs(coverage[i] - q))
+        
+#         # Differential loss metrics
+#         diff_metrics = quantile_loss_differential(y_true, y_pred_quantiles, quantiles_array)
+#         metrics.update(diff_metrics)
+        
+#         return metrics
+    
+#     def evaluate_intervals(
+#         self, 
+#         y_true: np.ndarray, 
+#         y_lower: np.ndarray, 
+#         y_upper: np.ndarray,
+#         alpha: float = 0.1
+#     ) -> Dict[str, float]:
+#         """
+#         Evaluate prediction intervals.
+        
+#         Args:
+#             y_true: True values
+#             y_lower: Lower bounds of prediction intervals
+#             y_upper: Upper bounds of prediction intervals
+#             alpha: Miscoverage level
+            
+#         Returns:
+#             Dictionary of interval metrics
+#         """
+#         metrics = {
+#             'interval_score': interval_score(y_true, y_lower, y_upper, alpha),
+#             'coverage_probability': prediction_interval_coverage_probability(y_true, y_lower, y_upper),
+#             'mean_interval_width': mean_interval_width(y_lower, y_upper),
+#             'normalized_interval_width': normalized_interval_width(y_lower, y_upper, y_true),
+#         }
+        
+#         return metrics
+    
+#     def get_metric_names(self) -> List[str]:
+#         """Get names of metrics computed by this evaluator."""
+#         base_metrics = [
+#             'mean_pinball_loss', 'median_pinball_loss', 'max_pinball_loss',
+#             'mean_coverage', 'coverage_deviation', 'mean_coverage_error',
+#             'max_coverage_error', 'coverage_bias'
+#         ]
+        
+#         # Add individual quantile metrics
+#         for q in self.quantiles:
+#             base_metrics.extend([
+#                 f'pinball_loss_q{int(q*100)}',
+#                 f'coverage_q{int(q*100)}',
+#                 f'coverage_error_q{int(q*100)}'
+#             ])
+        
+#         return base_metrics
 
 
 # class RegressionEvaluator:
