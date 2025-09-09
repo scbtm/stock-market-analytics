@@ -22,7 +22,7 @@ class CatBoostQuantileRegressionFlow(FlowSpec):
 
     This flow orchestrates the complete modeling process:
     1. Loads and prepares features data
-    2. Creates train/validation/test splits 
+    2. Creates train/validation/test splits
     3. Trains quantile regression model
     4. Evaluates model performance comprehensively
     5. Optionally applies conformal calibration
@@ -32,33 +32,39 @@ class CatBoostQuantileRegressionFlow(FlowSpec):
     """
 
     # Flow parameters
-    test_size = Parameter('test-size', 
-                         help='Fraction of data for test set',
-                         default=0.2)
-    
-    validation_size = Parameter('validation-size',
-                               help='Fraction of data for validation set', 
-                               default=0.1)
-    
-    time_span_days = Parameter('time-span-days',
-                              help='Number of recent days to use (0 for all)',
-                              default=0)
-    
-    enable_cross_validation = Parameter('enable-cv',
-                                       help='Whether to run cross-validation',
-                                       default=False)
-    
-    enable_conformal_calibration = Parameter('enable-calibration',
-                                            help='Whether to apply conformal calibration',
-                                            default=False)
-    
-    create_baselines = Parameter('create-baselines',
-                                help='Whether to create baseline model comparisons',
-                                default=True)
-    
-    output_dir = Parameter('output-dir',
-                          help='Output directory for artifacts (relative to BASE_DATA_PATH)',
-                          default='model_outputs')
+    test_size = Parameter(
+        "test-size", help="Fraction of data for test set", default=0.2
+    )
+
+    validation_size = Parameter(
+        "validation-size", help="Fraction of data for validation set", default=0.1
+    )
+
+    time_span_days = Parameter(
+        "time-span-days", help="Number of recent days to use (0 for all)", default=0
+    )
+
+    enable_cross_validation = Parameter(
+        "enable-cv", help="Whether to run cross-validation", default=False
+    )
+
+    enable_conformal_calibration = Parameter(
+        "enable-calibration",
+        help="Whether to apply conformal calibration",
+        default=False,
+    )
+
+    create_baselines = Parameter(
+        "create-baselines",
+        help="Whether to create baseline model comparisons",
+        default=True,
+    )
+
+    output_dir = Parameter(
+        "output-dir",
+        help="Output directory for artifacts (relative to BASE_DATA_PATH)",
+        default="model_outputs",
+    )
 
     @step
     def start(self) -> None:
@@ -79,7 +85,9 @@ class CatBoostQuantileRegressionFlow(FlowSpec):
 
         # Create timestamped output directory
         self.run_timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-        self.output_path = self.base_data_path / self.output_dir / f"cbm_qr_{self.run_timestamp}"
+        self.output_path = (
+            self.base_data_path / self.output_dir / f"cbm_qr_{self.run_timestamp}"
+        )
         print(f"💾 Output directory: {self.output_path}")
 
         # Initialize run info
@@ -92,7 +100,7 @@ class CatBoostQuantileRegressionFlow(FlowSpec):
                 "enable_cv": self.enable_cross_validation,
                 "enable_calibration": self.enable_conformal_calibration,
                 "create_baselines": self.create_baselines,
-            }
+            },
         }
 
         self.next(self.load_data)
@@ -121,8 +129,7 @@ class CatBoostQuantileRegressionFlow(FlowSpec):
         # Prepare modeling data
         time_span = self.time_span_days if self.time_span_days > 0 else None
         self.X, self.y = modeling_steps.prepare_modeling_data(
-            self.raw_data,
-            time_span_days=time_span
+            self.raw_data, time_span_days=time_span
         )
 
         print(f"✅ Prepared features shape: {self.X.shape}")
@@ -150,21 +157,27 @@ class CatBoostQuantileRegressionFlow(FlowSpec):
         Uses time-series splitting to respect temporal order and avoid
         data leakage. Creates three splits:
         - Training set: for model fitting
-        - Validation set: for hyperparameter tuning and early stopping  
+        - Validation set: for hyperparameter tuning and early stopping
         - Test set: for final performance evaluation
         """
         print("🔄 Creating time series data splits...")
 
         # Create splits
         splits = modeling_steps.create_modeling_splits(
-            self.X, 
+            self.X,
             self.y,
             test_size=self.test_size,
-            validation_size=self.validation_size
+            validation_size=self.validation_size,
         )
-        
-        (self.X_train, self.X_val, self.X_test, 
-         self.y_train, self.y_val, self.y_test) = splits
+
+        (
+            self.X_train,
+            self.X_val,
+            self.X_test,
+            self.y_train,
+            self.y_val,
+            self.y_test,
+        ) = splits
 
         print(f"📊 Train set size: {len(self.y_train)}")
         print(f"📊 Validation set size: {len(self.y_val)}")
@@ -194,22 +207,17 @@ class CatBoostQuantileRegressionFlow(FlowSpec):
 
         # Train model with validation
         self.model = modeling_steps.fit_quantile_model(
-            self.X_train,
-            self.y_train,
-            X_val=self.X_val,
-            y_val=self.y_val
+            self.X_train, self.y_train, X_val=self.X_val, y_val=self.y_val
         )
 
         print("✅ Model training completed successfully")
-        
+
         # Get feature importance
         self.feature_importance = self.model.get_feature_importance()
-        
+
         # Print top features
         sorted_features = sorted(
-            self.feature_importance.items(), 
-            key=lambda x: x[1], 
-            reverse=True
+            self.feature_importance.items(), key=lambda x: x[1], reverse=True
         )
         print("🔍 Top 5 most important features:")
         for feat, importance in sorted_features[:5]:
@@ -217,7 +225,7 @@ class CatBoostQuantileRegressionFlow(FlowSpec):
 
         self.next(self.evaluate_model)
 
-    @step  
+    @step
     def evaluate_model(self) -> None:
         """
         Evaluate model performance on the test set.
@@ -232,9 +240,7 @@ class CatBoostQuantileRegressionFlow(FlowSpec):
 
         # Comprehensive evaluation
         self.evaluation_results = modeling_steps.evaluate_model_performance(
-            self.model,
-            self.X_test,
-            self.y_test
+            self.model, self.X_test, self.y_test
         )
 
         # Print key results
@@ -243,9 +249,15 @@ class CatBoostQuantileRegressionFlow(FlowSpec):
         backtest_metrics = self.evaluation_results.get("backtest_metrics", {})
 
         print("📊 === Key Evaluation Results ===")
-        print(f"   Mean Pinball Loss: {quantile_metrics.get('mean_pinball_loss', 'N/A'):.6f}")
-        print(f"   Directional Accuracy: {financial_metrics.get('directional_accuracy', 'N/A'):.4f}")
-        print(f"   Sharpe Ratio (Pred): {financial_metrics.get('sharpe_ratio_pred', 'N/A'):.4f}")
+        print(
+            f"   Mean Pinball Loss: {quantile_metrics.get('mean_pinball_loss', 'N/A'):.6f}"
+        )
+        print(
+            f"   Directional Accuracy: {financial_metrics.get('directional_accuracy', 'N/A'):.4f}"
+        )
+        print(
+            f"   Sharpe Ratio (Pred): {financial_metrics.get('sharpe_ratio_pred', 'N/A'):.4f}"
+        )
         print(f"   Total Return: {backtest_metrics.get('total_return', 'N/A'):.4f}")
         print(f"   Max Drawdown: {backtest_metrics.get('max_drawdown', 'N/A'):.4f}")
 
@@ -275,15 +287,14 @@ class CatBoostQuantileRegressionFlow(FlowSpec):
             self.model,
             self.X_val,
             self.y_val,
-            alpha=0.1  # 90% prediction intervals
+            alpha=0.1,  # 90% prediction intervals
         )
 
         print("✅ Conformal calibration completed")
 
         # Create calibrated production pipeline
         self.production_pipeline = modeling_steps.create_production_pipeline(
-            self.model,
-            calibrator=self.calibrator
+            self.model, calibrator=self.calibrator
         )
 
         # Continue with next steps
@@ -318,7 +329,7 @@ class CatBoostQuantileRegressionFlow(FlowSpec):
             initial_train_size=initial_train_size,
             test_size=test_size,
             step_size=step_size,
-            max_folds=5  # Limit to 5 folds for computational efficiency
+            max_folds=5,  # Limit to 5 folds for computational efficiency
         )
 
         print(f"✅ Completed cross-validation with {len(self.cv_results)} folds")
@@ -327,13 +338,13 @@ class CatBoostQuantileRegressionFlow(FlowSpec):
         if self.cv_results:
             # Calculate mean metrics across folds
             mean_pinball_loss = sum(
-                fold.get("quantile_metrics", {}).get("mean_pinball_loss", 0) 
+                fold.get("quantile_metrics", {}).get("mean_pinball_loss", 0)
                 for fold in self.cv_results
             ) / len(self.cv_results)
-            
+
             mean_directional_accuracy = sum(
                 fold.get("financial_metrics", {}).get("directional_accuracy", 0)
-                for fold in self.cv_results  
+                for fold in self.cv_results
             ) / len(self.cv_results)
 
             print("📊 === Cross-Validation Results (Mean) ===")
@@ -358,10 +369,7 @@ class CatBoostQuantileRegressionFlow(FlowSpec):
         print("📏 Creating baseline model comparisons...")
 
         self.baseline_results = modeling_steps.create_baseline_models(
-            self.X_train,
-            self.y_train,
-            self.X_test,
-            self.y_test
+            self.X_train, self.y_train, self.X_test, self.y_test
         )
 
         print("📊 === Baseline Model Results ===")
@@ -388,17 +396,18 @@ class CatBoostQuantileRegressionFlow(FlowSpec):
             self.model,
             self.evaluation_results,
             self.output_path,
-            model_name=f"catboost_qr_{self.run_timestamp}"
+            model_name=f"catboost_qr_{self.run_timestamp}",
         )
 
         # Save test predictions
         test_predictions = self.model.predict(self.X_test)
         from stock_market_analytics.config import config
+
         predictions_path = modeling_steps.save_predictions(
             test_predictions,
             config.modeling.quantiles,
             self.output_path,
-            filename=f"test_predictions_{self.run_timestamp}.parquet"
+            filename=f"test_predictions_{self.run_timestamp}.parquet",
         )
         self.artifact_paths["predictions"] = predictions_path
 
@@ -413,25 +422,29 @@ class CatBoostQuantileRegressionFlow(FlowSpec):
             "model_params": config.modeling.cb_model_params,
             "fit_params": config.modeling.cb_fit_params,
         }
-        
+
         config_path = modeling_steps.save_configuration(
             config_dict,
             self.output_path,
-            filename=f"run_config_{self.run_timestamp}.json"
+            filename=f"run_config_{self.run_timestamp}.json",
         )
         self.artifact_paths["config"] = config_path
 
         # Save additional results if available
-        if hasattr(self, 'cv_results') and self.cv_results:
+        if hasattr(self, "cv_results") and self.cv_results:
             import json
+
             cv_path = self.output_path / f"cv_results_{self.run_timestamp}.json"
-            with open(cv_path, 'w') as f:
+            with open(cv_path, "w") as f:
                 json.dump(self.cv_results, f, indent=2, default=str)
             self.artifact_paths["cv_results"] = cv_path
 
-        if hasattr(self, 'baseline_results') and self.baseline_results:
+        if hasattr(self, "baseline_results") and self.baseline_results:
             import json
-            baseline_path = self.output_path / f"baseline_results_{self.run_timestamp}.json"
+
+            baseline_path = (
+                self.output_path / f"baseline_results_{self.run_timestamp}.json"
+            )
             # Convert baseline results for JSON serialization
             baseline_serializable = {}
             for name, results in self.baseline_results.items():
@@ -439,8 +452,8 @@ class CatBoostQuantileRegressionFlow(FlowSpec):
                     "metrics": results["metrics"]
                     # Skip the actual model objects for serialization
                 }
-            
-            with open(baseline_path, 'w') as f:
+
+            with open(baseline_path, "w") as f:
                 json.dump(baseline_serializable, f, indent=2, default=str)
             self.artifact_paths["baseline_results"] = baseline_path
 
@@ -462,15 +475,19 @@ class CatBoostQuantileRegressionFlow(FlowSpec):
         print("🎉 CatBoost Quantile Regression Training Flow completed successfully!")
         print(f"📁 Results saved to: {self.output_path}")
         print("📊 Model training and evaluation complete.")
-        
+
         # Print final summary
-        if hasattr(self, 'evaluation_results'):
+        if hasattr(self, "evaluation_results"):
             quantile_metrics = self.evaluation_results.get("quantile_metrics", {})
             financial_metrics = self.evaluation_results.get("financial_metrics", {})
-            
+
             print("\n📈 Final Model Performance:")
-            print(f"   • Mean Pinball Loss: {quantile_metrics.get('mean_pinball_loss', 'N/A'):.6f}")
-            print(f"   • Directional Accuracy: {financial_metrics.get('directional_accuracy', 'N/A'):.4f}")
+            print(
+                f"   • Mean Pinball Loss: {quantile_metrics.get('mean_pinball_loss', 'N/A'):.6f}"
+            )
+            print(
+                f"   • Directional Accuracy: {financial_metrics.get('directional_accuracy', 'N/A'):.4f}"
+            )
             print(f"   • Model artifacts: {len(self.artifact_paths)} files saved")
 
 

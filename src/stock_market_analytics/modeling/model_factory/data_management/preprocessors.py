@@ -12,8 +12,9 @@ from stock_market_analytics.modeling.model_factory.data_management.splitting_fun
     _validate,
     _apply_segment_masks,
     _xy,
-    _build_test_windows
+    _build_test_windows,
 )
+
 
 class PurgedTimeSeriesSplit:
     """
@@ -31,7 +32,7 @@ class PurgedTimeSeriesSplit:
         horizon_days: int = 5,
         embargo_days: Optional[int] = None,
         test_span_days: Optional[int] = None,
-        min_train_fraction: float = 0.05,      # optional safety
+        min_train_fraction: float = 0.05,  # optional safety
     ):
         if n_splits < 2:
             raise ValueError("n_splits must be >= 2.")
@@ -43,11 +44,18 @@ class PurgedTimeSeriesSplit:
         self.min_train_fraction = float(min_train_fraction)
         self._date = _as_dt(date) if date is not None else None
 
-    def split(self, X: pd.DataFrame, y: Optional[pd.Series] = None, groups: Optional[pd.Series] = None) -> Iterator[tuple[np.ndarray, np.ndarray]]:
+    def split(
+        self,
+        X: pd.DataFrame,
+        y: Optional[pd.Series] = None,
+        groups: Optional[pd.Series] = None,
+    ) -> Iterator[tuple[np.ndarray, np.ndarray]]:
         # Resolve date series
         if self._date is None:
             if "date" not in X.columns:
-                raise ValueError("X must contain a 'date' column if 'date' not provided at init.")
+                raise ValueError(
+                    "X must contain a 'date' column if 'date' not provided at init."
+                )
             d = _as_dt(X["date"])
         else:
             d = self._date
@@ -59,10 +67,12 @@ class PurgedTimeSeriesSplit:
         n = len(dates)
 
         # Strict causal cutoff per fold
-        gap = np.timedelta64(self.embargo + self.h, 'D')  # (embargo + horizon)
+        gap = np.timedelta64(self.embargo + self.h, "D")  # (embargo + horizon)
 
-        for (t_start, t_end) in test_windows:
-            test_mask = (dates >= np.datetime64(t_start)) & (dates <= np.datetime64(t_end))
+        for t_start, t_end in test_windows:
+            test_mask = (dates >= np.datetime64(t_start)) & (
+                dates <= np.datetime64(t_end)
+            )
 
             # Strictly causal train: date <= t_start - (embargo + horizon)
             cutoff = np.datetime64(t_start) - gap
@@ -134,6 +144,7 @@ class PurgedTimeSeriesSplit:
     #             continue
 
     #         yield np.nonzero(train_mask)[0], np.nonzero(test_mask)[0]
+
 
 # =========================
 # Purged, Embargoed time CV
@@ -221,6 +232,7 @@ class PanelHorizonSplitter:
     Data splitter for panel stock data targeting a fixed natural-day horizon.
     Produces leakage-safe Train/Val/Cal/Test slices and a PurgedTimeSeriesSplit for HPO.
     """
+
     date_col: str = "date"
     symbol_col: str = "symbol"
     horizon_days: int = 5
@@ -257,9 +269,9 @@ class PanelHorizonSplitter:
 
         return {
             "train": df.iloc[idx["train_idx"]],
-            "val"  : df.iloc[idx["val_idx"]],
-            "cal"  : df.iloc[idx["cal_idx"]],
-            "test" : df.iloc[idx["test_idx"]],
+            "val": df.iloc[idx["val_idx"]],
+            "cal": df.iloc[idx["cal_idx"]],
+            "test": df.iloc[idx["test_idx"]],
         }
 
     def catboost_early_stopping_sets(
@@ -280,14 +292,14 @@ class PanelHorizonSplitter:
         frames = self.make_holdout_splits(df, fractions=fractions, return_frames=True)
 
         X_train, y_train = _xy(frames["train"], feature_cols, target_col)
-        X_val, y_val     = _xy(frames["val"], feature_cols, target_col)
-        X_cal, y_cal     = _xy(frames["cal"], feature_cols, target_col)
-        X_test, y_test   = _xy(frames["test"], feature_cols, target_col)
+        X_val, y_val = _xy(frames["val"], feature_cols, target_col)
+        X_cal, y_cal = _xy(frames["cal"], feature_cols, target_col)
+        X_test, y_test = _xy(frames["test"], feature_cols, target_col)
         return {
             "train": (X_train, y_train),
-            "val"  : (X_val  , y_val),
-            "cal"  : (X_cal  , y_cal),
-            "test" : (X_test , y_test),
+            "val": (X_val, y_val),
+            "cal": (X_cal, y_cal),
+            "test": (X_test, y_test),
         }
 
     def cv_splitter(
@@ -306,6 +318,8 @@ class PanelHorizonSplitter:
             n_splits=n_splits,
             date=df[self.date_col],
             horizon_days=self.horizon_days,
-            embargo_days=self.embargo_days if self.embargo_days is not None else self.horizon_days,
+            embargo_days=self.embargo_days
+            if self.embargo_days is not None
+            else self.horizon_days,
             test_span_days=test_span_days,
         )

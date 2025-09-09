@@ -128,26 +128,26 @@ class TestHelperFunctions:
         """Test weighted mean calculation without weights."""
         x = np.array([1.0, 2.0, 3.0])
         result = _weighted_mean(x, None)
-        
+
         assert result == 2.0  # Simple mean
 
     def test_weighted_mean_with_weights(self):
         """Test weighted mean calculation with weights."""
         x = np.array([1.0, 2.0, 3.0])
         w = np.array([1.0, 2.0, 3.0])  # More weight on higher values
-        
+
         result = _weighted_mean(x, w)
-        
+
         # Weighted mean: (1*1 + 2*2 + 3*3) / (1+2+3) = 14/6 = 2.333...
-        assert abs(result - 14/6) < 1e-10
+        assert abs(result - 14 / 6) < 1e-10
 
     def test_weighted_mean_edge_case(self):
         """Test weighted mean with single value."""
         x = np.array([5.0])
         w = np.array([0.7])
-        
+
         result = _weighted_mean(x, w)
-        
+
         assert result == 5.0  # Should return the single value
 
     def test_pinball_basic(self):
@@ -155,9 +155,9 @@ class TestHelperFunctions:
         y = np.array([1.0, 2.0, 3.0])
         q = np.array([0.9, 2.1, 2.8])
         alpha = 0.1
-        
+
         result = _pinball(y, q, alpha, None)
-        
+
         assert isinstance(result, float)
         assert result >= 0  # Pinball loss is always non-negative
 
@@ -167,9 +167,9 @@ class TestHelperFunctions:
         q = np.array([0.9, 2.1])
         alpha = 0.1
         w = np.array([1.0, 2.0])
-        
+
         result = _pinball(y, q, alpha, w)
-        
+
         assert isinstance(result, float)
         assert result >= 0
 
@@ -177,12 +177,12 @@ class TestHelperFunctions:
         """Test pinball loss at alpha boundaries."""
         y = np.array([1.0, 2.0])  # Different values to ensure different results
         q = np.array([0.5, 1.5])  # Different predictions
-        
+
         # At alpha=0, should only penalize underestimation
         result_0 = _pinball(y, q, 0.0, None)
-        # At alpha=1, should only penalize overestimation  
+        # At alpha=1, should only penalize overestimation
         result_1 = _pinball(y, q, 1.0, None)
-        
+
         assert result_0 >= 0
         assert result_1 >= 0
         # Results should be different for different alphas with mixed errors
@@ -197,9 +197,9 @@ class TestInterpolationFunction:
         alpha = 0.5
         Q = [0.1, 0.5, 0.9]
         qhat = np.array([[1.0, 5.0, 9.0], [2.0, 6.0, 10.0]])
-        
+
         result = _interp(alpha, Q, qhat)
-        
+
         # Should return exact column for 0.5 quantile
         expected = np.array([5.0, 6.0])
         np.testing.assert_array_equal(result, expected)
@@ -209,9 +209,9 @@ class TestInterpolationFunction:
         alpha = 0.3  # Between 0.1 and 0.5
         Q = [0.1, 0.5, 0.9]
         qhat = np.array([[1.0, 5.0, 9.0]])
-        
+
         result = _interp(alpha, Q, qhat)
-        
+
         # Linear interpolation: 0.3 is halfway between 0.1 and 0.5
         # So result should be halfway between 1.0 and 5.0 = 3.0
         expected = np.array([3.0])
@@ -222,8 +222,10 @@ class TestInterpolationFunction:
         alpha = 0.05  # Below minimum quantile
         Q = [0.1, 0.5, 0.9]
         qhat = np.array([[1.0, 5.0, 9.0]])
-        
-        with pytest.raises(ValueError, match="interval alpha outside provided quantiles"):
+
+        with pytest.raises(
+            ValueError, match="interval alpha outside provided quantiles"
+        ):
             _interp(alpha, Q, qhat)
 
     def test_interp_upper_boundary_error(self):
@@ -231,8 +233,10 @@ class TestInterpolationFunction:
         alpha = 0.95  # Above maximum quantile
         Q = [0.1, 0.5, 0.9]
         qhat = np.array([[1.0, 5.0, 9.0]])
-        
-        with pytest.raises(ValueError, match="interval alpha outside provided quantiles"):
+
+        with pytest.raises(
+            ValueError, match="interval alpha outside provided quantiles"
+        ):
             _interp(alpha, Q, qhat)
 
 
@@ -242,15 +246,17 @@ class TestEvalMultiquantile:
     def test_eval_multiquantile_basic(self):
         """Test basic multi-quantile evaluation."""
         y_true = np.array([1.0, 2.0, 3.0])
-        q_pred = np.array([
-            [0.5, 1.0, 1.5],  # Sample 1: low, med, high quantiles
-            [1.5, 2.0, 2.5],  # Sample 2
-            [2.5, 3.0, 3.5]   # Sample 3
-        ])
+        q_pred = np.array(
+            [
+                [0.5, 1.0, 1.5],  # Sample 1: low, med, high quantiles
+                [1.5, 2.0, 2.5],  # Sample 2
+                [2.5, 3.0, 3.5],  # Sample 3
+            ]
+        )
         quantiles = [0.1, 0.5, 0.9]
-        
+
         loss, metrics = eval_multiquantile(y_true, q_pred, quantiles)
-        
+
         assert isinstance(loss, float)
         assert isinstance(metrics, dict)
         assert "coverage_10_90" in metrics  # Coverage with default interval
@@ -261,17 +267,14 @@ class TestEvalMultiquantile:
     def test_eval_multiquantile_with_weights(self):
         """Test multi-quantile evaluation with sample weights."""
         y_true = np.array([1.0, 2.0])
-        q_pred = np.array([
-            [0.9, 1.0, 1.1],
-            [1.9, 2.0, 2.1]
-        ])
+        q_pred = np.array([[0.9, 1.0, 1.1], [1.9, 2.0, 2.1]])
         quantiles = [0.1, 0.5, 0.9]
         sample_weight = np.array([1.0, 2.0])
-        
+
         loss, metrics = eval_multiquantile(
             y_true, q_pred, quantiles, sample_weight=sample_weight
         )
-        
+
         assert isinstance(loss, float)
         assert "coverage_10_90" in metrics  # Coverage with default interval
         assert loss >= 0
@@ -280,48 +283,51 @@ class TestEvalMultiquantile:
         """Test crossing penalty functionality."""
         y_true = np.array([1.0, 2.0])
         # Intentionally crossed quantiles (high < low)
-        q_pred = np.array([
-            [1.5, 1.0, 0.5],  # Crossed: 1.5 > 1.0 > 0.5 (should be increasing)
-            [2.5, 2.0, 1.5]
-        ])
+        q_pred = np.array(
+            [
+                [1.5, 1.0, 0.5],  # Crossed: 1.5 > 1.0 > 0.5 (should be increasing)
+                [2.5, 2.0, 1.5],
+            ]
+        )
         quantiles = [0.1, 0.5, 0.9]
-        
-        loss_no_penalty, _ = eval_multiquantile(y_true, q_pred, quantiles, lambda_cross=0.0)
-        loss_with_penalty, _ = eval_multiquantile(y_true, q_pred, quantiles, lambda_cross=1.0)
-        
+
+        loss_no_penalty, _ = eval_multiquantile(
+            y_true, q_pred, quantiles, lambda_cross=0.0
+        )
+        loss_with_penalty, _ = eval_multiquantile(
+            y_true, q_pred, quantiles, lambda_cross=1.0
+        )
+
         assert loss_with_penalty > loss_no_penalty  # Penalty should increase loss
 
     def test_eval_multiquantile_custom_interval(self):
         """Test with custom coverage interval."""
         y_true = np.array([1.0, 2.0, 3.0])
-        q_pred = np.array([
-            [0.2, 0.8, 1.0, 1.2, 1.8],
-            [1.2, 1.8, 2.0, 2.2, 2.8],
-            [2.2, 2.8, 3.0, 3.2, 3.8]
-        ])
+        q_pred = np.array(
+            [
+                [0.2, 0.8, 1.0, 1.2, 1.8],
+                [1.2, 1.8, 2.0, 2.2, 2.8],
+                [2.2, 2.8, 3.0, 3.2, 3.8],
+            ]
+        )
         quantiles = [0.05, 0.25, 0.5, 0.75, 0.95]
         interval = (0.25, 0.75)  # 50% interval instead of default 80%
-        
-        loss, metrics = eval_multiquantile(
-            y_true, q_pred, quantiles, interval=interval
-        )
-        
+
+        loss, metrics = eval_multiquantile(y_true, q_pred, quantiles, interval=interval)
+
         assert "coverage_25_75" in metrics  # Custom interval coverage
         assert metrics["coverage_25_75"] == 1.0  # Perfect coverage for this example
 
     def test_eval_multiquantile_per_quantile_metrics(self):
         """Test return of per-quantile pinball losses."""
         y_true = np.array([1.0, 2.0])
-        q_pred = np.array([
-            [0.9, 1.0, 1.1],
-            [1.9, 2.0, 2.1]
-        ])
+        q_pred = np.array([[0.9, 1.0, 1.1], [1.9, 2.0, 2.1]])
         quantiles = [0.1, 0.5, 0.9]
-        
+
         loss, metrics = eval_multiquantile(
             y_true, q_pred, quantiles, return_per_quantile=True
         )
-        
+
         # Check for individual pinball metrics (format: pinball@0.10, pinball@0.50, etc.)
         pinball_keys = [k for k in metrics.keys() if k.startswith("pinball@")]
         assert len(pinball_keys) == len(quantiles)
@@ -331,7 +337,7 @@ class TestEvalMultiquantile:
         y_true = np.array([1.0, 2.0])
         q_pred = np.array([[1.0, 2.0]])  # Wrong shape: 1 sample vs 2 true values
         quantiles = [0.1, 0.9]
-        
+
         with pytest.raises(AssertionError, match="Shape mismatch"):
             eval_multiquantile(y_true, q_pred, quantiles)
 
@@ -340,7 +346,7 @@ class TestEvalMultiquantile:
         y_true = np.array([1.0, 2.0])
         q_pred = np.array([[1.0, 2.0], [3.0, 4.0]])  # 2 quantiles
         quantiles = [0.1, 0.5, 0.9]  # 3 quantiles - mismatch!
-        
+
         with pytest.raises(AssertionError, match="quantiles must align"):
             eval_multiquantile(y_true, q_pred, quantiles)
 
@@ -350,7 +356,7 @@ class TestEvalMultiquantile:
         q_pred = np.array([[1.0]])
         quantiles = [0.5]
         invalid_interval = (0.3, 1.1)  # Above 1.0
-        
+
         with pytest.raises(AssertionError, match="interval must be within"):
             eval_multiquantile(y_true, q_pred, quantiles, interval=invalid_interval)
 
@@ -358,13 +364,13 @@ class TestEvalMultiquantile:
 class TestPlottingFunctions:
     """Test suite for plotting functions (basic smoke tests)."""
 
-    @patch('stock_market_analytics.modeling.pipeline_components.functions.go.Figure')
+    @patch("stock_market_analytics.modeling.pipeline_components.functions.go.Figure")
     def test_plot_optuna_parallel_coordinates(self, mock_figure):
         """Test Optuna parallel coordinates plotting function."""
         # Create mock study
         mock_study = Mock()
         mock_study.trials = []
-        
+
         # Test that function runs without error
         try:
             plot_optuna_parallel_coordinates(mock_study)
@@ -374,13 +380,13 @@ class TestPlottingFunctions:
             # If there are import issues or other problems, that's OK for unit tests
             pytest.skip("Plotting function dependencies not available")
 
-    @patch('stock_market_analytics.modeling.pipeline_components.functions.go.Figure')  
+    @patch("stock_market_analytics.modeling.pipeline_components.functions.go.Figure")
     def test_plot_optuna_metrics_distribution(self, mock_figure):
         """Test Optuna metrics distribution plotting function."""
         # Create mock study
         mock_study = Mock()
         mock_study.trials = []
-        
+
         # Test that function runs without error
         try:
             plot_optuna_metrics_distribution(mock_study)

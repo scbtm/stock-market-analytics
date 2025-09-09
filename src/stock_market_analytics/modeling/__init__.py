@@ -2,7 +2,7 @@
 Stock Market Analytics - Modeling Module
 
 This module contains all machine learning and modeling components for the
-stock market analytics project. It exports the public interfaces from 
+stock market analytics project. It exports the public interfaces from
 the model_factory submodules following the established architecture pattern.
 """
 
@@ -72,11 +72,10 @@ __all__ = [
     # Estimators
     "CatBoostMultiQuantileModel",
     # "CatBoostQuantileRegressor",
-    # "LightGBMQuantileRegressor", 
+    # "LightGBMQuantileRegressor",
     # "RandomForestQuantileRegressor",
     # "LinearQuantileRegressor",
     # "BaselineEstimator",
-    
     # Evaluators
     "QuantileRegressionEvaluator",
     # "RegressionEvaluator",
@@ -85,7 +84,6 @@ __all__ = [
     # "ClassificationEvaluator",
     # "CompositeEvaluator",
     # "BacktestEvaluator",
-    
     # Data Management
     "PurgedTimeSeriesSplit",
     "PanelHorizonSplitter",
@@ -98,13 +96,11 @@ __all__ = [
     # "OutlierClippingProcessor",
     # "MarketRegimeProcessor",
     # "CompositePredictionProcessor",
-    
     # Calibrators
     "QuantileConformalCalibrator",
     # "AdaptiveConformalCalibrator",
     # "PlattScalingCalibrator",
     # "IsotonicRegressionCalibrator",
-    
     # Protocols
     "Calibrator",
     "QuantileCalibrator",
