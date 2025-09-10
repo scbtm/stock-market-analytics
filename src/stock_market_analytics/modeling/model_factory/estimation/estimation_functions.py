@@ -5,7 +5,6 @@ This module provides utility functions and preprocessing helpers
 for various machine learning estimators and model implementations.
 """
 
-import numpy as np
 import pandas as pd
 from typing import Any, Sequence
 from catboost import Pool
@@ -22,14 +21,25 @@ def detect_categorical_features(
     Returns:
         List of categorical feature names
     """
-    if isinstance(X, pd.DataFrame):  # Pandas DataFrame
-        categorical_cols = X.select_dtypes(
-            include=["category", "object"]
-        ).columns.tolist()
-        return categorical_cols
-    else:
-        return []
+    if not isinstance(X, pd.DataFrame):
+        X = pd.DataFrame(X)  # Pandas DataFrame
+    categorical_cols = X.select_dtypes(include=["category", "object"]).columns.tolist()
+    return categorical_cols
 
+def standardize_data(
+    X: Any,
+) -> pd.DataFrame:
+
+    if not isinstance(X, pd.DataFrame):
+        X = pd.DataFrame(X)  # Convert to Pandas DataFrame
+
+    for col in X.columns:
+        try:
+            X[col] = pd.to_numeric(X[col], errors='raise')
+        except (ValueError, TypeError):
+            X[col] = X[col].astype('category')
+
+    return X
 
 def create_catboost_pool(
     X: pd.DataFrame,
@@ -47,6 +57,7 @@ def create_catboost_pool(
         CatBoost Pool object
     """
     # Identify categorical feature indices
+    X = standardize_data(X)
     cat_features = detect_categorical_features(X)
     return Pool(data=X, label=y, cat_features=cat_features if cat_features else None)
 

@@ -174,14 +174,8 @@ class CatBoostMultiQuantileModel(BaseEstimator, RegressorMixin):
             raise ValueError("Model must be fitted to access best iteration")
         return getattr(self._model, "best_iteration_", None)
 
-    def get_params(self, _deep: bool = True) -> dict[str, Any]:
+    def get_params(self, deep: bool = True) -> dict[str, Any]:
         """Get parameters for this estimator.
-
-        Parameters
-        ----------
-        deep : bool, default=True
-            If True, will return the parameters for this estimator and
-            contained subobjects that are estimators.
 
         Returns
         -------
