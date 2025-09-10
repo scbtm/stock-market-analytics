@@ -1,330 +1,250 @@
 """
-Rich protocols for the model factory components.
+Protocols for a model factory (pandas/NumPy only).
 
-These protocols define the expected interfaces for all model factory components,
-ensuring type safety and enforcing correct use of the modeling pipeline.
+Conventions
+-----------
+- Frames/series: pandas only (no polars).
+- Arrays: NumPy float arrays unless stated otherwise.
+- Shapes:
+    * Regression predictions: (n_samples,)
+    * Multiclass probabilities: (n_samples, n_classes)
+    * Quantiles: (n_samples, n_quantiles)
+    * Index splits: integer index arrays
+- Calibration maps model outputs -> calibrated outputs (X is optional context).
+
+These are structural types (Protocols) to decouple components while preserving type safety.
 """
 
-from typing import Any, Protocol, runtime_checkable
+from __future__ import annotations
+
+from typing import Any, Protocol, runtime_checkable, Mapping, Sequence, Iterator
 
 import numpy as np
-import polars as pl
+import pandas as pd
+from numpy.typing import NDArray
+
+# ----- Common type aliases ----------------------------------------------------
+
+Array = NDArray[np.float64]          # numeric arrays (preds, probs, quantiles)
+IndexArray = NDArray[np.intp]        # index arrays for CV splitters
+Frame = pd.DataFrame
+Series = pd.Series
+Metrics = Mapping[str, float]
 
 
-@runtime_checkable
-class Calibrator(Protocol):
-    """Protocol for model calibrators that perform post-hoc prediction processing."""
-
-    def calibrate(
-        self, X_cal: pl.DataFrame, y_cal: pl.Series, **kwargs: Any
-    ) -> "Calibrator":
-        """
-        Learn calibration parameters from calibration data.
-
-        Args:
-            X_cal: Calibration features
-            y_cal: Calibration targets
-            **kwargs: Additional calibration parameters
-
-        Returns:
-            Self for method chaining
-        """
-        ...
-
-    def fit(self, X_cal: pl.DataFrame, y_cal: pl.Series) -> "Calibrator":
-        """
-        Sklearn-compatible fit method that calls calibrate.
-
-        Args:
-            X_cal: Calibration features
-            y_cal: Calibration targets
-
-        Returns:
-            Self for method chaining
-        """
-        ...
-
-    def predict(self, y_hat: np.ndarray) -> np.ndarray:
-        """
-        Apply calibration to model predictions.
-
-        Args:
-            y_hat: Raw model predictions
-
-        Returns:
-            Calibrated predictions
-        """
-        ...
-
+# ----- Calibration ------------------------------------------------------------
 
 @runtime_checkable
-class QuantileCalibrator(Calibrator, Protocol):
-    """Protocol for quantile-based calibrators."""
+class BaseCalibrator(Protocol):
+    """Learns a mapping from model outputs to calibrated outputs.
 
-    def predict_quantiles(
-        self, y_hat: np.ndarray, quantiles: list[float]
-    ) -> np.ndarray:
-        """
-        Predict quantiles for given predictions.
+    Notes
+    -----
+    - `y_pred_cal` are the base model's outputs used to fit the calibrator:
+        * Binary classification: scores/logits/probs shape (n,)
+        * Multiclass: scores/logits/probs shape (n, C)
+        * Quantiles: predicted quantiles shape (n, Q)
+    - `X_cal` is optional, for context-aware calibration if needed.
+    """
 
-        Args:
-            y_hat: Raw model predictions
-            quantiles: List of quantiles to predict
+    def fit(
+        self,
+        y_pred_cal: Array,
+        y_true_cal: Array,
+        X_cal: Frame | None = None,
+        **kwargs: Any,
+    ) -> BaseCalibrator:
+        ...
 
-        Returns:
-            Quantile predictions with shape (n_samples, n_quantiles)
-        """
+    def transform(self, y_pred: Array, **kwargs: Any) -> Array:
+        """Map raw model outputs to calibrated outputs."""
+        ...
+
+    def fit_transform(
+        self,
+        y_pred_cal: Array,
+        y_true_cal: Array,
+        X_cal: Frame | None = None,
+        **kwargs: Any,
+    ) -> Array:
         ...
 
 
 @runtime_checkable
-class ProbabilityCalibrator(Calibrator, Protocol):
-    """Protocol for probability calibrators."""
+class ProbabilityCalibrator(BaseCalibrator, Protocol):
+    """Calibrate scores/logits/probabilities to calibrated probabilities.
 
-    def predict_proba(self, y_hat: np.ndarray) -> np.ndarray:
-        """
-        Predict class probabilities.
+    Expected output shapes
+    ----------------------
+    - Binary: (n,) or (n, 1)
+    - Multiclass: (n, C) with rows summing to ~1.0
+    """
 
-        Args:
-            y_hat: Raw model predictions
-
-        Returns:
-            Class probabilities
-        """
+    def transform(self, y_score: Array, **kwargs: Any) -> Array:
         ...
 
+
+@runtime_checkable
+class QuantileCalibrator(BaseCalibrator, Protocol):
+    """Calibrate multi-quantile predictions (n_samples, n_quantiles)."""
+
+    def transform(self, y_pred_quantiles: Array, **kwargs: Any) -> Array:
+        ...
+
+# ----- Data splitting -------------------------------------------------------------#
 
 @runtime_checkable
 class DataSplitter(Protocol):
     """Protocol for data splitting strategies."""
 
-    def split(
-        self, X: pl.DataFrame, y: pl.Series
-    ) -> tuple[pl.DataFrame, pl.DataFrame, pl.Series, pl.Series]:
-        """
-        Split data according to the splitting strategy.
-
-        Args:
-            X: Feature matrix
-            y: Target vector
-
-        Returns:
-            Tuple of (X_train, X_test, y_train, y_test)
-        """
+    def split(self, df: pd.DataFrame) -> Iterator[Frame]:
+        """Split the DataFrame into training and testing sets."""
         ...
 
-    def get_train_indices(self, X: pl.DataFrame) -> list[int]:
-        """
-        Get indices for training data.
-
-        Args:
-            X: Feature matrix
-
-        Returns:
-            List of training indices
-        """
-        ...
-
-    def get_test_indices(self, X: pl.DataFrame) -> list[int]:
-        """
-        Get indices for test data.
-
-        Args:
-            X: Feature matrix
-
-        Returns:
-            List of test indices
-        """
-        ...
-
+# ----- Post-processing / business rules --------------------------------------
 
 @runtime_checkable
 class PostProcessor(Protocol):
-    """Protocol for applying business rules to predictions."""
+    """Apply and validate business rules on predictions."""
 
     def apply_rules(
-        self, predictions: np.ndarray, context: dict[str, Any]
-    ) -> np.ndarray:
-        """
-        Apply business rules to model predictions.
-
-        Args:
-            predictions: Raw model predictions
-            context: Additional context for rule application
-
-        Returns:
-            Post-processed predictions
-        """
+        self,
+        predictions: Array,
+        context: dict[str, Any] | None = None,
+    ) -> Array:
         ...
 
-    def validate_predictions(self, predictions: np.ndarray) -> bool:
-        """
-        Validate predictions meet business constraints.
-
-        Args:
-            predictions: Model predictions to validate
-
-        Returns:
-            True if predictions are valid, False otherwise
-        """
+    def validate_predictions(self, predictions: Array) -> bool:
+        """Return True if predictions satisfy business constraints."""
         ...
 
+    # Optional but useful for debugging/monitoring:
+    def report_violations(self, predictions: Array) -> dict[str, Any]:  # pragma: no cover
+        """Return a structured report of constraint violations (empty dict if none)."""
+        ...
+
+
+# ----- Evaluation -------------------------------------------------------------
 
 @runtime_checkable
 class ModelEvaluator(Protocol):
-    """Protocol for standardized model evaluation."""
+    """Standardized evaluation interface."""
 
-    def evaluate(self, y_true: np.ndarray, y_pred: np.ndarray) -> dict[str, float]:
-        """
-        Evaluate model predictions against true values.
-
-        Args:
-            y_true: True target values
-            y_pred: Model predictions
-
-        Returns:
-            Dictionary of evaluation metrics
-        """
+    def evaluate(self, y_true: Array, y_pred: Array) -> dict[str, float]:
         ...
 
     def get_metric_names(self) -> list[str]:
-        """
-        Get names of metrics computed by this evaluator.
-
-        Returns:
-            List of metric names
-        """
         ...
 
 
 @runtime_checkable
 class QuantileEvaluator(ModelEvaluator, Protocol):
-    """Protocol for evaluating quantile predictions."""
+    """Evaluation for quantile/interval predictions."""
 
     def evaluate_quantiles(
-        self, y_true: np.ndarray, y_pred_quantiles: np.ndarray, quantiles: list[float]
+        self,
+        y_true: Array,
+        y_pred_quantiles: Array,
+        quantiles: Sequence[float],
     ) -> dict[str, float]:
-        """
-        Evaluate quantile predictions.
+        ...
 
-        Args:
-            y_true: True target values
-            y_pred_quantiles: Quantile predictions with shape (n_samples, n_quantiles)
-            quantiles: List of quantiles corresponding to predictions
+    def evaluate_intervals(
+        self,
+        y_true: Array,
+        y_lower: Array,
+        y_upper: Array,
+        alpha: float = 0.1,
+    ) -> dict[str, float]:
+        ...
 
-        Returns:
-            Dictionary of quantile-specific metrics
-        """
+
+# ----- Estimators -------------------------------------------------------------
+
+@runtime_checkable
+class SklearnCompatibleEstimator(Protocol):
+    """Sklearn-compatible estimator surface (cloneable & tunable)."""
+
+    def fit(self, X: Frame | Array, y: Series | Array, **kwargs: Any) -> SklearnCompatibleEstimator:
+        ...
+
+    def predict(self, X: Frame | Array) -> Array:
+        ...
+
+    def score(self, X: Any, y: Any, sample_weight: Any = None) -> float:
+        ...
+
+    # Required for sklearn cloning/grid-search compatibility
+    def get_params(self, deep: bool = True) -> dict[str, Any]:
+        ...
+
+    def set_params(self, **params: Any) -> SklearnCompatibleEstimator:
         ...
 
 
 @runtime_checkable
-class SklearnCompatibleEstimator(Protocol):
-    """Protocol for sklearn-compatible estimators with additional functionality."""
+class SupportsFeatureImportances(Protocol):
+    """Optional mixin for models exposing feature_importances_."""
 
-    def fit(
-        self, X: pl.DataFrame, y: pl.Series, **kwargs: Any
-    ) -> "SklearnCompatibleEstimator":
-        """
-        Fit the estimator to training data.
-
-        Args:
-            X: Training features
-            y: Training targets
-            **kwargs: Additional fit parameters
-
-        Returns:
-            Self for method chaining
-        """
+    @property
+    def feature_importances_(self) -> Array:
         ...
 
-    def predict(self, X: pl.DataFrame) -> np.ndarray:
-        """
-        Make predictions on new data.
 
-        Args:
-            X: Features for prediction
+@runtime_checkable
+class SupportsPredictProba(Protocol):
+    """Optional mixin for classifiers exposing predict_proba."""
 
-        Returns:
-            Predictions
-        """
-        ...
-
-    def get_feature_importance(self) -> dict[str, float]:
-        """
-        Get feature importance scores.
-
-        Returns:
-            Dictionary mapping feature names to importance scores
-        """
+    def predict_proba(self, X: Frame | Array) -> Array:
         ...
 
 
 @runtime_checkable
 class QuantileEstimator(SklearnCompatibleEstimator, Protocol):
-    """Protocol for quantile regression estimators."""
+    """Estimators that predict multiple quantiles per sample."""
 
-    def predict_quantiles(self, X: pl.DataFrame, quantiles: list[float]) -> np.ndarray:
-        """
-        Predict quantiles for given features.
+    quantiles: Sequence[float]
 
-        Args:
-            X: Features for prediction
-            quantiles: List of quantiles to predict
-
-        Returns:
-            Quantile predictions with shape (n_samples, n_quantiles)
-        """
+    def predict(self, X: Frame | Array) -> Array:
+        """Return shape (n_samples, n_quantiles)."""
         ...
 
+    def transform(self, X: Frame | Array) -> Array:
+        """Alias for predict to enable transformer usage in pipelines."""
+        ...
+
+
+# ----- Pipeline ---------------------------------------------------------------
 
 @runtime_checkable
 class ModelingPipeline(Protocol):
-    """Protocol for complete modeling pipelines."""
+    """End-to-end pipeline interface decoupled from concrete components."""
 
-    def fit(self, X: pl.DataFrame, y: pl.Series) -> "ModelingPipeline":
-        """
-        Fit the entire modeling pipeline.
-
-        Args:
-            X: Training features
-            y: Training targets
-
-        Returns:
-            Self for method chaining
-        """
+    def fit(self, X: Frame, y: Series) -> ModelingPipeline:
         ...
 
-    def predict(self, X: pl.DataFrame) -> np.ndarray:
-        """
-        Make predictions using the full pipeline.
-
-        Args:
-            X: Features for prediction
-
-        Returns:
-            Final pipeline predictions
-        """
+    def predict(self, X: Frame) -> Array:
         ...
 
-    def evaluate(self, X: pl.DataFrame, y: pl.Series) -> dict[str, float]:
-        """
-        Evaluate the pipeline on given data.
-
-        Args:
-            X: Features for evaluation
-            y: True targets for evaluation
-
-        Returns:
-            Dictionary of evaluation metrics
-        """
+    def evaluate(self, X: Frame, y: Series, evaluator: ModelEvaluator) -> dict[str, float]:
         ...
 
     def get_components(self) -> dict[str, Any]:
-        """
-        Get all pipeline components.
-
-        Returns:
-            Dictionary mapping component names to component objects
-        """
+        """Return named subcomponents (e.g., {'preprocessor': ..., 'estimator': ..., 'calibrator': ...})."""
         ...
+
+
+__all__ = [
+    # aliases
+    "Array", "IndexArray", "Frame", "Series", "Metrics",
+    # calibrators
+    "BaseCalibrator", "ProbabilityCalibrator", "QuantileCalibrator",
+    # post-processing
+    "PostProcessor",
+    # evaluation
+    "ModelEvaluator", "QuantileEvaluator",
+    # estimators
+    "SklearnCompatibleEstimator", "SupportsFeatureImportances", "SupportsPredictProba", "QuantileEstimator",
+    # pipeline
+    "ModelingPipeline",
+]

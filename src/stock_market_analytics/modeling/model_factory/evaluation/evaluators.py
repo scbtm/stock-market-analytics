@@ -6,8 +6,11 @@ and provide standardized metrics for different modeling tasks.
 """
 
 import numpy as np
-from typing import Dict, List
+from typing import Dict, List, Sequence
 
+from stock_market_analytics.modeling.model_factory.protocols import (
+    ModelEvaluator, QuantileEvaluator, Array
+)
 from stock_market_analytics.modeling.model_factory.evaluation.evaluation_functions import (
     pinball_loss_vectorized,
     quantile_coverage,
@@ -33,7 +36,7 @@ from stock_market_analytics.modeling.model_factory.evaluation.evaluation_functio
 # -------------------------
 
 
-class QuantileRegressionEvaluator:
+class QuantileRegressionEvaluator(QuantileEvaluator):
     """
     Evaluator for quantile regression tasks.
 
@@ -41,7 +44,7 @@ class QuantileRegressionEvaluator:
     pinball loss, coverage, CRPS, PIT calibration, and crossing diagnostics.
     """
 
-    def __init__(self, quantiles: List[float]):
+    def __init__(self, quantiles: Sequence[float]):
         """
         Initialize the quantile regression evaluator.
 
@@ -52,13 +55,13 @@ class QuantileRegressionEvaluator:
             np.array(quantiles, dtype=float)
         )
 
-    def evaluate(self, y_true: np.ndarray, y_pred: np.ndarray) -> Dict[str, float]:
+    def evaluate(self, y_true: Array, y_pred: Array) -> dict[str, float]:
         # Intentionally empty for point predictions in a QR context.
         return {}
 
     def evaluate_quantiles(
-        self, y_true: np.ndarray, y_pred_quantiles: np.ndarray, quantiles: List[float]
-    ) -> Dict[str, float]:
+        self, y_true: Array, y_pred_quantiles: Array, quantiles: Sequence[float]
+    ) -> dict[str, float]:
         """
         Evaluate quantile predictions.
         """
@@ -118,11 +121,11 @@ class QuantileRegressionEvaluator:
 
     def evaluate_intervals(
         self,
-        y_true: np.ndarray,
-        y_lower: np.ndarray,
-        y_upper: np.ndarray,
+        y_true: Array,
+        y_lower: Array,
+        y_upper: Array,
         alpha: float = 0.1,
-    ) -> Dict[str, float]:
+    ) -> dict[str, float]:
         """
         Evaluate prediction intervals.
         """
@@ -137,7 +140,7 @@ class QuantileRegressionEvaluator:
             ),
         }
 
-    def get_metric_names(self) -> List[str]:
+    def get_metric_names(self) -> list[str]:
         names = [
             "n_samples_evaluated",
             "n_rows_dropped_nan",

@@ -7,7 +7,13 @@ for various machine learning estimators and model implementations.
 
 import pandas as pd
 from typing import Any, Sequence
-from catboost import Pool
+
+try:
+    from catboost import Pool
+    CATBOOST_AVAILABLE = True
+except ImportError:
+    CATBOOST_AVAILABLE = False
+    Pool = None
 
 
 def detect_categorical_features(
@@ -46,7 +52,7 @@ def create_catboost_pool(
     y: pd.Series | None = None,
 ) -> Any:
     """
-    Create a CatBoost Pool object from Polars DataFrame.
+    Create a CatBoost Pool object from pandas DataFrame.
 
     Args:
         X: Feature matrix
@@ -56,6 +62,9 @@ def create_catboost_pool(
     Returns:
         CatBoost Pool object
     """
+    if not CATBOOST_AVAILABLE:
+        raise ImportError("CatBoost is not available. Please install it with 'pip install catboost'")
+        
     # Identify categorical feature indices
     X = standardize_data(X)
     cat_features = detect_categorical_features(X)

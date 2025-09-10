@@ -1,7 +1,11 @@
+
 from __future__ import annotations
-from typing import Optional
+from typing import Optional, Iterator
 import numpy as np
 import pandas as pd
+from collections.abc import Mapping
+
+from stock_market_analytics.modeling.model_factory.protocols import (DataSplitter)
 
 
 def _as_dt(s: pd.Series) -> pd.Series:
@@ -39,7 +43,6 @@ def _validate(df: pd.DataFrame, date_col: str, symbol_col: str) -> pd.DataFrame:
     if symbol_col not in df.columns:
         raise ValueError(f"'{symbol_col}' column missing.")
 
-    df = df.copy()
     df[date_col] = _as_dt(df[date_col])
     return df
 
@@ -147,3 +150,141 @@ def _build_test_windows(
     # ensure chronological order
     wins.sort(key=lambda t: t[0])
     return wins  # type: ignore
+
+
+# --------------------------------------- Public API --------------------------------------- #
+def make_holdout_splits(
+        date_col: str,
+        symbol_col: str,
+        df: pd.DataFrame,
+        *,
+        fractions: tuple[float, float, float, float] = (0.7, 0.10, 0.10, 0.10),
+        cut_dates: Optional[tuple[pd.Timestamp, pd.Timestamp, pd.Timestamp]] = None,
+        return_frames: bool = False,
+    ) -> Mapping[str, pd.DataFrame] | Mapping[str, np.ndarray]:
+        
+    """
+    Build leakage-safe Train/Val/Cal/Test.
+
+    Either pass `cut_dates=(train_end, val_end, cal_end)` or `fractions` (sum=1).
+    Embargo around boundaries defaults to `horizon_days`.
+    """
+    df = _validate(df, date_col, symbol_col)
+    u = _unique_sorted_dates(df[date_col])
+
+    if cut_dates is None:
+        train_end, val_end, cal_end = _cut_by_fractions(u, fractions)
+        
+    else:
+        train_end, val_end, cal_end = cut_dates
+
+    idx = _apply_segment_masks(df, train_end, val_end, cal_end)
+
+    if not return_frames:
+        return idx
+
+    return {
+        "train": df.iloc[idx["train_idx"]],
+        "val": df.iloc[idx["val_idx"]],
+        "cal": df.iloc[idx["cal_idx"]],
+        "test": df.iloc[idx["test_idx"]],
+        }
+
+
+def get_modeling_sets(
+        df: pd.DataFrame,
+        date_col: str = "date",
+        symbol_col: str = "symbol",
+        *,
+        feature_cols: list[str],
+        target_col: str,
+        fractions: tuple[float, float, float, float] = (0.7, 0.10, 0.10, 0.10),
+    ) -> dict[str, tuple[pd.DataFrame, pd.Series]]:
+    """
+    Convenience for CatBoost:
+      - Train set for fitting
+      - Validation set for early stopping
+      - Calibration set reserved for conformal
+      - Test set final evaluation
+    """
+    frames = make_holdout_splits(df, date_col=date_col, symbol_col=symbol_col, fractions=fractions, return_frames=True)
+
+    X_train, y_train = _xy(frames["train"], feature_cols, target_col)
+    X_val, y_val = _xy(frames["val"], feature_cols, target_col)
+    X_cal, y_cal = _xy(frames["cal"], feature_cols, target_col)
+    X_test, y_test = _xy(frames["test"], feature_cols, target_col)
+    return {
+        "train": (X_train, y_train),
+        "val": (X_val, y_val),
+        "cal": (X_cal, y_cal),
+        "test": (X_test, y_test),
+        }
+
+
+class PurgedTimeSeriesSplit(DataSplitter):
+    """
+    Purged & embargoed time-series CV for panel data with fixed forecast horizon.
+    Past-only by default: training samples must lie strictly BEFORE the test window
+    (with an embargo buffer and no label-window overlap).
+
+    train_side: 'past' (default) or 'past_and_future' (old behavior).
+    """
+
+    def __init__(
+        self,
+        n_splits: int = 5,
+        date: Optional[pd.Series] = None,
+        horizon_days: int = 5,
+        embargo_days: Optional[int] = None,
+        test_span_days: Optional[int] = None,
+        min_train_fraction: float = 0.05,  # optional safety
+    ):
+        if n_splits < 2:
+            raise ValueError("n_splits must be >= 2.")
+
+        self.n_splits = n_splits
+        self.h = int(horizon_days)
+        self.embargo = int(embargo_days if embargo_days is not None else self.h)
+        self.test_span_days = test_span_days
+        self.min_train_fraction = float(min_train_fraction)
+        self._date = _as_dt(date) if date is not None else None
+
+    def split(
+        self,
+        X: pd.DataFrame,
+        y: Optional[pd.Series] = None,
+        groups: Optional[pd.Series] = None,
+    ) -> Iterator[tuple[np.ndarray, np.ndarray]]:
+        # Resolve date series
+        if self._date is None:
+            if "date" not in X.columns:
+                raise ValueError(
+                    "X must contain a 'date' column if 'date' not provided at init."
+                )
+            d = _as_dt(X["date"])
+        else:
+            d = self._date
+
+        u = _unique_sorted_dates(d)
+        test_windows = _build_test_windows(u, self.n_splits, self.test_span_days)
+
+        dates: np.ndarray = np.asarray(d.values)  # numpy datetime64[D]
+        n = len(dates)
+
+        # Strict causal cutoff per fold
+        gap = np.timedelta64(self.embargo + self.h, "D")  # (embargo + horizon)
+
+        for t_start, t_end in test_windows:
+            test_mask = (dates >= np.datetime64(t_start)) & (
+                dates <= np.datetime64(t_end)
+            )
+
+            # Strictly causal train: date <= t_start - (embargo + horizon)
+            cutoff = np.datetime64(t_start) - gap
+            train_mask = (dates <= cutoff) & (~test_mask)
+
+            # Safety: drop fold if too small train
+            if train_mask.sum() < self.min_train_fraction * n:
+                continue
+
+            yield np.nonzero(train_mask)[0], np.nonzero(test_mask)[0]
