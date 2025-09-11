@@ -87,6 +87,9 @@ class ModelingConfig(BaseModel):
     time_span: int = Field(
         default=7 * 28, description="Weeks of historical data for validation/testing"
     )
+    fractions: tuple[float, float, float, float] = Field(
+        default=(0.6, 0.1, 0.2, 0.1), description="Train/val/cal/test split fractions"
+    )
 
     # Deprecated tuning parameters (no longer used since tuning flow was removed)
     timeout_mins: int = 10
@@ -96,6 +99,7 @@ class ModelingConfig(BaseModel):
     # Feature groups
     features: list[str] = Field(
         default=[
+            "symbol",
             "month",
             "day_of_week",
             "day_of_year",
@@ -340,67 +344,3 @@ class AppConfig(BaseModel):
 
 # Global configuration instance
 config = AppConfig()
-
-
-# Backward compatibility - maintain existing interfaces
-def get_data_config() -> dict[str, Any]:
-    """Get data collection configuration as dictionary for backward compatibility."""
-    data_cfg = config.data_collection
-    return {
-        "TICKERS_FILE": data_cfg.tickers_file,
-        "METADATA_FILE": data_cfg.metadata_file,
-        "STOCKS_HISTORY_FILE": data_cfg.stocks_history_file,
-        "REQUIRED_TICKER_COLUMNS": data_cfg.required_ticker_columns,
-        "TICKER_COLUMN_MAPPING": data_cfg.ticker_column_mapping,
-        "REQUIRED_METADATA_COLUMNS": data_cfg.required_metadata_columns,
-    }
-
-
-def get_features_config() -> dict[str, Any]:
-    """Get feature engineering configuration as dictionary for backward compatibility."""
-    feat_cfg = config.feature_engineering
-    return {
-        "horizon": feat_cfg.horizon,
-        "short_window": feat_cfg.short_window,
-        "long_window": feat_cfg.long_window,
-        "past_horizon": feat_cfg.past_horizon,
-        "ichimoku_params": feat_cfg.ichimoku_params,
-    }
-
-
-def get_modeling_config() -> dict[str, Any]:
-    """Get modeling configuration as dictionary for backward compatibility."""
-    model_cfg = config.modeling
-    return {
-        "FEATURES_FILE": model_cfg.features_file,
-        "QUANTILES": model_cfg.quantiles,
-        "FEATURES": model_cfg.features,
-        "TARGET_COVERAGE": model_cfg.target_coverage,
-        "TARGET": model_cfg.target,
-        "TIME_SPAN": model_cfg.time_span,
-        "FEATURE_GROUPS": model_cfg.feature_groups,
-        "TIMEOUT_MINS": model_cfg.timeout_mins,
-        "N_TRIALS": model_cfg.n_trials,
-        "STUDY_NAME": model_cfg.study_name,
-        **model_cfg.quantile_indices,
-    }
-
-
-def get_cb_model_params() -> dict[str, Any]:
-    """Get CatBoost model parameters."""
-    return config.modeling.cb_model_params
-
-
-def get_cb_fit_params() -> dict[str, Any]:
-    """Get CatBoost fit parameters."""
-    return config.modeling.cb_fit_params
-
-
-def get_pca_params() -> dict[str, Any]:
-    """Get PCA parameters."""
-    return config.modeling.pca_params
-
-
-def get_pca_group_params() -> dict[str, dict[str, Any]]:
-    """Get PCA group parameters."""
-    return config.modeling.pca_group_params
