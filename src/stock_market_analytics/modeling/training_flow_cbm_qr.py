@@ -260,6 +260,18 @@ class TrainingFlow(FlowSpec):
                 y_upper=upper_bounds,
                 alpha=0.2,  # 80% prediction intervals
             )
+            
+            # Get full quantile predictions for pinball loss evaluation
+            # Apply transformations then get quantiles from model
+            xtest_transformed = self.pipeline.named_steps["transformations"].transform(xtest)
+            catboost_quantiles = self.pipeline.named_steps["model"].predict(xtest_transformed, return_full_quantiles=True)
+            quantile_metrics = evaluator.evaluate_quantiles(
+                y_true=ytest,
+                y_pred_quantiles=catboost_quantiles,
+                quantiles=self.config.modeling.quantiles
+            )
+            # Add pinball loss metrics to interval metrics
+            interval_metrics.update({k: v for k, v in quantile_metrics.items() if 'pinball' in k})
 
             print("\n📊 CatBoost Model Evaluation Metrics:")
             print("="*50)
@@ -280,6 +292,15 @@ class TrainingFlow(FlowSpec):
                 alpha=0.2,  # 80% prediction intervals
             )
             
+            # Add pinball loss for baseline model
+            baseline_quantile_metrics = evaluator.evaluate_quantiles(
+                y_true=ytest,
+                y_pred_quantiles=baseline_intervals,
+                quantiles=self.config.modeling.quantiles
+            )
+            # Add pinball loss metrics to baseline metrics
+            baseline_metrics.update({k: v for k, v in baseline_quantile_metrics.items() if 'pinball' in k})
+            
             print("\n📊 Baseline Model Evaluation Metrics:")
             print("="*50)
             for metric, value in baseline_metrics.items():
@@ -292,7 +313,17 @@ class TrainingFlow(FlowSpec):
             
             # Define which metrics are better when higher vs lower
             higher_is_better = {"coverage_probability"}
-            lower_is_better = {"interval_score", "mean_interval_width", "normalized_interval_width"}
+            lower_is_better = {
+                "interval_score", 
+                "mean_interval_width",
+                "normalized_interval_width",
+                "mean_pinball_loss",
+                "median_pinball_loss",
+                "max_pinball_loss",
+                "pinball_loss_q10",
+                "pinball_loss_q50",
+                "pinball_loss_q90",
+            }
             
             for metric in interval_metrics:
                 catboost_val = interval_metrics[metric]
