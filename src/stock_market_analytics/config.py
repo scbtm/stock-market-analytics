@@ -87,6 +87,9 @@ class ModelingConfig(BaseModel):
     time_span: int = Field(
         default=7 * 28, description="Weeks of historical data for validation/testing"
     )
+    fractions: tuple[float, float, float, float] = Field(
+        default=(0.6, 0.1, 0.2, 0.1), description="Train/val/cal/test split fractions"
+    )
 
     # Deprecated tuning parameters (no longer used since tuning flow was removed)
     timeout_mins: int = 10

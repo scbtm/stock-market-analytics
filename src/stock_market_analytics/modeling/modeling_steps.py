@@ -102,7 +102,8 @@ def prepare_modeling_data(
             date_col='date', 
             symbol_col='symbol', 
             feature_cols=config.modeling.features, 
-            target_col=config.modeling.target
+            target_col=config.modeling.target,
+            fractions=config.modeling.fractions,
         )
         
         # Validate that all splits have data
