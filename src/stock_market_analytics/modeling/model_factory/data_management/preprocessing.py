@@ -154,9 +154,9 @@ def _build_test_windows(
 
 # --------------------------------------- Public API --------------------------------------- #
 def make_holdout_splits(
+        df: pd.DataFrame,
         date_col: str,
         symbol_col: str,
-        df: pd.DataFrame,
         *,
         fractions: tuple[float, float, float, float] = (0.7, 0.10, 0.10, 0.10),
         cut_dates: Optional[tuple[pd.Timestamp, pd.Timestamp, pd.Timestamp]] = None,

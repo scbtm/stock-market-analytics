@@ -82,7 +82,7 @@ def prepare_modeling_data(
         Dictionary with keys 'features' and 'target'
     """
     # Get modeling sets
-    modeling_sets = get_modeling_sets(df, date_col='date', symbol_col='symbol', feature_cols=config.modeling.feature_cols, target_col=config.modeling.target_col)
+    modeling_sets = get_modeling_sets(df, date_col='date', symbol_col='symbol', feature_cols=config.modeling.features, target_col=config.modeling.target)
 
     return modeling_sets
 

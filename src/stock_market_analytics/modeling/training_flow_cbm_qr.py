@@ -38,10 +38,10 @@ class TrainingFlow(FlowSpec):
         """
         print("🚀 Starting CatBoost Quantile Regression Training Flow...")
 
-        config.modeling.validate()
-        print("✅ Configuration validated successfully")
+        print("✅ Configuration loaded successfully")
 
-        self.config = config.modeling
+        self.config = config
+        self.modeling_config = config.modeling
 
         self.next(self.load_data)
 
@@ -72,7 +72,7 @@ class TrainingFlow(FlowSpec):
 
     @step
     def split_data(self) -> None:
-        self.modeling_sets = modeling_steps.create_modeling_splits(self.df)
+        self.modeling_sets = modeling_steps.prepare_modeling_data(self.df)
         self.next(self.train_model)
 
     @step
@@ -124,8 +124,11 @@ class TrainingFlow(FlowSpec):
 
         #Remove early stopping params for final fit
         fit_params.pop("early_stopping_rounds", None)
+        
+        # Prefix fit_params for pipeline model step
+        pipeline_fit_params = {f"model__{k}": v for k, v in fit_params.items()}
 
-        pipeline.fit(xtrain, ytrain, **fit_params)
+        pipeline.fit(xtrain, ytrain, **pipeline_fit_params)
 
         self.pipeline = pipeline
 
