@@ -109,7 +109,7 @@ class CatBoostMultiQuantileModel(BaseEstimator, RegressorMixin, QuantileEstimato
 
         return self
 
-    def predict(self, X: Frame | Array) -> Array:
+    def predict(self, X: Frame | Array, return_full_quantiles: bool = False) -> Array:
         """Generate multi-quantile predictions.
 
         Parameters
@@ -119,7 +119,7 @@ class CatBoostMultiQuantileModel(BaseEstimator, RegressorMixin, QuantileEstimato
 
         Returns
         -------
-        predictions : ndarray of shape (n_samples, n_quantiles)
+        median_pred : ndarray of shape (n_samples,)
             Multi-quantile predictions
         """
         if self._model is None:
@@ -136,7 +136,13 @@ class CatBoostMultiQuantileModel(BaseEstimator, RegressorMixin, QuantileEstimato
         # Ensure monotonic quantile ordering
         predictions.sort(axis=1)
 
-        return predictions
+        if return_full_quantiles:
+            return predictions
+
+        median_idx = len(self.quantiles) // 2
+        median_pred = predictions[:, median_idx]
+
+        return median_pred
 
     def transform(self, X: Frame | Array) -> Array:
         """Alias for predict to enable transformer usage in pipelines."""
@@ -159,11 +165,7 @@ class CatBoostMultiQuantileModel(BaseEstimator, RegressorMixin, QuantileEstimato
         score : float
             R^2 score for median quantile prediction
         """
-        predictions = self.predict(X)
-
-        # Use median quantile (middle column) for scoring
-        median_idx = len(self.quantiles) // 2
-        median_pred = predictions[:, median_idx]
+        median_pred = self.predict(X)
 
         return r2_score(y, median_pred, sample_weight=sample_weight)
 

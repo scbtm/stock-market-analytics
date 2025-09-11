@@ -6,11 +6,10 @@ and provide standardized metrics for different modeling tasks.
 """
 
 import numpy as np
-from typing import Dict, List, Sequence
+from typing import Dict, Sequence
 
-from stock_market_analytics.modeling.model_factory.protocols import (
-    ModelEvaluator, QuantileEvaluator, Array
-)
+from stock_market_analytics.modeling.model_factory.protocols import (QuantileEvaluator, Array)
+
 from stock_market_analytics.modeling.model_factory.evaluation.evaluation_functions import (
     pinball_loss_vectorized,
     quantile_coverage,
@@ -124,7 +123,7 @@ class QuantileRegressionEvaluator(QuantileEvaluator):
         y_true: Array,
         y_lower: Array,
         y_upper: Array,
-        alpha: float = 0.1,
+        alpha: float = 0.2,
     ) -> dict[str, float]:
         """
         Evaluate prediction intervals.

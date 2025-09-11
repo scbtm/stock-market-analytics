@@ -29,6 +29,15 @@ from stock_market_analytics.modeling.model_factory.estimation.estimators import 
     CatBoostMultiQuantileModel,
 )
 
+from stock_market_analytics.modeling.model_factory.calibration.calibrators import (
+    QuantileConformalCalibrator,
+)
+
+from stock_market_analytics.modeling.model_factory.evaluation.evaluators import (
+    QuantileRegressionEvaluator,
+)
+
+
 def load_features_data(data_path: str) -> pd.DataFrame:
     """
     Load the features dataset for modeling.
@@ -123,3 +132,21 @@ def get_catboost_multiquantile_model(params:Optional[dict] = None) -> CatBoostMu
         params = config.modeling.cb_model_params
 
     return CatBoostMultiQuantileModel(**params)
+
+
+def get_calibrator() -> QuantileConformalCalibrator:
+
+    # Initialize conformal calibrator for 80% prediction intervals
+    alpha = 0.2  # 80% coverage
+    conformal_calibrator = QuantileConformalCalibrator(
+        alpha=alpha,
+        method="absolute"  # Could also use "normalized" with uncertainty estimates
+        )
+
+    return conformal_calibrator
+
+def get_evaluator() -> QuantileRegressionEvaluator:
+
+    quantiles = config.modeling.quantiles
+
+    return QuantileRegressionEvaluator(quantiles=quantiles)

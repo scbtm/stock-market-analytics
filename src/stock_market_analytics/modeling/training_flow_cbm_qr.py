@@ -76,29 +76,6 @@ class TrainingFlow(FlowSpec):
         self.next(self.train_model)
 
     @step
-    def prefit_pipeline(self) -> None:
-        """
-        Pre-fit the data transformation pipeline.
-
-        Fits the data transformation pipeline on the training data
-        and transforms all datasets (train, val, test) accordingly.
-        """
-        print("🔧 Pre-fitting data transformation pipeline...")
-
-        modeling_sets = self.modeling_sets
-
-        transformations = modeling_steps.get_adhoc_transforms_pipeline()
-
-        xtrain, _ = modeling_sets["train"]
-
-        transformations.fit(xtrain)  # Fit PCA on training data only
-
-        self.transformations = transformations
-
-        self.next(self.train_model) 
-
-
-    @step
     def train_model(self) -> None:
         # Set up early stopping parameters
         fit_params = config.modeling.cb_fit_params.copy()
@@ -156,16 +133,63 @@ class TrainingFlow(FlowSpec):
 
     @step
     def calibrate_model(self) -> None:
-        #TODO implement calibration step
 
+        modeling_sets = self.modeling_sets
+
+        xcal, ycal = modeling_sets["cal"]
+
+        pipeline = self.pipeline
+
+        y_pred_cal = pipeline.predict(xcal)
+
+        conformal_calibrator = modeling_steps.get_calibrator()
+
+        # Fit calibrator using calibration set
+        conformal_calibrator.fit(y_pred_cal=y_pred_cal, y_true_cal=ycal)
+
+        pipeline = Pipeline(steps=[
+            ("transformations", pipeline.named_steps["transformations"]),
+            ("model", pipeline.named_steps["model"]),
+            ("calibrator", conformal_calibrator),
+        ])
+
+        print(f"Conformal calibrator fitted")
+        print(f"Learned radius (conformity score quantile): {conformal_calibrator.radius_:.4f}")
+        self.pipeline = pipeline
         self.next(self.evaluate_model)
 
     @step
     def evaluate_model(self) -> None:
-        #TODO implement evaluation step
+
+        evaluator = modeling_steps.get_evaluator()
+
+        modeling_sets = self.modeling_sets
+        xtest, ytest = modeling_sets["test"]
+
+        # Generate prediction intervals for test set
+        intervals_test = self.pipeline.predict(xtest)
+        lower_bounds = intervals_test[:, 0]
+        upper_bounds = intervals_test[:, 1]
+
+        # Evaluate the calibrated intervals
+        interval_metrics = evaluator.evaluate_intervals(
+            y_true=ytest,
+            y_lower=lower_bounds,
+            y_upper=upper_bounds,
+            alpha=0.2,  # 80% prediction intervals
+        )
+
+        print("Calibrated Interval Evaluation Metrics:")
+        for metric, value in interval_metrics.items():
+            print(f"  {metric}: {value:.4f}")
+
         self.next(self.end)
 
     @step
     def end(self) -> None:
         # Finalize the training flow.
         print("🏁 Training flow completed successfully.")
+
+
+if __name__ == "__main__":
+    TrainingFlow()
