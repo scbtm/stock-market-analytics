@@ -155,6 +155,9 @@ class TrainingFlow(FlowSpec):
             pipeline.fit(xtrain_combined, ytrain_combined, **pipeline_fit_params)
             print("✅ Model training completed successfully")
 
+            print("Feature importance analysis:")
+            modeling_steps.analyze_feature_importance(pipeline.named_steps["model"])
+
             self.pipeline = pipeline
             
         except Exception as e:

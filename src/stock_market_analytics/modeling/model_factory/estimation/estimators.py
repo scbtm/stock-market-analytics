@@ -179,6 +179,11 @@ class CatBoostMultiQuantileModel(BaseEstimator, RegressorMixin, QuantileEstimato
         if self._model is None:
             raise ValueError("Model must be fitted to access feature importances")
         return self._model.feature_importances_
+    
+    @property
+    def feature_names_(self):
+        """Feature names seen during fit."""
+        return self._model.feature_names_ if self._model else None
 
     @property
     def best_iteration_(self):
@@ -225,6 +230,21 @@ class CatBoostMultiQuantileModel(BaseEstimator, RegressorMixin, QuantileEstimato
 
         return self
     
+    def get_feature_importance(self, **kwargs: dict) -> pd.DataFrame:
+        """Get feature importances from the trained model.
+        Parameters
+        ----------
+        **kwargs : dict
+            Additional parameters for CatBoost's get_feature_importance method.
+        Returns
+        -------
+        importances : Array
+            Feature importances.
+        """
+        if self._model is None:
+            raise ValueError("Model must be fitted to access feature importances")
+        return self._model.get_feature_importance(**kwargs | {"prettified": True}) #type: ignore - this will always be a DF
+
 
 # ---------------------------------------------------------------------------------------
 # Baseline Estimator

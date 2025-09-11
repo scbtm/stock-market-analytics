@@ -96,6 +96,7 @@ class ModelingConfig(BaseModel):
     # Feature groups
     features: list[str] = Field(
         default=[
+            "symbol",
             "month",
             "day_of_week",
             "day_of_year",

@@ -165,7 +165,7 @@ def get_adhoc_transforms_pipeline() -> Pipeline:
 
         scalers = ColumnTransformer(
             transformers=_scalers,
-            remainder="drop",  # Drop any features not specified in the transformers
+            remainder="passthrough",  # Keep any features not specified in the transformers
             verbose_feature_names_out="{feature_name}__scaled",
             verbose=False,
         ).set_output(transform="pandas")
@@ -179,7 +179,7 @@ def get_adhoc_transforms_pipeline() -> Pipeline:
         
         reducers = ColumnTransformer(
             transformers=_reducers,
-            remainder="drop",  # Drop any features not specified in the transformers
+            remainder="passthrough",  # Keep any features not specified in the transformers
             verbose_feature_names_out=True,
             verbose=False,
         ).set_output(transform="pandas")
@@ -221,6 +221,28 @@ def get_catboost_multiquantile_model(params: Optional[dict] = None) -> CatBoostM
         
     except Exception as e:
         raise ValueError(f"Error creating CatBoost model: {str(e)}") from e
+    
+
+def analyze_feature_importance(model: CatBoostMultiQuantileModel) -> None:
+    """
+    Analyze and return feature importance from the trained CatBoost model.
+
+    Args:
+        model: Trained CatBoostMultiQuantileModel instance
+
+    Returns:
+        DataFrame containing feature importance scores
+    """
+    try:
+        feature_importance = model.get_feature_importance()
+        if feature_importance is None or len(feature_importance) == 0:
+            raise ValueError("Feature importance is empty or not available")
+        print("✅ Feature importance analysis completed successfully")
+
+        print(feature_importance)
+
+    except Exception as e:
+        raise ValueError(f"Error analyzing feature importance: {str(e)}") from e
 
 
 def get_calibrator() -> QuantileConformalCalibrator:
