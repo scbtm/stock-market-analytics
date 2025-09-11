@@ -14,6 +14,12 @@ from metaflow import FlowSpec, step
 from stock_market_analytics.modeling import modeling_steps
 from stock_market_analytics.config import config
 
+import wandb
+from wandb.integration.metaflow import wandb_log
+wandb.login(key=config.wandb_key)
+
+
+
 class TrainingFlow(FlowSpec):
     """
     A Metaflow pipeline for training CatBoost quantile regression models.
@@ -354,6 +360,7 @@ class TrainingFlow(FlowSpec):
                 print(f"     Baseline: {baseline_val:.4f}")
                 print(f"     {emoji} {comparison_word}: {difference:+.4f} ({difference_pct:+.1f}%)")
                 print()
+                
             print("="*60)
             
             # Store metrics for potential downstream use
@@ -366,6 +373,44 @@ class TrainingFlow(FlowSpec):
             print(f"❌ Error during model evaluation: {e}")
             raise
 
+        self.next(self.log_artifacts)
+
+    @wandb_log(datasets=True, models=True, others=True, settings=wandb.Settings(project="stock-market-analytics", run_job_type="train-model"))
+    @step
+    def log_artifacts(self) -> None:
+        """Log datasets, models, and metrics to Weights & Biases.
+        Becuase wandb_log decorator is used, no explicit logging code is needed here, only storing in self what we want to log.
+        """
+        print("📦 Logging artifacts and metrics to Weights & Biases...")
+
+        #Select artifacts to log
+
+        # Artifacts
+        pipeline = self.pipeline
+        self.pipeline = pipeline
+
+        modeling_config = self.config.modeling
+        self.modeling_config = modeling_config
+
+        feature_importance = pipeline.named_steps["model"].get_feature_importance(prettified=True)
+        self.feature_importance = feature_importance
+
+        # Metrics
+        model_metrics = self.evaluation_metrics['catboost']
+        baseline_metrics = self.evaluation_metrics['baseline']
+        self.model_metrics = model_metrics
+        self.baseline_metrics = baseline_metrics
+
+        # Datasets
+        xtrain, ytrain = self.modeling_sets["train"]
+        xval, yval = self.modeling_sets["val"]
+        xcal, ycal = self.modeling_sets["cal"]
+        xtest, ytest = self.modeling_sets["test"]
+        self.train_set = pd.concat([xtrain, ytrain], axis=1)
+        self.val_set = pd.concat([xval, yval], axis=1)
+        self.cal_set = pd.concat([xcal, ycal], axis=1)
+        self.test_set = pd.concat([xtest, ytest], axis=1)
+        print("✅ Artifacts and metrics logged successfully")
         self.next(self.end)
 
     @step
@@ -379,6 +424,7 @@ class TrainingFlow(FlowSpec):
         print("✅ Conformal calibration applied")
         print("✅ Baseline model trained")
         print("✅ Model evaluation and comparison completed")
+        print("✅ Artifacts and metrics logged to Weights & Biases")
 
 if __name__ == "__main__":
     TrainingFlow()
