@@ -27,6 +27,7 @@ from stock_market_analytics.modeling.model_factory.data_management.preprocessing
 
 from stock_market_analytics.modeling.model_factory.estimation.estimators import (
     CatBoostMultiQuantileModel,
+    HistoricalMultiQuantileBaseline,
 )
 
 from stock_market_analytics.modeling.model_factory.calibration.calibrators import (
@@ -272,3 +273,72 @@ def get_evaluator() -> QuantileRegressionEvaluator:
         
     except Exception as e:
         raise ValueError(f"Error creating quantile regression evaluator: {str(e)}") from e
+
+
+def get_baseline_model(params: Optional[dict] = None) -> HistoricalMultiQuantileBaseline:
+    """
+    Create a historical multi-quantile baseline model.
+    
+    Args:
+        params: Optional model parameters. If None, uses config defaults.
+
+    Returns:
+        Configured HistoricalMultiQuantileBaseline instance
+        
+    Raises:
+        ValueError: If model parameters are invalid
+    """
+    try:
+        if not params:
+            # Use same quantiles as the main model for fair comparison
+            quantiles = config.modeling.quantiles
+            params = {"quantiles": quantiles, "group_col": None}
+            
+        # Validate quantiles parameter if present
+        if 'quantiles' in params:
+            quantiles = params['quantiles']
+            if not isinstance(quantiles, (list, tuple)) or len(quantiles) == 0:
+                raise ValueError("Quantiles must be a non-empty list or tuple")
+            if any(q <= 0 or q >= 1 for q in quantiles):
+                raise ValueError("All quantiles must be between 0 and 1 (exclusive)")
+
+        return HistoricalMultiQuantileBaseline(**params)
+        
+    except Exception as e:
+        raise ValueError(f"Error creating baseline model: {str(e)}") from e
+
+
+def train_baseline_model(
+    modeling_sets: dict[str, tuple[pd.DataFrame, pd.Series]]
+) -> HistoricalMultiQuantileBaseline:
+    """
+    Train the baseline model on training data.
+    
+    Args:
+        modeling_sets: Dictionary containing train/val/cal/test splits
+        
+    Returns:
+        Fitted baseline model
+        
+    Raises:
+        ValueError: If training fails
+    """
+    try:
+        # Get training data
+        xtrain, ytrain = modeling_sets["train"]
+        xval, yval = modeling_sets["val"]
+        
+        # Combine train and validation data for baseline training
+        # (no need for early stopping with this simple model)
+        xtrain_combined = pd.concat([xtrain, xval], axis=0)
+        ytrain_combined = pd.concat([ytrain, yval], axis=0)
+        
+        # Create and train baseline model
+        baseline_model = get_baseline_model()
+        baseline_model.fit(xtrain_combined, ytrain_combined)
+        
+        return baseline_model
+        
+    except Exception as e:
+        raise ValueError(f"Error training baseline model: {str(e)}") from e
+

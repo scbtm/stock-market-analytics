@@ -82,7 +82,7 @@ class TrainingFlow(FlowSpec):
         self.modeling_sets = modeling_steps.prepare_modeling_data(self.df)
         
         # Print data split information
-        for split_name, (X, y) in self.modeling_sets.items():
+        for split_name, (X, _) in self.modeling_sets.items():
             print(f"📊 {split_name.upper()} set: {X.shape[0]} samples, {X.shape[1]} features")
             
         print("✅ Data splitting completed successfully")
@@ -202,6 +202,26 @@ class TrainingFlow(FlowSpec):
             print(f"❌ Error during model calibration: {e}")
             raise
             
+        self.next(self.train_baseline_model)
+
+    @step
+    def train_baseline_model(self) -> None:
+        """Train the baseline model for comparison."""
+        print("📊 Training baseline model for comparison...")
+        
+        try:
+            print("🔧 Initializing historical quantile baseline...")
+            baseline_model = modeling_steps.train_baseline_model(self.modeling_sets)
+            
+            print("✅ Baseline model training completed")
+            print(f"📈 Baseline quantiles: {baseline_model.quantiles_}")
+            
+            self.baseline_model = baseline_model
+            
+        except Exception as e:
+            print(f"❌ Error during baseline model training: {e}")
+            raise
+            
         self.next(self.evaluate_model)
 
     @step
@@ -238,14 +258,75 @@ class TrainingFlow(FlowSpec):
                 alpha=0.2,  # 80% prediction intervals
             )
 
-            print("\n📊 Calibrated Interval Evaluation Metrics:")
+            print("\n📊 CatBoost Model Evaluation Metrics:")
             print("="*50)
             for metric, value in interval_metrics.items():
                 print(f"  📌 {metric}: {value:.4f}")
             print("="*50)
             
+            # Evaluate baseline model
+            print("\n📊 Evaluating baseline model...")
+            baseline_intervals = self.baseline_model.predict(xtest, return_full_quantiles=True)
+            baseline_lower = baseline_intervals[:, 0]  # First quantile
+            baseline_upper = baseline_intervals[:, -1]  # Last quantile
+            
+            baseline_metrics = evaluator.evaluate_intervals(
+                y_true=ytest,
+                y_lower=baseline_lower,
+                y_upper=baseline_upper,
+                alpha=0.2,  # 80% prediction intervals
+            )
+            
+            print("\n📊 Baseline Model Evaluation Metrics:")
+            print("="*50)
+            for metric, value in baseline_metrics.items():
+                print(f"  📌 {metric}: {value:.4f}")
+            print("="*50)
+            
+            # Model comparison
+            print("\n🆚 Model Comparison (CatBoost vs Baseline):")
+            print("="*60)
+            
+            # Define which metrics are better when higher vs lower
+            higher_is_better = {"coverage_probability"}
+            lower_is_better = {"interval_score", "mean_interval_width", "normalized_interval_width"}
+            
+            for metric in interval_metrics:
+                catboost_val = interval_metrics[metric]
+                baseline_val = baseline_metrics[metric]
+                difference = catboost_val - baseline_val
+                
+                if baseline_val != 0:
+                    difference_pct = (difference / abs(baseline_val)) * 100
+                else:
+                    difference_pct = 0
+                
+                # Determine if this is an improvement
+                if metric in higher_is_better:
+                    is_improvement = difference > 0
+                    comparison_word = "Improvement" if is_improvement else "Degradation"
+                    emoji = "📈" if is_improvement else "📉"
+                elif metric in lower_is_better:
+                    is_improvement = difference < 0
+                    comparison_word = "Improvement" if is_improvement else "Degradation" 
+                    emoji = "📈" if is_improvement else "📉"
+                else:
+                    # For unknown metrics, just show the difference without judgment
+                    comparison_word = "Difference"
+                    emoji = "📊"
+                
+                print(f"  🎯 {metric}:")
+                print(f"     CatBoost: {catboost_val:.4f}")
+                print(f"     Baseline: {baseline_val:.4f}")
+                print(f"     {emoji} {comparison_word}: {difference:+.4f} ({difference_pct:+.1f}%)")
+                print()
+            print("="*60)
+            
             # Store metrics for potential downstream use
-            self.evaluation_metrics = interval_metrics
+            self.evaluation_metrics = {
+                'catboost': interval_metrics,
+                'baseline': baseline_metrics
+            }
             
         except Exception as e:
             print(f"❌ Error during model evaluation: {e}")
@@ -260,20 +341,10 @@ class TrainingFlow(FlowSpec):
         print("\n📋 Flow Summary:")
         print("="*40)
         print("✅ Data loaded and processed")
-        print("✅ Model trained with early stopping")
+        print("✅ CatBoost model trained with early stopping")
         print("✅ Conformal calibration applied")
-        print("✅ Model evaluation completed")
-        
-        if hasattr(self, 'evaluation_metrics'):
-            # Find the most relevant metric to highlight
-            coverage_metrics = {k: v for k, v in self.evaluation_metrics.items() if 'coverage' in k.lower()}
-            if coverage_metrics:
-                best_metric = max(coverage_metrics.items(), key=lambda x: x[1])
-                print(f"🎯 Key result: {best_metric[0]} = {best_metric[1]:.4f}")
-        
-        print("="*40)
-        print("🚀 Ready for deployment or further analysis!")
-
+        print("✅ Baseline model trained")
+        print("✅ Model evaluation and comparison completed")
 
 if __name__ == "__main__":
     TrainingFlow()

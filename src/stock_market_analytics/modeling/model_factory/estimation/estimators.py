@@ -6,11 +6,15 @@ to ensure they work seamlessly with sklearn pipelines while providing
 additional functionality for financial modeling.
 """
 
-from typing import Any, Sequence
+from __future__ import annotations
+
+from typing import Any, Sequence, Dict, Hashable
 
 import numpy as np
+import pandas as pd
 from sklearn.base import BaseEstimator, RegressorMixin
 from sklearn.metrics import r2_score
+
 from stock_market_analytics.modeling.model_factory.protocols import (
     QuantileEstimator, Array, Frame, Series
 )
@@ -220,3 +224,196 @@ class CatBoostMultiQuantileModel(BaseEstimator, RegressorMixin, QuantileEstimato
                 self.catboost_params[key] = value
 
         return self
+    
+
+# ---------------------------------------------------------------------------------------
+# Baseline Estimator
+# ---------------------------------------------------------------------------------------
+
+class HistoricalMultiQuantileBaseline(BaseEstimator, RegressorMixin, QuantileEstimator):
+    """
+    Naive multi-quantile baseline that predicts unconditional (or per-group) empirical
+    quantiles estimated from the training targets.
+
+    Parameters
+    ----------
+    quantiles : sequence of float, optional (default: [0.1, 0.25, 0.5, 0.75, 0.9])
+        Quantiles to predict in (0,1). They will be sorted ascending internally.
+    group_col : str or None, optional (default: None)
+        If provided, compute/store quantiles per group using X[group_col] at fit time.
+        During predict, each row uses its group's quantiles; unseen groups fall back to
+        global quantiles.
+    """
+
+    def __init__(
+        self,
+        quantiles: Sequence[float] | None = None,
+        group_col: str | None = None,
+    ):
+        self.quantiles = list(quantiles) if quantiles else [0.1, 0.25, 0.5, 0.75, 0.9]
+        self.group_col = group_col
+
+        # Fitted attributes
+        self.quantiles_: list[float] | None = None
+        self.global_quantiles_: np.ndarray | None = None          # shape (n_q,)
+        self.group_quantiles_: Dict[Hashable, np.ndarray] | None = None  # each (n_q,)
+        self.n_features_in_: int | None = None
+        self.feature_names_in_: list[str] | None = None
+        self._is_fitted: bool = False
+
+    # ---- sklearn API ----
+    def fit(
+        self,
+        X: Frame | Array,
+        y: Series | Array,
+        **fit_params: Any,
+    ) -> "HistoricalMultiQuantileBaseline":
+        """
+        Fit by computing empirical quantiles of y (globally or per group).
+        """
+        _ = fit_params  # unused, kept for compatibility with other estimators
+
+        y_arr = self._to_1d_numpy(y)
+        q_sorted = np.sort(np.asarray(self.quantiles, dtype=float))
+        self._validate_quantiles(q_sorted)
+
+        # Basic metadata (not strictly needed but nice for consistency)
+        if hasattr(X, "shape"):
+            self.n_features_in_ = X.shape[1] if len(np.shape(X)) == 2 else None
+        if hasattr(X, "columns"):
+            self.feature_names_in_ = list(X.columns)
+
+        # Global quantiles
+        self.global_quantiles_ = np.quantile(y_arr, q_sorted)
+
+        # Optional per-group quantiles
+        if self.group_col is not None:
+            if not isinstance(X, pd.DataFrame):
+                raise ValueError(
+                    f"group_col='{self.group_col}' requires X to be a pandas DataFrame."
+                )
+            if self.group_col not in X.columns:
+                raise ValueError(
+                    f"group_col '{self.group_col}' not found in X columns."
+                )
+
+            df = pd.DataFrame(
+                {self.group_col: X[self.group_col].values, "__y__": y_arr}
+            )
+            self.group_quantiles_ = {}
+            for g, sub in df.groupby(self.group_col, sort=False, observed=True):
+                self.group_quantiles_[g] = np.quantile(sub["__y__"].to_numpy(), q_sorted)
+        else:
+            self.group_quantiles_ = None
+
+        self.quantiles_ = q_sorted.tolist()
+        self._is_fitted = True
+        return self
+
+    def predict(self, X: Frame | Array, return_full_quantiles: bool = False) -> Array:
+        """
+        Predict quantiles by repeating the (global or per-group) fitted quantiles.
+
+        Parameters
+        ----------
+        X : array-like or DataFrame of shape (n_samples, n_features)
+        return_full_quantiles : bool, default=False
+            If True, returns array of shape (n_samples, n_quantiles).
+            If False, returns the median quantile (n_samples,).
+
+        Returns
+        -------
+        preds : ndarray
+            Median predictions or full quantile matrix.
+        """
+        self._check_is_fitted()
+
+        n_samples = self._num_rows(X)
+        q_vec = np.asarray(self.quantiles_, dtype=float)
+        n_q = q_vec.size
+
+        if self.group_col is None:
+            Q = np.tile(self.global_quantiles_[None, :], (n_samples, 1))
+        else:
+            if not isinstance(X, pd.DataFrame):
+                raise ValueError(
+                    f"group_col='{self.group_col}' requires X to be a pandas DataFrame."
+                )
+            if self.group_col not in X.columns:
+                raise ValueError(
+                    f"group_col '{self.group_col}' not found in X columns."
+                )
+            groups = X[self.group_col].values
+            Q = np.empty((n_samples, n_q), dtype=float)
+            for i, g in enumerate(groups):
+                if g in self.group_quantiles_:
+                    Q[i, :] = self.group_quantiles_[g]
+                else:
+                    # Fallback to global if unseen group at inference time
+                    Q[i, :] = self.global_quantiles_
+
+        # Ensure non-crossing (should already be sorted, but just in case)
+        Q.sort(axis=1)
+
+        if return_full_quantiles:
+            return Q
+
+        median_idx = n_q // 2
+        return Q[:, median_idx]
+
+    def transform(self, X: Frame | Array) -> Array:
+        """Alias for predict to enable transformer usage in pipelines."""
+        return self.predict(X)
+
+    def score(self, X: Frame | Array, y: Series | Array, sample_weight: Any = None) -> float:
+        """R² of median quantile (same behavior as your CatBoost wrapper)."""
+        y_arr = self._to_1d_numpy(y)
+        y_hat = self.predict(X)
+        return r2_score(y_arr, y_hat, sample_weight=sample_weight)
+
+    # ---- sklearn plumbing ----
+    def get_params(self, deep: bool = True) -> dict[str, Any]:
+        return {"quantiles": self.quantiles, "group_col": self.group_col}
+
+    def set_params(self, **params: Any) -> "HistoricalMultiQuantileBaseline":
+        for k, v in params.items():
+            setattr(self, k, v)
+        return self
+
+    # ---- helpers ----
+    @staticmethod
+    def _to_1d_numpy(y: Series | Array) -> np.ndarray:
+        if isinstance(y, (pd.Series, pd.DataFrame)):
+            y = np.asarray(y).ravel()
+        else:
+            y = np.asarray(y).ravel()
+        if y.ndim != 1:
+            raise ValueError("y must be 1D.")
+        return y
+
+    @staticmethod
+    def _validate_quantiles(q: np.ndarray) -> None:
+        if q.size == 0:
+            raise ValueError("quantiles must be non-empty.")
+        if np.any((q <= 0) | (q >= 1)):
+            raise ValueError("quantiles must be in the open interval (0, 1).")
+        if len(np.unique(q)) != len(q):
+            raise ValueError("quantiles must be unique.")
+
+    @staticmethod
+    def _num_rows(X: Frame | Array) -> int:
+        if hasattr(X, "shape"):
+            return int(X.shape[0])
+        # Fall back to len()
+        return len(X)
+
+    def _check_is_fitted(self) -> None:
+        if not self._is_fitted or self.global_quantiles_ is None:
+            raise ValueError("Estimator is not fitted yet. Call 'fit' first.")
+
+    # Optional for parity with your CatBoost wrapper
+    @property
+    def feature_importances_(self):
+        raise AttributeError(
+            "HistoricalMultiQuantileBaseline has no feature_importances_."
+        )
