@@ -147,6 +147,12 @@ def crps_from_quantiles(
 def interval_score(
     y_true: np.ndarray, y_lower: np.ndarray, y_upper: np.ndarray, alpha: float = 0.1
 ) -> float:
+    
+    """Compute the interval score for prediction intervals.
+    The interval score is a proper scoring rule for evaluating prediction intervals.
+    It balances the width of the interval and penalties for observations falling outside the interval.
+    A good score is low, with a minimum of the average interval width when all observations are covered.
+    """
     if not (0.0 < alpha < 1.0):
         raise ValueError("alpha must be in (0, 1).")
     y_true = np.asarray(y_true).reshape(-1)
@@ -192,6 +198,7 @@ def mean_interval_width(y_lower: np.ndarray, y_upper: np.ndarray) -> float:
 def normalized_interval_width(
     y_lower: np.ndarray, y_upper: np.ndarray, y_true: np.ndarray
 ) -> float:
+    
     y_lower = np.asarray(y_lower).reshape(-1)
     y_upper = np.asarray(y_upper).reshape(-1)
     y_true = np.asarray(y_true).reshape(-1)
@@ -202,6 +209,7 @@ def normalized_interval_width(
     width = y_upper - y_lower
     denom = float(np.std(y_true))
     if not np.isfinite(denom) or denom <= 0.0:
+        print("Warning: Non-finite or zero standard deviation for y_true.")
         return 0.0 if np.allclose(width, 0.0) else float("inf")
     return float(np.mean(width) / denom)
 

@@ -58,7 +58,11 @@ def load_features_data(data_path: str) -> pd.DataFrame:
         raise FileNotFoundError(f"Features file not found: {features_file}")
 
     try:
+        # load features data
         df = pd.read_parquet(features_file)
+
+        #drop nulls in target column
+        df = df.dropna(subset=[config.modeling.target])
 
         if df.empty:
             raise ValueError("Features file is empty")
