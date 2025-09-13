@@ -59,7 +59,7 @@ def download_artifacts() -> tuple[str, str, str, str]:
     api = wandb.Api(api_key=os.environ.get("WANDB_API_KEY"))
     model_name: str = os.environ.get("MODEL_NAME") or "pipeline:latest"
     model_version: str = model_name.split(':')[1] if ':' in model_name else 'latest'
-    dataset_name: str = "test_set:" + model_version
+    dataset_name: str = "val_set:" + model_version
 
     # Reference the artifact by entity/project/name:version or :latest
     model = api.artifact(f"san-cbtm/stock-market-analytics/{model_name}", type="model")
@@ -182,31 +182,66 @@ def get_performance_trends(y_true: pd.Series,
     return quantile_performance_trends(y_true.values, pred_array, quantiles, dates.values, window_size)
 
 
-# PLOTS
+# =========================
+# PLOTS & REPORTING HELPERS
+# =========================
+import io, base64
 
-def plot_drift_metrics(drift_results: dict,
-                       save_path: str = None,
-                       figsize: tuple = (15, 10)) -> None:
+def _fig_to_base64(fig) -> str: # type: ignore
+    """Encode a Matplotlib figure as base64 PNG (for self-contained HTML)."""
+    buff = io.BytesIO()
+    fig.savefig(buff, format="png", dpi=300, bbox_inches="tight")
+    plt.close(fig)
+    buff.seek(0)
+    return base64.b64encode(buff.read()).decode("ascii")
+
+def _render_figure(fig, save_path: str | None, return_image: bool) -> str | None: # type: ignore
+    """Save/show/return-image without changing prior behavior."""
+    img_b64 = None
+    if save_path:
+        fig.savefig(save_path, dpi=300, bbox_inches="tight")
+    if return_image:
+        img_b64 = _fig_to_base64(fig)
+    else:
+        plt.show()
+        plt.close(fig)
+    return img_b64
+
+# =========================
+# PLOTS
+# =========================
+
+def plot_drift_metrics(
+    drift_results: dict,
+    save_path: str | None = None,
+    figsize: tuple = (15, 10),
+    return_image: bool = False,
+) -> str | None:
     """
-    Create comprehensive visualizations for drift detection results.
+    Create visualizations for drift detection results.
+
+    If return_image=True, returns a base64-encoded PNG string; otherwise shows/saves the figure.
     """
-    # Determine the type of drift results and plot accordingly
     if "per_feature" in drift_results:
-        _plot_covariate_drift(drift_results, save_path, figsize)
+        return _plot_covariate_drift(drift_results, save_path, figsize, return_image)
     elif "per_quantile" in drift_results:
-        _plot_prediction_drift(drift_results, save_path, figsize)
+        return _plot_prediction_drift(drift_results, save_path, figsize, return_image)
     elif "distribution_tests" in drift_results:
-        _plot_target_drift(drift_results, save_path, figsize)
+        return _plot_target_drift(drift_results, save_path, figsize, return_image)
     else:
         raise ValueError("Unknown drift results format")
 
-
-def _plot_covariate_drift(drift_results: dict, save_path: str = None, figsize: tuple = (15, 10)):
+def _plot_covariate_drift(
+    drift_results: dict,
+    save_path: str | None = None,
+    figsize: tuple = (15, 10),
+    return_image: bool = False,
+) -> str | None:
     """Plot covariate drift metrics."""
     features = list(drift_results["per_feature"].keys())
     if not features:
         print("No features to plot")
-        return
+        return None
 
     n_features = len(features)
     min_height_per_feature = 0.4
@@ -215,66 +250,79 @@ def _plot_covariate_drift(drift_results: dict, save_path: str = None, figsize: t
 
     if n_features > 20:
         feature_psi_pairs = [(f, drift_results["per_feature"][f]["psi"]) for f in features]
-        feature_psi_pairs.sort(key=lambda x: x[1], reverse=True)
+        feature_psi_pairs.sort(key=lambda x: (x[1] if x[1] is not None else -np.inf), reverse=True)
         top_features = [f for f, _ in feature_psi_pairs[:20]]
         print(f"Showing top 20 features out of {n_features} total features (sorted by PSI)")
         features = top_features
 
     psi_values = [drift_results["per_feature"][f]["psi"] for f in features]
-    ks_stats = [drift_results["per_feature"][f]["ks_statistic"] for f in features]
-    wd_values = [drift_results["per_feature"][f]["wasserstein_distance"] for f in features]
+    ks_stats   = [drift_results["per_feature"][f]["ks_statistic"] for f in features]
+    wd_values  = [drift_results["per_feature"][f]["wasserstein_distance"] for f in features]
+    js_values  = [drift_results["per_feature"][f].get("jensen_shannon_distance", np.nan) for f in features]
 
-    fig, axes = plt.subplots(2, 2, figsize=adjusted_figsize)
+    fig, axes = plt.subplots(2, 2, figsize=adjusted_figsize, constrained_layout=True)
     fig.suptitle('Covariate Drift Detection Results', fontsize=16, fontweight='bold')
 
-    label_fontsize = max(8, min(12, 200 // len(features)))
+    label_fontsize = max(8, min(12, 200 // max(1, len(features))))
 
     # PSI plot with traffic-light colors
     colors = [
-        MONITORING_COLORS['no_drift'] if x < 0.1
-        else MONITORING_COLORS['minor_drift'] if x < 0.2
+        MONITORING_COLORS['no_drift'] if (x is not None and x < 0.1)
+        else MONITORING_COLORS['minor_drift'] if (x is not None and x < 0.2)
         else MONITORING_COLORS['major_drift'] for x in psi_values
     ]
     axes[0, 0].barh(features, psi_values, color=colors, height=0.8)
     axes[0, 0].axvline(x=0.1, color=MONITORING_COLORS['minor_drift'], linestyle='--', alpha=0.7, label='Minor drift')
     axes[0, 0].axvline(x=0.2, color=MONITORING_COLORS['major_drift'], linestyle='--', alpha=0.7, label='Major drift')
-    axes[0, 0].set_xlabel('PSI Value')
+    axes[0, 0].set_xlabel('PSI')
     axes[0, 0].set_title('Population Stability Index (PSI)')
     axes[0, 0].tick_params(axis='y', labelsize=label_fontsize)
+    axes[0, 0].grid(axis='x', alpha=0.2)
     axes[0, 0].legend()
 
-    # KS statistic plot (analytical blue)
+    # KS statistic
     axes[0, 1].barh(features, ks_stats, color=MONITORING_COLORS['secondary'], height=0.8)
     axes[0, 1].set_xlabel('KS Statistic')
-    axes[0, 1].set_title('Kolmogorov-Smirnov Statistic')
+    axes[0, 1].set_title('KS Statistic by Feature')
     axes[0, 1].tick_params(axis='y', labelsize=label_fontsize)
+    axes[0, 1].grid(axis='x', alpha=0.2)
 
-    # Wasserstein distance plot (primary blue)
+    # Wasserstein distance
     axes[1, 0].barh(features, wd_values, color=MONITORING_COLORS['primary'], height=0.8)
     axes[1, 0].set_xlabel('Wasserstein Distance')
-    axes[1, 0].set_title('Wasserstein Distance')
+    axes[1, 0].set_title('Wasserstein Distance by Feature')
     axes[1, 0].tick_params(axis='y', labelsize=label_fontsize)
+    axes[1, 0].grid(axis='x', alpha=0.2)
 
+    # Summary text (also includes JS distance summary)
     agg = drift_results["aggregate"]
-    summary_text = f"""Aggregate Metrics:
-Mean PSI: {agg.get('mean_psi', 'N/A'):.3f}
-Max PSI: {agg.get('max_psi', 'N/A'):.3f}
-Drifted Features: {agg.get('fraction_drifted_features_psi', 0):.1%}
-Features Analyzed: {agg.get('n_features_analyzed', 0)}"""
+    try:
+        mean_js = float(np.nanmean(js_values))
+        max_js  = float(np.nanmax(js_values))
+    except Exception:
+        mean_js, max_js = np.nan, np.nan
 
-    axes[1, 1].text(0.1, 0.5, summary_text, transform=axes[1, 1].transAxes,
-                    fontsize=12, verticalalignment='center', fontfamily='monospace')
+    summary_text = (
+        f"Aggregate Metrics:\n"
+        f"Mean PSI: {agg.get('mean_psi', np.nan):.3f}\n"
+        f"Max PSI: {agg.get('max_psi', np.nan):.3f}\n"
+        f"Drifted Features (PSI>0.2): {agg.get('fraction_drifted_features_psi', 0):.1%}\n"
+        f"Mean Wasserstein: {agg.get('mean_wasserstein', np.nan):.3f}\n"
+        f"Mean JS distance: {mean_js:.3f} | Max JS: {max_js:.3f}\n"
+        f"Features Analyzed: {agg.get('n_features_analyzed', 0)}"
+    )
+    axes[1, 1].text(0.05, 0.5, summary_text, transform=axes[1, 1].transAxes,
+                    fontsize=11, va='center', family='monospace')
     axes[1, 1].axis('off')
 
-    plt.tight_layout()
-    plt.subplots_adjust(left=0.25, right=0.95)
+    return _render_figure(fig, save_path, return_image)
 
-    if save_path:
-        plt.savefig(save_path, dpi=300, bbox_inches='tight')
-    plt.show()
-
-
-def _plot_prediction_drift(drift_results: dict, save_path: str = None, figsize: tuple = (12, 8)):
+def _plot_prediction_drift(
+    drift_results: dict,
+    save_path: str | None = None,
+    figsize: tuple = (12, 8),
+    return_image: bool = False,
+) -> str | None:
     """Plot prediction drift metrics."""
     quantiles = drift_results["quantiles"]
     per_quantile = drift_results["per_quantile"]
@@ -283,410 +331,371 @@ def _plot_prediction_drift(drift_results: dict, save_path: str = None, figsize: 
     wd_values = [per_quantile[f"q_{q:.2f}"]["wasserstein_distance"] for q in quantiles]
     psi_values = [per_quantile[f"q_{q:.2f}"]["psi"] for q in quantiles]
 
-    fig, axes = plt.subplots(1, 3, figsize=figsize)
+    fig, axes = plt.subplots(1, 3, figsize=figsize, constrained_layout=True)
     fig.suptitle('Prediction Drift Across Quantiles', fontsize=16, fontweight='bold')
 
-    # KS statistic across quantiles
     axes[0].plot(quantiles, ks_stats, 'o-', color=MONITORING_COLORS['primary'], linewidth=2, markersize=6)
     axes[0].set_xlabel('Quantile Level')
     axes[0].set_ylabel('KS Statistic')
-    axes[0].set_title('KS Statistic by Quantile')
+    axes[0].set_title('KS by Quantile')
     axes[0].grid(True, alpha=0.3)
 
-    # Wasserstein distance across quantiles (analytical blue)
     axes[1].plot(quantiles, wd_values, 'o-', color=MONITORING_COLORS['secondary'], linewidth=2, markersize=6)
     axes[1].set_xlabel('Quantile Level')
     axes[1].set_ylabel('Wasserstein Distance')
-    axes[1].set_title('Wasserstein Distance by Quantile')
+    axes[1].set_title('Wasserstein by Quantile')
     axes[1].grid(True, alpha=0.3)
 
-    # PSI across quantiles (traffic-light bars)
     colors = [
         MONITORING_COLORS['no_drift'] if x < 0.1
         else MONITORING_COLORS['minor_drift'] if x < 0.2
         else MONITORING_COLORS['major_drift'] for x in psi_values
     ]
     axes[2].bar([f'{q:.2f}' for q in quantiles], psi_values, color=colors)
-    axes[2].axhline(y=0.1, color=MONITORING_COLORS['minor_drift'], linestyle='--', alpha=0.7)
-    axes[2].axhline(y=0.2, color=MONITORING_COLORS['major_drift'], linestyle='--', alpha=0.7)
+    axes[2].axhline(y=0.1, color=MONITORING_COLORS['minor_drift'], linestyle='--', alpha=0.7, label='0.10')
+    axes[2].axhline(y=0.2, color=MONITORING_COLORS['major_drift'], linestyle='--', alpha=0.7, label='0.20')
     axes[2].set_xlabel('Quantile Level')
-    axes[2].set_ylabel('PSI Value')
+    axes[2].set_ylabel('PSI')
     axes[2].set_title('PSI by Quantile')
     axes[2].tick_params(axis='x', rotation=45)
+    axes[2].legend()
 
-    plt.tight_layout()
+    return _render_figure(fig, save_path, return_image)
 
-    if save_path:
-        plt.savefig(save_path, dpi=300, bbox_inches='tight')
-    plt.show()
-
-
-def _plot_target_drift(drift_results: dict, save_path: str = None, figsize: tuple = (15, 10)):
+def _plot_target_drift(
+    drift_results: dict,
+    save_path: str | None = None,
+    figsize: tuple = (15, 10),
+    return_image: bool = False,
+) -> str | None:
     """Plot target drift metrics."""
-    fig, axes = plt.subplots(2, 3, figsize=figsize)
+    fig, axes = plt.subplots(2, 3, figsize=figsize, constrained_layout=True)
     fig.suptitle('Target Distribution Drift Analysis', fontsize=16, fontweight='bold')
 
-    # Distribution test results
     dist_tests = drift_results["distribution_tests"]
-    test_names = ['KS Statistic', 'PSI']
-    test_values = [dist_tests["ks_statistic"], dist_tests["psi"]]
-    axes[0, 0].bar(test_names, test_values, color=[MONITORING_COLORS['primary'], MONITORING_COLORS['warning']])
-    axes[0, 0].set_title('Distribution Test Statistics')
-    axes[0, 0].set_ylabel('Test Statistic Value')
+    moments    = drift_results["moments_comparison"]
+    distance_metrics = drift_results["distance_metrics"]
+    stat_tests = drift_results["statistical_tests"]
+    sample_info = drift_results["sample_sizes"]
+
+    # Distribution test statistics
+    axes[0, 0].bar(['KS Stat', 'PSI'], [dist_tests["ks_statistic"], dist_tests["psi"]],
+                   color=[MONITORING_COLORS['primary'], MONITORING_COLORS['warning']])
+    axes[0, 0].set_title('Distribution Tests')
+    axes[0, 0].grid(axis='y', alpha=0.2)
 
     # Moments comparison
-    moments = drift_results["moments_comparison"]
-    metrics = ['Mean', 'Std', 'Skewness', 'Kurtosis']
-    ref_values = [moments["ref_mean"], moments["ref_std"], moments["ref_skewness"], moments["ref_kurtosis"]]
-    curr_values = [moments["curr_mean"], moments["curr_std"], moments["curr_skewness"], moments["curr_kurtosis"]]
+    metrics = ['Mean', 'Std', 'Skew', 'Kurtosis']
+    ref_vals = [moments["ref_mean"], moments["ref_std"], moments["ref_skewness"], moments["ref_kurtosis"]]
+    cur_vals = [moments["curr_mean"], moments["curr_std"], moments["curr_skewness"], moments["curr_kurtosis"]]
+    x = np.arange(len(metrics)); width = 0.35
+    axes[0, 1].bar(x - width/2, ref_vals, width, label='Ref', color=MONITORING_COLORS['light_blue'])
+    axes[0, 1].bar(x + width/2, cur_vals, width, label='Cur', color=MONITORING_COLORS['light_green'])
+    axes[0, 1].set_xticks(x); axes[0, 1].set_xticklabels(metrics)
+    axes[0, 1].set_title('Moments Comparison'); axes[0, 1].legend(); axes[0, 1].grid(axis='y', alpha=0.2)
 
-    x = np.arange(len(metrics))
-    width = 0.35
+    # Distances
+    axes[0, 2].bar(['Wasserstein', 'JS dist'],
+                   [distance_metrics["wasserstein_distance"], distance_metrics["jensen_shannon_distance"]],
+                   color=[MONITORING_COLORS['primary'], MONITORING_COLORS['secondary']])
+    axes[0, 2].set_title('Distance Metrics'); axes[0, 2].grid(axis='y', alpha=0.2)
 
-    axes[0, 1].bar(x - width/2, ref_values, width, label='Reference', color=MONITORING_COLORS['light_blue'])
-    axes[0, 1].bar(x + width/2, curr_values, width, label='Current', color=MONITORING_COLORS['light_green'])
-    axes[0, 1].set_xlabel('Statistical Moments')
-    axes[0, 1].set_ylabel('Value')
-    axes[0, 1].set_title('Moments Comparison')
-    axes[0, 1].set_xticks(x)
-    axes[0, 1].set_xticklabels(metrics)
-    axes[0, 1].legend()
-
-    # Distance metrics
-    distance_metrics = drift_results["distance_metrics"]
-    dist_names = ['Wasserstein', 'Jensen-Shannon']
-    dist_values = [distance_metrics["wasserstein_distance"], distance_metrics["jensen_shannon_distance"]]
-
-    axes[0, 2].bar(dist_names, dist_values, color=[MONITORING_COLORS['primary'], MONITORING_COLORS['secondary']])
-    axes[0, 2].set_title('Distance Metrics')
-    axes[0, 2].set_ylabel('Distance Value')
-
-    # Statistical test p-values
-    stat_tests = drift_results["statistical_tests"]
-    test_names = ['Mean Diff\n(t-test)', 'Variance Diff\n(Levene)']
+    # P-values
     p_values = [stat_tests["mean_diff_p_value"], stat_tests["variance_levene_p_value"]]
-
     colors = [MONITORING_COLORS['no_drift'] if p > 0.05 else MONITORING_COLORS['major_drift'] for p in p_values]
-    axes[1, 0].bar(test_names, p_values, color=colors)
+    axes[1, 0].bar(['t-test p', 'Levene p'], p_values, color=colors)
     axes[1, 0].axhline(y=0.05, color=MONITORING_COLORS['major_drift'], linestyle='--', alpha=0.7, label='α=0.05')
-    axes[1, 0].set_title('Statistical Test P-values')
-    axes[1, 0].set_ylabel('P-value')
-    axes[1, 0].legend()
+    axes[1, 0].set_title('Hypothesis Tests'); axes[1, 0].legend(); axes[1, 0].grid(axis='y', alpha=0.2)
 
     # Sample sizes
-    sample_info = drift_results["sample_sizes"]
-    sample_names = ['Reference', 'Current']
-    sample_sizes = [sample_info["reference_n"], sample_info["current_n"]]
-
-    axes[1, 1].bar(sample_names, sample_sizes, color=MONITORING_COLORS['light_gray'])
-    axes[1, 1].set_title('Sample Sizes')
-    axes[1, 1].set_ylabel('Number of Samples')
+    axes[1, 1].bar(['Reference', 'Current'], [sample_info["reference_n"], sample_info["current_n"]],
+                   color=MONITORING_COLORS['light_gray'])
+    axes[1, 1].set_title('Sample Sizes'); axes[1, 1].grid(axis='y', alpha=0.2)
 
     # Summary text
-    summary_text = f"""Distribution Tests:
-KS p-value: {dist_tests.get('ks_p_value', 'N/A'):.4f}
-PSI: {dist_tests.get('psi', 'N/A'):.4f} ({dist_tests.get('psi_interpretation', 'N/A')})
-
-Distance Metrics:
-Wasserstein: {distance_metrics.get('wasserstein_distance', 'N/A'):.4f}
-Jensen-Shannon: {distance_metrics.get('jensen_shannon_distance', 'N/A'):.4f}
-
-Mean Shift: {moments.get('mean_shift', 'N/A'):.4f}
-Std Ratio: {moments.get('std_ratio', 'N/A'):.4f}"""
-
-    axes[1, 2].text(0.1, 0.5, summary_text, transform=axes[1, 2].transAxes,
-                    fontsize=10, verticalalignment='center', fontfamily='monospace')
+    summary_text = (
+        f"KS p-value: {dist_tests.get('ks_p_value', np.nan):.4f}\n"
+        f"PSI: {dist_tests.get('psi', np.nan):.4f} ({dist_tests.get('psi_interpretation', 'N/A')})\n\n"
+        f"Mean Shift: {moments.get('mean_shift', np.nan):.4f}\n"
+        f"Std Ratio: {moments.get('std_ratio', np.nan):.4f}"
+    )
+    axes[1, 2].text(0.05, 0.5, summary_text, transform=axes[1, 2].transAxes,
+                    fontsize=10, va='center', family='monospace')
     axes[1, 2].axis('off')
 
-    plt.tight_layout()
+    return _render_figure(fig, save_path, return_image)
 
-    if save_path:
-        plt.savefig(save_path, dpi=300, bbox_inches='tight')
-    plt.show()
-
-
-def plot_performance_metrics(performance_results: dict,
-                             save_path: str = None,
-                             figsize: tuple = (15, 12)) -> None:
+def plot_performance_metrics(
+    performance_results: dict,
+    save_path: str | None = None,
+    figsize: tuple = (15, 12),
+    return_image: bool = False,
+) -> str | None:
     """
-    Create comprehensive visualizations for model performance metrics.
+    Visualizations for model performance metrics.
+
+    If return_image=True, returns base64-encoded PNG; else shows/saves figure.
     """
     if "pinball_losses" in performance_results:
-        _plot_quantile_performance(performance_results, save_path, figsize)
+        return _plot_quantile_performance(performance_results, save_path, figsize, return_image)
     elif "coverage" in performance_results and "interval_width" in performance_results:
-        _plot_interval_performance(performance_results, save_path, figsize)
+        return _plot_interval_performance(performance_results, save_path, figsize, return_image)
     elif "dates" in performance_results and "metrics" in performance_results:
-        _plot_performance_trends(performance_results, save_path, figsize)
+        return _plot_performance_trends(performance_results, save_path, figsize, return_image)
     else:
         raise ValueError("Unknown performance results format")
 
-
-def _plot_quantile_performance(performance_results: dict, save_path: str = None, figsize: tuple = (15, 12)):
-    """Plot quantile regression performance metrics."""
-    fig, axes = plt.subplots(2, 3, figsize=figsize)
+def _plot_quantile_performance(
+    performance_results: dict,
+    save_path: str | None = None,
+    figsize: tuple = (15, 12),
+    return_image: bool = False,
+) -> str | None:
+    """Plot quantile regression performance metrics with reliability band."""
+    fig, axes = plt.subplots(2, 3, figsize=figsize, constrained_layout=True)
     fig.suptitle('Quantile Regression Performance Metrics', fontsize=16, fontweight='bold')
 
-    pinball_losses = performance_results["pinball_losses"]["per_quantile"]
+    pinball_losses   = performance_results["pinball_losses"]["per_quantile"]
     coverage_metrics = performance_results["coverage"]["per_quantile"]
-    coverage_errors = performance_results["coverage"]["errors"]
+    coverage_errors  = performance_results["coverage"]["errors"]
+    n_valid = performance_results.get("sample_info", {}).get("n_valid_samples", None)
 
-    quantiles = list(pinball_losses.keys())
-    quantile_values = [float(q.split('_')[1]) for q in quantiles]
+    q_labels = list(pinball_losses.keys())
+    q_vals   = [float(q.split('_')[1]) for q in q_labels]
 
-    # Pinball losses by quantile
+    # Pinball losses
     losses = list(pinball_losses.values())
-    axes[0, 0].bar(quantiles, losses, color=MONITORING_COLORS['primary'])
+    axes[0, 0].bar(q_labels, losses, color=MONITORING_COLORS['primary'])
     axes[0, 0].set_title('Pinball Loss by Quantile')
-    axes[0, 0].set_xlabel('Quantile')
-    axes[0, 0].set_ylabel('Pinball Loss')
-    axes[0, 0].tick_params(axis='x', rotation=45)
+    axes[0, 0].set_xlabel('Quantile'); axes[0, 0].set_ylabel('Pinball Loss')
+    axes[0, 0].tick_params(axis='x', rotation=45); axes[0, 0].grid(axis='y', alpha=0.2)
 
-    # Coverage by quantile (observed vs target line y=x)
-    coverages = list(coverage_metrics.values())
-    axes[0, 1].plot(quantile_values, coverages, 'o-', color=MONITORING_COLORS['light_green'], linewidth=2, markersize=6, label='Observed')
-    axes[0, 1].plot(quantile_values, quantile_values, '--', color=MONITORING_COLORS['neutral'], linewidth=2, label='Target')
+    # Coverage vs nominal with 95% binomial band (normal approx)
+    covs = np.array(list(coverage_metrics.values()))
+    axes[0, 1].plot(q_vals, covs, 'o-', color=MONITORING_COLORS['light_green'],
+                    linewidth=2, markersize=6, label='Observed')
+    axes[0, 1].plot(q_vals, q_vals, '--', color=MONITORING_COLORS['neutral'], linewidth=2, label='Target y=x')
+    if (n_valid is not None) and (n_valid > 0):
+        se = np.sqrt(np.clip(np.array(q_vals)*(1-np.array(q_vals))/n_valid, 0, None))
+        upper = np.clip(np.array(q_vals) + 1.96*se, 0, 1)
+        lower = np.clip(np.array(q_vals) - 1.96*se, 0, 1)
+        axes[0, 1].fill_between(q_vals, lower, upper, alpha=0.15, label='95% sampling band')
     axes[0, 1].set_title('Coverage by Quantile')
-    axes[0, 1].set_xlabel('Quantile Level')
-    axes[0, 1].set_ylabel('Coverage')
-    axes[0, 1].legend()
-    axes[0, 1].grid(True, alpha=0.3)
+    axes[0, 1].set_xlabel('Quantile Level'); axes[0, 1].set_ylabel('Coverage')
+    axes[0, 1].legend(); axes[0, 1].grid(True, alpha=0.3)
 
     # Coverage errors with thresholds
-    errors = list(coverage_errors.values())
+    errs = list(coverage_errors.values())
     colors = [
         MONITORING_COLORS['no_drift'] if abs(e) < 0.05
         else MONITORING_COLORS['minor_drift'] if abs(e) < 0.1
-        else MONITORING_COLORS['major_drift'] for e in errors
+        else MONITORING_COLORS['major_drift'] for e in errs
     ]
-    axes[0, 2].bar(quantiles, errors, color=colors)
+    axes[0, 2].bar(q_labels, errs, color=colors)
     axes[0, 2].axhline(y=0, color=MONITORING_COLORS['baseline'], linestyle='-', alpha=0.6)
     axes[0, 2].axhline(y=0.05, color=MONITORING_COLORS['minor_drift'], linestyle='--', alpha=0.7)
     axes[0, 2].axhline(y=-0.05, color=MONITORING_COLORS['minor_drift'], linestyle='--', alpha=0.7)
-    axes[0, 2].set_title('Coverage Errors')
-    axes[0, 2].set_xlabel('Quantile')
-    axes[0, 2].set_ylabel('Coverage Error')
-    axes[0, 2].tick_params(axis='x', rotation=45)
+    axes[0, 2].set_title('Coverage Errors'); axes[0, 2].set_xlabel('Quantile'); axes[0, 2].set_ylabel('Error')
+    axes[0, 2].tick_params(axis='x', rotation=45); axes[0, 2].grid(axis='y', alpha=0.2)
 
-    # PIT histogram (uniform reference line in baseline gray)
-    if performance_results["calibration"]["pit_values"]:
-        pit_values = performance_results["calibration"]["pit_values"]
-        axes[1, 0].hist(pit_values, bins=20, density=True, alpha=0.7,
+    # PIT histogram
+    pit_vals = performance_results["calibration"]["pit_values"]
+    if pit_vals:
+        axes[1, 0].hist(pit_vals, bins=20, density=True, alpha=0.75,
                         color=MONITORING_COLORS['light_gray'], edgecolor='black')
         axes[1, 0].axhline(y=1.0, color=MONITORING_COLORS['baseline'], linestyle='--', label='Uniform')
-        axes[1, 0].set_title('PIT Histogram')
-        axes[1, 0].set_xlabel('PIT Value')
-        axes[1, 0].set_ylabel('Density')
-        axes[1, 0].legend()
+        axes[1, 0].set_title('PIT Histogram'); axes[1, 0].set_xlabel('PIT'); axes[1, 0].set_ylabel('Density'); axes[1, 0].legend()
     else:
         axes[1, 0].text(0.5, 0.5, 'PIT values\nnot available', ha='center', va='center', transform=axes[1, 0].transAxes)
         axes[1, 0].set_title('PIT Histogram')
 
-    # Summary metrics
-    summary_text = f"""Performance Summary:
-Mean Pinball Loss: {performance_results['pinball_losses']['mean']:.4f}
-Mean Coverage Error: {performance_results['coverage']['mean_absolute_error']:.4f}
-Coverage Bias: {performance_results['coverage']['bias']:.4f}
-CRPS: {performance_results['distributional']['crps']:.4f}
-
-Calibration:
-PIT KS Statistic: {performance_results['calibration']['pit_ks_statistic']:.4f}
-PIT ECE: {performance_results['calibration']['pit_ece']:.4f}
-
-Monotonicity:
-Violation Rate: {performance_results['monotonicity']['violation_rate']:.2%}
-Valid Samples: {performance_results['sample_info']['n_valid_samples']}"""
-
-    axes[1, 1].text(0.1, 0.5, summary_text, transform=axes[1, 1].transAxes,
-                    fontsize=10, verticalalignment='center', fontfamily='monospace')
+    # Summary text
+    summary_text = (
+        f"Mean Pinball: {performance_results['pinball_losses']['mean']:.4f}\n"
+        f"Mean |Coverage Error|: {performance_results['coverage']['mean_absolute_error']:.4f}\n"
+        f"Coverage Bias: {performance_results['coverage']['bias']:.4f}\n"
+        f"CRPS: {performance_results['distributional']['crps']:.4f}\n\n"
+        f"PIT KS: {performance_results['calibration']['pit_ks_statistic']:.4f}\n"
+        f"PIT ECE: {performance_results['calibration']['pit_ece']:.4f}\n\n"
+        f"Monotonicity Violation Rate: {performance_results['monotonicity']['violation_rate']:.2%}\n"
+        f"Valid Samples: {performance_results['sample_info']['n_valid_samples']}"
+    )
+    axes[1, 1].text(0.05, 0.5, summary_text, transform=axes[1, 1].transAxes,
+                    fontsize=10, va='center', family='monospace')
     axes[1, 1].axis('off')
 
-    # Monotonicity violations
-    mono_rate = performance_results['monotonicity']['violation_rate']
+    # Monotonicity: bar instead of pie
     mono_count = performance_results['monotonicity']['violation_count']
     total_samples = performance_results['monotonicity']['total_samples']
+    valid_count = max(total_samples - mono_count, 0)
+    axes[1, 2].bar(['Valid', 'Violations'], [valid_count, mono_count],
+                   color=[MONITORING_COLORS['good_performance'], MONITORING_COLORS['poor_performance']])
+    axes[1, 2].set_title('Non-crossing Check'); axes[1, 2].set_ylabel('Count'); axes[1, 2].grid(axis='y', alpha=0.2)
 
-    mono_data = ['Valid', 'Violations']
-    mono_values = [total_samples - mono_count, mono_count]
-    colors = [MONITORING_COLORS['good_performance'], MONITORING_COLORS['poor_performance']]
+    return _render_figure(fig, save_path, return_image)
 
-    axes[1, 2].pie(mono_values, labels=mono_data, colors=colors, autopct='%1.1f%%')
-    axes[1, 2].set_title(f'Monotonicity Violations\n({mono_rate:.2%} violation rate)')
-
-    plt.tight_layout()
-
-    if save_path:
-        plt.savefig(save_path, dpi=300, bbox_inches='tight')
-    plt.show()
-
-
-def _plot_interval_performance(performance_results: dict, save_path: str = None, figsize: tuple = (12, 8)):
+def _plot_interval_performance(
+    performance_results: dict,
+    save_path: str | None = None,
+    figsize: tuple = (12, 8),
+    return_image: bool = False,
+) -> str | None:
     """Plot prediction interval performance metrics."""
-    fig, axes = plt.subplots(2, 2, figsize=figsize)
+    fig, axes = plt.subplots(2, 2, figsize=figsize, constrained_layout=True)
     fig.suptitle('Prediction Interval Performance', fontsize=16, fontweight='bold')
 
     coverage_info = performance_results["coverage"]
     width_info = performance_results["interval_width"]
 
     # Coverage vs target
-    coverage_data = ['Target', 'Observed']
     coverage_values = [coverage_info["target"], coverage_info["observed"]]
     colors = [
         MONITORING_COLORS['light_blue'],
         MONITORING_COLORS['light_green'] if abs(coverage_info["error"]) < 0.05 else MONITORING_COLORS['light_red']
     ]
-    axes[0, 0].bar(coverage_data, coverage_values, color=colors)
+    axes[0, 0].bar(['Target', 'Observed'], coverage_values, color=colors)
     axes[0, 0].set_title(f'Coverage: {coverage_info["observed"]:.3f} vs {coverage_info["target"]:.3f}')
-    axes[0, 0].set_ylabel('Coverage Probability')
-    axes[0, 0].set_ylim([0, 1])
+    axes[0, 0].set_ylabel('Coverage'); axes[0, 0].set_ylim([0, 1]); axes[0, 0].grid(axis='y', alpha=0.2)
 
     # Width distribution
-    width_stats = width_info["width_statistics"]
-    width_metrics = ['Min', 'Q25', 'Median', 'Q75', 'Max']
-    width_values = [width_stats["min"], width_stats["q25"],
-                    width_stats["median"], width_stats["q75"], width_stats["max"]]
-
-    axes[0, 1].bar(width_metrics, width_values, color=MONITORING_COLORS['light_orange'])
-    axes[0, 1].set_title('Interval Width Distribution')
-    axes[0, 1].set_ylabel('Width')
-    axes[0, 1].tick_params(axis='x', rotation=45)
+    ws = width_info["width_statistics"]
+    axes[0, 1].bar(['Min','Q25','Median','Q75','Max'],
+                   [ws["min"], ws["q25"], ws["median"], ws["q75"], ws["max"]],
+                   color=MONITORING_COLORS['light_orange'])
+    axes[0, 1].set_title('Interval Width Summary'); axes[0, 1].set_ylabel('Width'); axes[0, 1].grid(axis='y', alpha=0.2)
 
     # Coverage breakdown
-    misc_data = ['Below Lower', 'Covered', 'Above Upper']
-    misc_values = [coverage_info["below_lower_rate"],
-                   coverage_info["observed"],
-                   coverage_info["above_upper_rate"]]
-    misc_colors = [MONITORING_COLORS['light_red'],
-                   MONITORING_COLORS['light_green'],
-                   MONITORING_COLORS['light_orange']]
+    axes[1, 0].bar(['Below Lower', 'Covered', 'Above Upper'],
+                   [coverage_info["below_lower_rate"], coverage_info["observed"], coverage_info["above_upper_rate"]],
+                   color=[MONITORING_COLORS['light_red'], MONITORING_COLORS['light_green'], MONITORING_COLORS['light_orange']])
+    axes[1, 0].set_title('Coverage Breakdown'); axes[1, 0].set_ylabel('Rate'); axes[1, 0].grid(axis='y', alpha=0.2)
 
-    axes[1, 0].bar(misc_data, misc_values, color=misc_colors)
-    axes[1, 0].set_title('Coverage Breakdown')
-    axes[1, 0].set_ylabel('Rate')
-    axes[1, 0].tick_params(axis='x', rotation=45)
-
-    # Summary metrics
-    summary_text = f"""Interval Metrics:
-Mean Width: {width_info['mean_width']:.4f}
-Normalized Width: {width_info['normalized_width']:.4f}
-Interval Score: {performance_results['scoring']['interval_score']:.4f}
-Efficiency Ratio: {performance_results['scoring']['efficiency_ratio']:.4f}
-
-Coverage Error: {coverage_info['error']:.4f}
-Below Lower: {coverage_info['below_lower_rate']:.3f}
-Above Upper: {coverage_info['above_upper_rate']:.3f}
-
-Sample Info:
-Valid Samples: {performance_results['sample_info']['n_valid_samples']}
-Total Samples: {performance_results['sample_info']['n_total_samples']}"""
-
-    axes[1, 1].text(0.1, 0.5, summary_text, transform=axes[1, 1].transAxes,
-                    fontsize=10, verticalalignment='center', fontfamily='monospace')
+    # Summary text
+    summary_text = (
+        f"Mean Width: {width_info['mean_width']:.4f}\n"
+        f"Normalized Width: {width_info['normalized_width']:.4f}\n"
+        f"Interval Score: {performance_results['scoring']['interval_score']:.4f}\n"
+        f"Efficiency Ratio: {performance_results['scoring']['efficiency_ratio']:.4f}\n\n"
+        f"Coverage Error: {coverage_info['error']:.4f}\n"
+        f"Below Lower: {coverage_info['below_lower_rate']:.3f} | Above Upper: {coverage_info['above_upper_rate']:.3f}\n\n"
+        f"Valid Samples: {performance_results['sample_info']['n_valid_samples']}/"
+        f"{performance_results['sample_info']['n_total_samples']}"
+    )
+    axes[1, 1].text(0.05, 0.5, summary_text, transform=axes[1, 1].transAxes,
+                    fontsize=10, va='center', family='monospace')
     axes[1, 1].axis('off')
 
-    plt.tight_layout()
+    return _render_figure(fig, save_path, return_image)
 
-    if save_path:
-        plt.savefig(save_path, dpi=300, bbox_inches='tight')
-    plt.show()
-
-
-def _plot_performance_trends(performance_results: dict, save_path: str = None, figsize: tuple = (15, 8)):
+def _plot_performance_trends(
+    performance_results: dict,
+    save_path: str | None = None,
+    figsize: tuple = (15, 8),
+    return_image: bool = False,
+) -> str | None:
     """Plot performance trends over time."""
     dates = pd.to_datetime(performance_results["dates"])
     metrics = performance_results["metrics"]
 
-    fig, axes = plt.subplots(1, 3, figsize=figsize)
+    fig, axes = plt.subplots(1, 3, figsize=figsize, constrained_layout=True)
     fig.suptitle('Performance Trends Over Time', fontsize=16, fontweight='bold')
 
-    # Mean pinball loss trend
     axes[0].plot(dates, metrics["mean_pinball_loss"], 'o-', color=MONITORING_COLORS['primary'], linewidth=2, markersize=4)
-    axes[0].set_title('Mean Pinball Loss Trend')
-    axes[0].set_xlabel('Date')
-    axes[0].set_ylabel('Mean Pinball Loss')
-    axes[0].tick_params(axis='x', rotation=45)
-    axes[0].grid(True, alpha=0.3)
+    axes[0].set_title('Mean Pinball Loss'); axes[0].set_xlabel('Date'); axes[0].set_ylabel('Loss')
+    axes[0].tick_params(axis='x', rotation=45); axes[0].grid(True, alpha=0.3)
 
-    # Coverage error trend (analytical line + threshold)
-    axes[1].plot(dates, metrics["mean_coverage_error"], 'o-', color=MONITORING_COLORS['secondary'], linewidth=2, markersize=4)
+    axes[1].plot(dates, metrics["mean_coverage_error"], 'o-', color=MONITORING_COLORS['secondary'], linewidth=2, markersize=4, label='|Err|')
     axes[1].axhline(y=0.05, color=MONITORING_COLORS['minor_drift'], linestyle='--', alpha=0.7, label='5% threshold')
     axes[1].axhline(y=-0.05, color=MONITORING_COLORS['minor_drift'], linestyle='--', alpha=0.7)
-    axes[1].set_title('Mean Coverage Error Trend')
-    axes[1].set_xlabel('Date')
-    axes[1].set_ylabel('Mean Coverage Error')
-    axes[1].tick_params(axis='x', rotation=45)
-    axes[1].legend()
-    axes[1].grid(True, alpha=0.3)
+    axes[1].set_title('Mean Coverage Error'); axes[1].set_xlabel('Date'); axes[1].set_ylabel('Abs Error')
+    axes[1].tick_params(axis='x', rotation=45); axes[1].legend(); axes[1].grid(True, alpha=0.3)
 
-    # CRPS trend
     axes[2].plot(dates, metrics["crps"], 'o-', color=MONITORING_COLORS['good_performance'], linewidth=2, markersize=4)
-    axes[2].set_title('CRPS Trend')
-    axes[2].set_xlabel('Date')
-    axes[2].set_ylabel('CRPS')
-    axes[2].tick_params(axis='x', rotation=45)
-    axes[2].grid(True, alpha=0.3)
+    axes[2].set_title('CRPS'); axes[2].set_xlabel('Date'); axes[2].set_ylabel('CRPS')
+    axes[2].tick_params(axis='x', rotation=45); axes[2].grid(True, alpha=0.3)
 
-    plt.tight_layout()
+    return _render_figure(fig, save_path, return_image)
 
-    if save_path:
-        plt.savefig(save_path, dpi=300, bbox_inches='tight')
-    plt.show()
+# =========================
+# REPORTING
+# =========================
 
-
-# REPORTING (unchanged structure; CSS colors can stay as-is or be mapped to palette if you prefer)
-
-def generate_monitoring_report(monitoring_results: dict,
-                               output_path: str = None,
-                               title: str = "Model Monitoring Report") -> str:
+def generate_monitoring_report(
+    monitoring_results: dict,
+    output_path: str | None = None,
+    title: str = "Model Monitoring Report"
+) -> str:
     """
-    Generate a comprehensive HTML monitoring report.
+    Generate a comprehensive **self-contained** HTML monitoring report.
+
+    To embed plots inline, pass base64 images under any of these optional keys in `monitoring_results`:
+      - "image_covariate_drift", "image_prediction_drift", "image_target_drift",
+        "image_quantile_performance", "image_interval_performance", "image_trends"
+
+    Example:
+        img = _plot_quantile_performance(perf, return_image=True)
+        monitoring_results["image_quantile_performance"] = img
     """
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-    html_template = f"""
-    <!DOCTYPE html>
-    <html lang="en">
-    <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <title>{title}</title>
-        <style>
-            body {{ font-family: Arial, sans-serif; margin: 20px; line-height: 1.6; }}
-            .header {{ background-color: #f4f4f4; padding: 20px; border-radius: 5px; }}
-            .section {{ margin: 20px 0; padding: 15px; border-left: 4px solid #007cba; }}
-            .metric {{ background-color: #f9f9f9; padding: 10px; margin: 5px 0; border-radius: 3px; }}
-            .warning {{ border-left-color: #ff9800; background-color: #fff3cd; }}
-            .error {{ border-left-color: #f44336; background-color: #f8d7da; }}
-            .success {{ border-left-color: #4caf50; background-color: #d4edda; }}
-            table {{ border-collapse: collapse; width: 100%; margin: 10px 0; }}
-            th, td {{ border: 1px solid #ddd; padding: 8px; text-align: left; }}
-            th {{ background-color: #f2f2f2; }}
-            .code {{ font-family: monospace; background-color: #f5f5f5; padding: 2px 4px; }}
-        </style>
-    </head>
-    <body>
-        <div class="header">
-            <h1>{title}</h1>
-            <p>Generated on: {timestamp}</p>
-        </div>
-    """
+    def _img_html(key: str) -> str:
+        b64 = monitoring_results.get(key)
+        if not b64:
+            return ""
+        return f'<div><img alt="{key}" style="max-width:100%;height:auto" src="data:image/png;base64,{b64}"/></div>'
+
+    html = f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>{title}</title>
+<style>
+body {{ font-family: Arial, sans-serif; margin: 20px; line-height: 1.6; color: #222; }}
+.header {{ background-color: #f4f4f4; padding: 20px; border-radius: 5px; }}
+.section {{ margin: 20px 0; padding: 15px; border-left: 4px solid #0072B2; background:#fafafa; border-radius:4px; }}
+.metric {{ background-color: #fff; padding: 10px; margin: 5px 0; border-radius: 3px; border:1px solid #eee; }}
+.warning {{ border-left-color: #E69F00; background-color: #fff9ef; }}
+.error {{ border-left-color: #D55E00; background-color: #fff1ec; }}
+.success {{ border-left-color: #009E73; background-color: #eefaf6; }}
+table {{ border-collapse: collapse; width: 100%; margin: 10px 0; font-size: 14px; }}
+th, td {{ border: 1px solid #ddd; padding: 8px; text-align: left; }}
+th {{ background-color: #f2f2f2; }}
+.code {{ font-family: monospace; background-color: #f5f5f5; padding: 2px 4px; }}
+h2 {{ margin-top: 0; }}
+img {{ display:block; margin: 10px 0; }}
+</style>
+</head>
+<body>
+<div class="header">
+  <h1>{title}</h1>
+  <p>Generated on: {timestamp}</p>
+</div>
+"""
+
     if "drift_results" in monitoring_results:
-        html_template += _generate_drift_section(monitoring_results["drift_results"])
+        html += _generate_drift_section(monitoring_results["drift_results"])
+        # inline images if provided
+        html += _img_html("image_covariate_drift")
+        html += _img_html("image_prediction_drift")
+        html += _img_html("image_target_drift")
+
     if "performance_results" in monitoring_results:
-        html_template += _generate_performance_section(monitoring_results["performance_results"])
+        html += _generate_performance_section(monitoring_results["performance_results"])
+        html += _img_html("image_quantile_performance")
+        html += _img_html("image_interval_performance")
+
     if "trends_results" in monitoring_results:
-        html_template += _generate_trends_section(monitoring_results["trends_results"])
-    html_template += """
-    </body>
-    </html>
-    """
+        html += _generate_trends_section(monitoring_results["trends_results"])
+        html += _img_html("image_trends")
+
+    html += "\n</body>\n</html>\n"
 
     if output_path:
-        with open(output_path, 'w') as f:
-            f.write(html_template)
+        with open(output_path, "w", encoding="utf-8") as f:
+            f.write(html)
         print(f"Report saved to: {output_path}")
-
-    return html_template
-
+    return html
 
 def _generate_drift_section(drift_results: dict) -> str:
     """Generate HTML section for drift results."""
