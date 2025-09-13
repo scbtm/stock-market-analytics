@@ -93,3 +93,4 @@ data/
 src/stock_market_analytics/feature_engineering/_features_.py
 src/stock_market_analytics/feature_engineering/_preprocessing_.py
 src/stock_market_analytics/feature_engineering/.hamilton_cache/
+src/stock_market_analytics/monitoring/production_artifacts/
