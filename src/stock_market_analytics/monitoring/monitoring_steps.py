@@ -59,7 +59,7 @@ def download_artifacts() -> tuple[str, str, str, str]:
     api = wandb.Api(api_key=os.environ.get("WANDB_API_KEY"))
     model_name: str = os.environ.get("MODEL_NAME") or "pipeline:latest"
     model_version: str = model_name.split(':')[1] if ':' in model_name else 'latest'
-    dataset_name: str = "val_set:" + model_version
+    dataset_name: str = "test_set:" + model_version
 
     # Reference the artifact by entity/project/name:version or :latest
     model = api.artifact(f"san-cbtm/stock-market-analytics/{model_name}", type="model")
