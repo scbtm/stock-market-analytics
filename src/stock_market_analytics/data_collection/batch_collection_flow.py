@@ -3,8 +3,16 @@ from pathlib import Path
 from typing import Any
 
 from metaflow import FlowSpec, step
+import wandb
+from wandb.integration.metaflow import wandb_log
+
+import pandas as pd
 
 from stock_market_analytics.data_collection import collection_steps
+from stock_market_analytics.config import config
+
+# Initialize wandb
+wandb.login(key=config.wandb_key)
 
 
 class BatchCollectionFlow(FlowSpec):
@@ -160,7 +168,53 @@ class BatchCollectionFlow(FlowSpec):
             print(f"  • Updated {update_result['symbols_updated']} symbols")
             print(f"  • Total records: {update_result['total_records']:,}")
 
+        # Store collection results for W&B logging
+        self.collection_results = update_result
+        self.metadata_updates = metadata_updates
+        self.collected_data_count = len(collected_data)
+
         print("✅ Successfully completed batch collection")
+        self.next(self.log_artifacts)
+
+    @wandb_log(datasets=True, models=False, others=True, settings=wandb.Settings(project="stock-market-analytics", run_job_type="data-collection"))
+    @step
+    def log_artifacts(self) -> None:
+        """
+        Log collection metadata and results to Weights & Biases.
+
+        The wandb_log decorator automatically logs any self attributes as W&B artifacts.
+        This includes the collection metadata and summary statistics.
+        """
+        print("📦 Logging collection metadata to Weights & Biases...")
+
+        try:
+            # Store new metadata file:
+            base_data_path = Path(os.environ["BASE_DATA_PATH"])
+            metadata_file = config.data_collection.metadata_file
+            metadata_path = base_data_path / metadata_file
+
+            self.metadata_info = pd.read_csv(metadata_path)
+
+            collection_results = self.collection_results or {}
+            self.collection_results = collection_results
+
+            # Collection summary metrics
+            self.collection_summary = {
+                "total_tickers_processed": len(self.metadata_info['symbol'].unique()),
+                "successful_data_collections": self.collected_data_count,
+                "metadata_updates_processed": len(self.metadata_updates),
+                "new_records_added": self.collection_results.get("new_records", 0),
+                "symbols_updated": self.collection_results.get("symbols_updated", 0),
+                "total_records_in_dataset": self.collection_results.get("total_records", 0),
+                "collection_status": self.collection_results.get("status", "unknown"),
+            }
+
+            print("✅ Collection metadata logged successfully")
+
+        except Exception as e:
+            print(f"❌ Error logging collection metadata: {e}")
+            raise
+
         self.next(self.end)
 
     @step

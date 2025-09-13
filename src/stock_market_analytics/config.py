@@ -15,7 +15,7 @@ from pydantic import BaseModel, Field, validator
 class DataCollectionConfig(BaseModel):
     """Configuration for data collection pipeline."""
 
-    tickers_file: str = "tickers.csv"
+    tickers_file: str = "top_200_tickers.csv"
     metadata_file: str = "metadata.csv"
     stocks_history_file: str = "stocks_history.parquet"
 
