@@ -12,11 +12,11 @@ from datetime import datetime
 
 # Centralized color palette configuration
 MONITORING_COLORS = {
-    'primary': '#377CA1',      # Blue
-    'secondary': "#2FACA5",    # Purple
-    'success': "#F5A327DD",      # Orange
-    'warning': "#F34F26",      # Red
-    'neutral': "#777A81",      # Gray
+    'primary': '#377CA1',      
+    'secondary': "#2FACA5",
+    'success': "#F5A327DD",
+    'warning': "#F34F26",
+    'neutral': "#777A81",
     'light_blue': "#95C2D4",
     'light_green': "#98CA98",
     'light_orange': "#F5BC6C",
@@ -269,32 +269,53 @@ def _plot_covariate_drift(drift_results: dict, save_path: str = None, figsize: t
         print("No features to plot")
         return
     
-    # Extract metrics
+    # Dynamically adjust figure height based on number of features
+    n_features = len(features)
+    min_height_per_feature = 0.4  # Minimum height per feature for readability
+    dynamic_height = max(figsize[1], n_features * min_height_per_feature + 4)  # +4 for margins and titles
+    adjusted_figsize = (figsize[0], dynamic_height)
+    
+    # For very large feature sets, limit to top 20 by PSI to avoid overcrowding
+    if n_features > 20:
+        # Get top 20 features by PSI value
+        feature_psi_pairs = [(f, drift_results["per_feature"][f]["psi"]) for f in features]
+        feature_psi_pairs.sort(key=lambda x: x[1], reverse=True)
+        top_features = [f for f, _ in feature_psi_pairs[:20]]
+        print(f"Showing top 20 features out of {n_features} total features (sorted by PSI)")
+        features = top_features
+    
+    # Extract metrics for selected features
     psi_values = [drift_results["per_feature"][f]["psi"] for f in features]
     ks_stats = [drift_results["per_feature"][f]["ks_statistic"] for f in features]
     wd_values = [drift_results["per_feature"][f]["wasserstein_distance"] for f in features]
     
-    fig, axes = plt.subplots(2, 2, figsize=figsize)
+    fig, axes = plt.subplots(2, 2, figsize=adjusted_figsize)
     fig.suptitle('Covariate Drift Detection Results', fontsize=16, fontweight='bold')
+    
+    # Determine appropriate font size based on number of features
+    label_fontsize = max(8, min(12, 200 // len(features)))  # Scale font size inversely with number of features
     
     # PSI plot
     colors = [MONITORING_COLORS['no_drift'] if x < 0.1 else MONITORING_COLORS['minor_drift'] if x < 0.2 else MONITORING_COLORS['major_drift'] for x in psi_values]
-    axes[0, 0].barh(features, psi_values, color=colors)
+    axes[0, 0].barh(features, psi_values, color=colors, height=0.8)  # Slightly thicker bars
     axes[0, 0].axvline(x=0.1, color=MONITORING_COLORS['minor_drift'], linestyle='--', alpha=0.7, label='Minor drift')
     axes[0, 0].axvline(x=0.2, color=MONITORING_COLORS['major_drift'], linestyle='--', alpha=0.7, label='Major drift')
     axes[0, 0].set_xlabel('PSI Value')
     axes[0, 0].set_title('Population Stability Index (PSI)')
+    axes[0, 0].tick_params(axis='y', labelsize=label_fontsize)
     axes[0, 0].legend()
     
     # KS statistic plot
-    axes[0, 1].barh(features, ks_stats, color=MONITORING_COLORS['light_blue'])
+    axes[0, 1].barh(features, ks_stats, color=MONITORING_COLORS['light_blue'], height=0.8)
     axes[0, 1].set_xlabel('KS Statistic')
     axes[0, 1].set_title('Kolmogorov-Smirnov Statistic')
+    axes[0, 1].tick_params(axis='y', labelsize=label_fontsize)
     
     # Wasserstein distance plot
-    axes[1, 0].barh(features, wd_values, color=MONITORING_COLORS['light_red'])
+    axes[1, 0].barh(features, wd_values, color=MONITORING_COLORS['light_red'], height=0.8)
     axes[1, 0].set_xlabel('Wasserstein Distance')
     axes[1, 0].set_title('Wasserstein Distance')
+    axes[1, 0].tick_params(axis='y', labelsize=label_fontsize)
     
     # Summary metrics
     agg = drift_results["aggregate"]
@@ -308,7 +329,9 @@ Features Analyzed: {agg.get('n_features_analyzed', 0)}"""
                     fontsize=12, verticalalignment='center', fontfamily='monospace')
     axes[1, 1].axis('off')
     
+    # Adjust layout with more space for y-axis labels
     plt.tight_layout()
+    plt.subplots_adjust(left=0.25, right=0.95)  # More space for feature names on the left
     
     if save_path:
         plt.savefig(save_path, dpi=300, bbox_inches='tight')
