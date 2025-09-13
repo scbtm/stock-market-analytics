@@ -10,6 +10,30 @@ import numpy as np
 
 from datetime import datetime
 
+# Centralized color palette configuration
+MONITORING_COLORS = {
+    'primary': '#377CA1',      # Blue
+    'secondary': "#2FACA5",    # Purple
+    'success': "#F5A327DD",      # Orange
+    'warning': "#F34F26",      # Red
+    'neutral': "#777A81",      # Gray
+    'light_blue': "#95C2D4",
+    'light_green': "#98CA98",
+    'light_orange': "#F5BC6C",
+    'light_red': "#F8B59B",
+    'light_gray': "#AAA7A7",
+    
+    # Thresholds for drift detection
+    'no_drift': "#3EE27A",     # Green
+    'minor_drift': "#DDCC31",  # Amber  
+    'major_drift': "#F14040",  # Red
+    
+    # Performance colors
+    'good_performance': '#10B981',
+    'medium_performance': '#F59E0B', 
+    'poor_performance': '#EF4444'
+}
+
 from stock_market_analytics.modeling.model_factory.data_management.preprocessing import _validate
 
 from stock_market_analytics.monitoring.monitoring_metrics import (
@@ -254,21 +278,21 @@ def _plot_covariate_drift(drift_results: dict, save_path: str = None, figsize: t
     fig.suptitle('Covariate Drift Detection Results', fontsize=16, fontweight='bold')
     
     # PSI plot
-    colors = ['green' if x < 0.1 else 'orange' if x < 0.2 else 'red' for x in psi_values]
+    colors = [MONITORING_COLORS['no_drift'] if x < 0.1 else MONITORING_COLORS['minor_drift'] if x < 0.2 else MONITORING_COLORS['major_drift'] for x in psi_values]
     axes[0, 0].barh(features, psi_values, color=colors)
-    axes[0, 0].axvline(x=0.1, color='orange', linestyle='--', alpha=0.7, label='Minor drift')
-    axes[0, 0].axvline(x=0.2, color='red', linestyle='--', alpha=0.7, label='Major drift')
+    axes[0, 0].axvline(x=0.1, color=MONITORING_COLORS['minor_drift'], linestyle='--', alpha=0.7, label='Minor drift')
+    axes[0, 0].axvline(x=0.2, color=MONITORING_COLORS['major_drift'], linestyle='--', alpha=0.7, label='Major drift')
     axes[0, 0].set_xlabel('PSI Value')
     axes[0, 0].set_title('Population Stability Index (PSI)')
     axes[0, 0].legend()
     
     # KS statistic plot
-    axes[0, 1].barh(features, ks_stats, color='skyblue')
+    axes[0, 1].barh(features, ks_stats, color=MONITORING_COLORS['light_blue'])
     axes[0, 1].set_xlabel('KS Statistic')
     axes[0, 1].set_title('Kolmogorov-Smirnov Statistic')
     
     # Wasserstein distance plot
-    axes[1, 0].barh(features, wd_values, color='lightcoral')
+    axes[1, 0].barh(features, wd_values, color=MONITORING_COLORS['light_red'])
     axes[1, 0].set_xlabel('Wasserstein Distance')
     axes[1, 0].set_title('Wasserstein Distance')
     
@@ -305,24 +329,24 @@ def _plot_prediction_drift(drift_results: dict, save_path: str = None, figsize: 
     fig.suptitle('Prediction Drift Across Quantiles', fontsize=16, fontweight='bold')
     
     # KS statistic across quantiles
-    axes[0].plot(quantiles, ks_stats, 'o-', color='blue', linewidth=2, markersize=6)
+    axes[0].plot(quantiles, ks_stats, 'o-', color=MONITORING_COLORS['primary'], linewidth=2, markersize=6)
     axes[0].set_xlabel('Quantile Level')
     axes[0].set_ylabel('KS Statistic')
     axes[0].set_title('KS Statistic by Quantile')
     axes[0].grid(True, alpha=0.3)
     
     # Wasserstein distance across quantiles
-    axes[1].plot(quantiles, wd_values, 'o-', color='red', linewidth=2, markersize=6)
+    axes[1].plot(quantiles, wd_values, 'o-', color=MONITORING_COLORS['light_red'], linewidth=2, markersize=6)
     axes[1].set_xlabel('Quantile Level')
     axes[1].set_ylabel('Wasserstein Distance')
     axes[1].set_title('Wasserstein Distance by Quantile')
     axes[1].grid(True, alpha=0.3)
     
     # PSI across quantiles
-    colors = ['green' if x < 0.1 else 'orange' if x < 0.2 else 'red' for x in psi_values]
+    colors = [MONITORING_COLORS['no_drift'] if x < 0.1 else MONITORING_COLORS['minor_drift'] if x < 0.2 else MONITORING_COLORS['major_drift'] for x in psi_values]
     axes[2].bar([f'{q:.2f}' for q in quantiles], psi_values, color=colors)
-    axes[2].axhline(y=0.1, color='orange', linestyle='--', alpha=0.7)
-    axes[2].axhline(y=0.2, color='red', linestyle='--', alpha=0.7)
+    axes[2].axhline(y=0.1, color=MONITORING_COLORS['light_orange'], linestyle='--', alpha=0.7)
+    axes[2].axhline(y=0.2, color=MONITORING_COLORS['light_red'], linestyle='--', alpha=0.7)
     axes[2].set_xlabel('Quantile Level')
     axes[2].set_ylabel('PSI Value')
     axes[2].set_title('PSI by Quantile')
@@ -358,9 +382,9 @@ def _plot_target_drift(drift_results: dict, save_path: str = None, figsize: tupl
     
     x = np.arange(len(metrics))
     width = 0.35
-    
-    axes[0, 1].bar(x - width/2, ref_values, width, label='Reference', color='lightblue')
-    axes[0, 1].bar(x + width/2, curr_values, width, label='Current', color='lightcoral')
+
+    axes[0, 1].bar(x - width/2, ref_values, width, label='Reference', color=MONITORING_COLORS['light_blue'])
+    axes[0, 1].bar(x + width/2, curr_values, width, label='Current', color=MONITORING_COLORS['light_red'])
     axes[0, 1].set_xlabel('Statistical Moments')
     axes[0, 1].set_ylabel('Value')
     axes[0, 1].set_title('Moments Comparison')
@@ -372,8 +396,8 @@ def _plot_target_drift(drift_results: dict, save_path: str = None, figsize: tupl
     distance_metrics = drift_results["distance_metrics"]
     dist_names = ['Wasserstein', 'Jensen-Shannon']
     dist_values = [distance_metrics["wasserstein_distance"], distance_metrics["jensen_shannon_distance"]]
-    
-    axes[0, 2].bar(dist_names, dist_values, color=['orange', 'purple'])
+
+    axes[0, 2].bar(dist_names, dist_values, color=[MONITORING_COLORS['primary'], MONITORING_COLORS['secondary']])
     axes[0, 2].set_title('Distance Metrics')
     axes[0, 2].set_ylabel('Distance Value')
     
@@ -382,9 +406,9 @@ def _plot_target_drift(drift_results: dict, save_path: str = None, figsize: tupl
     test_names = ['Mean Diff\n(t-test)', 'Variance Diff\n(Levene)']
     p_values = [stat_tests["mean_diff_p_value"], stat_tests["variance_levene_p_value"]]
     
-    colors = ['green' if p > 0.05 else 'red' for p in p_values]
+    colors = [MONITORING_COLORS['no_drift'] if p > 0.05 else MONITORING_COLORS['major_drift'] for p in p_values]
     axes[1, 0].bar(test_names, p_values, color=colors)
-    axes[1, 0].axhline(y=0.05, color='red', linestyle='--', alpha=0.7, label='α=0.05')
+    axes[1, 0].axhline(y=0.05, color=MONITORING_COLORS['major_drift'], linestyle='--', alpha=0.7, label='α=0.05')
     axes[1, 0].set_title('Statistical Test P-values')
     axes[1, 0].set_ylabel('P-value')
     axes[1, 0].legend()
@@ -394,7 +418,7 @@ def _plot_target_drift(drift_results: dict, save_path: str = None, figsize: tupl
     sample_names = ['Reference', 'Current']
     sample_sizes = [sample_info["reference_n"], sample_info["current_n"]]
     
-    axes[1, 1].bar(sample_names, sample_sizes, color='lightgray')
+    axes[1, 1].bar(sample_names, sample_sizes, color=MONITORING_COLORS['light_gray'])
     axes[1, 1].set_title('Sample Sizes')
     axes[1, 1].set_ylabel('Number of Samples')
     
@@ -462,7 +486,7 @@ def _plot_quantile_performance(performance_results: dict, save_path: str = None,
     
     # Pinball losses by quantile
     losses = list(pinball_losses.values())
-    axes[0, 0].bar(quantiles, losses, color='skyblue')
+    axes[0, 0].bar(quantiles, losses, color=MONITORING_COLORS['primary'])
     axes[0, 0].set_title('Pinball Loss by Quantile')
     axes[0, 0].set_xlabel('Quantile')
     axes[0, 0].set_ylabel('Pinball Loss')
@@ -470,8 +494,8 @@ def _plot_quantile_performance(performance_results: dict, save_path: str = None,
     
     # Coverage by quantile
     coverages = list(coverage_metrics.values())
-    axes[0, 1].plot(quantile_values, coverages, 'o-', color='green', linewidth=2, markersize=6, label='Observed')
-    axes[0, 1].plot(quantile_values, quantile_values, '--', color='red', linewidth=2, label='Target')
+    axes[0, 1].plot(quantile_values, coverages, 'o-', color=MONITORING_COLORS['light_green'], linewidth=2, markersize=6, label='Observed')
+    axes[0, 1].plot(quantile_values, quantile_values, '--', color=MONITORING_COLORS['light_red'], linewidth=2, label='Target')
     axes[0, 1].set_title('Coverage by Quantile')
     axes[0, 1].set_xlabel('Quantile Level')
     axes[0, 1].set_ylabel('Coverage')
@@ -480,7 +504,7 @@ def _plot_quantile_performance(performance_results: dict, save_path: str = None,
     
     # Coverage errors
     errors = list(coverage_errors.values())
-    colors = ['green' if abs(e) < 0.05 else 'orange' if abs(e) < 0.1 else 'red' for e in errors]
+    colors = [MONITORING_COLORS['no_drift'] if abs(e) < 0.05 else MONITORING_COLORS['minor_drift'] if abs(e) < 0.1 else MONITORING_COLORS['major_drift'] for e in errors]
     axes[0, 2].bar(quantiles, errors, color=colors)
     axes[0, 2].axhline(y=0, color='black', linestyle='-', alpha=0.5)
     axes[0, 2].axhline(y=0.05, color='orange', linestyle='--', alpha=0.7)
@@ -493,8 +517,8 @@ def _plot_quantile_performance(performance_results: dict, save_path: str = None,
     # PIT histogram (if available)
     if performance_results["calibration"]["pit_values"]:
         pit_values = performance_results["calibration"]["pit_values"]
-        axes[1, 0].hist(pit_values, bins=20, density=True, alpha=0.7, color='lightblue', edgecolor='black')
-        axes[1, 0].axhline(y=1.0, color='red', linestyle='--', label='Uniform')
+        axes[1, 0].hist(pit_values, bins=20, density=True, alpha=0.7, color=MONITORING_COLORS['light_gray'], edgecolor='black')
+        axes[1, 0].axhline(y=1.0, color=MONITORING_COLORS['major_drift'], linestyle='--', label='Uniform')
         axes[1, 0].set_title('PIT Histogram')
         axes[1, 0].set_xlabel('PIT Value')
         axes[1, 0].set_ylabel('Density')
@@ -529,7 +553,7 @@ Valid Samples: {performance_results['sample_info']['n_valid_samples']}"""
     
     mono_data = ['Valid', 'Violations']
     mono_values = [total_samples - mono_count, mono_count]
-    colors = ['green', 'red']
+    colors = [MONITORING_COLORS['good_performance'], MONITORING_COLORS['poor_performance']]
     
     axes[1, 2].pie(mono_values, labels=mono_data, colors=colors, autopct='%1.1f%%')
     axes[1, 2].set_title(f'Monotonicity Violations\n({mono_rate:.2%} violation rate)')
@@ -553,7 +577,7 @@ def _plot_interval_performance(performance_results: dict, save_path: str = None,
     # Coverage vs target
     coverage_data = ['Target', 'Observed']
     coverage_values = [coverage_info["target"], coverage_info["observed"]]
-    colors = ['blue', 'green' if abs(coverage_info["error"]) < 0.05 else 'red']
+    colors = [MONITORING_COLORS['light_blue'], MONITORING_COLORS['light_green'] if abs(coverage_info["error"]) < 0.05 else MONITORING_COLORS['light_red']]
     
     axes[0, 0].bar(coverage_data, coverage_values, color=colors)
     axes[0, 0].set_title(f'Coverage: {coverage_info["observed"]:.3f} vs {coverage_info["target"]:.3f}')
@@ -566,7 +590,7 @@ def _plot_interval_performance(performance_results: dict, save_path: str = None,
     width_values = [width_stats["min"], width_stats["q25"], 
                    width_stats["median"], width_stats["q75"], width_stats["max"]]
     
-    axes[0, 1].bar(width_metrics, width_values, color='lightcoral')
+    axes[0, 1].bar(width_metrics, width_values, color=MONITORING_COLORS['light_orange'])
     axes[0, 1].set_title('Interval Width Distribution')
     axes[0, 1].set_ylabel('Width')
     axes[0, 1].tick_params(axis='x', rotation=45)
@@ -576,7 +600,9 @@ def _plot_interval_performance(performance_results: dict, save_path: str = None,
     misc_values = [coverage_info["below_lower_rate"], 
                   coverage_info["observed"],
                   coverage_info["above_upper_rate"]]
-    misc_colors = ['red', 'green', 'red']
+    misc_colors = [MONITORING_COLORS['light_red'], 
+                   MONITORING_COLORS['light_green'], 
+                   MONITORING_COLORS['light_orange']]
     
     axes[1, 0].bar(misc_data, misc_values, color=misc_colors)
     axes[1, 0].set_title('Coverage Breakdown')
@@ -619,7 +645,7 @@ def _plot_performance_trends(performance_results: dict, save_path: str = None, f
     fig.suptitle('Performance Trends Over Time', fontsize=16, fontweight='bold')
     
     # Mean pinball loss trend
-    axes[0].plot(dates, metrics["mean_pinball_loss"], 'o-', color='blue', linewidth=2, markersize=4)
+    axes[0].plot(dates, metrics["mean_pinball_loss"], 'o-', color=MONITORING_COLORS['primary'], linewidth=2, markersize=4)
     axes[0].set_title('Mean Pinball Loss Trend')
     axes[0].set_xlabel('Date')
     axes[0].set_ylabel('Mean Pinball Loss')
@@ -627,8 +653,8 @@ def _plot_performance_trends(performance_results: dict, save_path: str = None, f
     axes[0].grid(True, alpha=0.3)
     
     # Coverage error trend
-    axes[1].plot(dates, metrics["mean_coverage_error"], 'o-', color='red', linewidth=2, markersize=4)
-    axes[1].axhline(y=0.05, color='orange', linestyle='--', alpha=0.7, label='5% threshold')
+    axes[1].plot(dates, metrics["mean_coverage_error"], 'o-', color=MONITORING_COLORS['light_red'], linewidth=2, markersize=4)
+    axes[1].axhline(y=0.05, color=MONITORING_COLORS['light_orange'], linestyle='--', alpha=0.7, label='5% threshold')
     axes[1].set_title('Mean Coverage Error Trend')
     axes[1].set_xlabel('Date')
     axes[1].set_ylabel('Mean Coverage Error')
@@ -637,7 +663,7 @@ def _plot_performance_trends(performance_results: dict, save_path: str = None, f
     axes[1].grid(True, alpha=0.3)
     
     # CRPS trend
-    axes[2].plot(dates, metrics["crps"], 'o-', color='green', linewidth=2, markersize=4)
+    axes[2].plot(dates, metrics["crps"], 'o-', color=MONITORING_COLORS['good_performance'], linewidth=2, markersize=4)
     axes[2].set_title('CRPS Trend')
     axes[2].set_xlabel('Date')
     axes[2].set_ylabel('CRPS')
