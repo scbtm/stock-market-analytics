@@ -44,3 +44,4 @@ batch-collect = "stock_market_analytics.data_collection.batch_collection_flow:Ba
 build-features = "stock_market_analytics.feature_engineering.feature_building_flow:FeatureBuildingFlow"
 train-model = "stock_market_analytics.modeling.training_flow_cbm_qr:TrainingFlow"
 monitor-model = "stock_market_analytics.monitoring.monitoring_flow:MonitoringFlow"
+dashboard = "stock_market_analytics.inference.dashboard:app.run"

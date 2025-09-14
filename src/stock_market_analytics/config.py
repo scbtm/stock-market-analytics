@@ -38,7 +38,7 @@ class DataCollectionConfig(BaseModel):
 class FeatureEngineeringConfig(BaseModel):
     """Configuration for feature engineering pipeline."""
 
-    horizon: int = Field(default=5, description="Days ahead to predict")
+    horizon: int = Field(default=3, description="Days ahead to predict")
     past_horizon: int = Field(
         default=7 * 280, description="Weeks of lookback for training"
     )
