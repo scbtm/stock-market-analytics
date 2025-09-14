@@ -13,7 +13,6 @@ Key principles:
 
 
 import polars as pl
-import pandas as pd
 
 from stock_market_analytics.data_collection.collection_steps import collect_and_process_symbol
 from stock_market_analytics.feature_engineering import features_config

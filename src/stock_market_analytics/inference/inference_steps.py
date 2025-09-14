@@ -65,13 +65,43 @@ def get_inference_data(symbol: str) -> pd.DataFrame:
         print(f"❌ Inference pipeline failed for {symbol}: {str(e)}")
         raise
 
-def make_predictions(model: object, data: pd.DataFrame) -> pd.DataFrame:
+def make_prediction_intervals(model: object, data: pd.DataFrame) -> pd.DataFrame:
     """
-    Make predictions using the loaded model and engineered features.
+    Make prediction intervals (higher and lower calibrated quantiles) using the loaded model and engineered features.
     """
     print("🤖 Making predictions...")
     predictions = model.predict(data[config.modeling.features])
     low_quantile, high_quantile = predictions[:, 0], predictions[:, 1]
     data['pred_low_quantile'] = low_quantile
     data['pred_high_quantile'] = high_quantile
+    return data
+
+def predict_quantiles(model: object, data: pd.DataFrame) -> pd.DataFrame:
+    """
+    Full inference workflow to get all quantile predictions.
+
+    Args:
+        model: Loaded model object
+        data: DataFrame with features for prediction
+
+    Returns:
+        DataFrame with prediction quantiles added as new columns
+    """
+    quantile_cols = []
+    for q in config.modeling.quantiles:
+        quantile_col = f'pred_Q_{q*100}'
+        quantile_cols.append(quantile_col)
+        data[quantile_col] = None  # Initialize columns
+
+    # Step 1: initial transforms 
+    transforms = model.named_steps.get('transforms')
+    x_inf_transformed = transforms.transform(data[config.modeling.features])
+
+    regressor = model.named_steps.get('model')
+    preds = regressor.predict(x_inf_transformed)
+    for i, q in enumerate(config.modeling.quantiles):
+        quantile_col = f'pred_Q_{q*100}'
+        data[quantile_col] = preds[:, i]
+
+    print(f"✅ Predictions completed")
     return data
