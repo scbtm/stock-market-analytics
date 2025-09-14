@@ -1,0 +1,133 @@
+/* --- Main App Styling --- */
+body {
+background-color: #111;
+color: #f0f0f0;
+font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+margin: 0;
+padding: 2rem;
+}
+
+.app-container {
+max-width: 1200px;
+margin: 0 auto;
+display: flex;
+flex-direction: column;
+gap: 2rem;
+}
+
+/* --- Header --- */
+.header {
+text-align: center;
+border-bottom: 1px solid #333;
+padding-bottom: 1rem;
+}
+
+.header h1 {
+margin: 0;
+font-size: 2.5rem;
+font-weight: 300;
+letter-spacing: 1px;
+}
+
+.header p {
+margin: 0.5rem 0 0;
+color: #888;
+font-size: 1.1rem;
+}
+
+/* --- Controls --- */
+.controls-container {
+display: flex;
+justify-content: center;
+align-items: center;
+gap: 1rem;
+padding: 1rem;
+background-color: #1e1e1e;
+border-radius: 8px;
+}
+
+.symbol-input {
+font-size: 1rem;
+padding: 0.75rem;
+background-color: #333;
+border: 1px solid #555;
+border-radius: 6px;
+color: #f0f0f0;
+outline: none;
+width: 300px;
+transition: border-color 0.3s, box-shadow 0.3s;
+}
+
+.symbol-input:focus {
+border-color: #1f77b4;
+box-shadow: 0 0 0 3px rgba(31, 119, 180, 0.3);
+}
+
+.submit-button {
+font-size: 1rem;
+padding: 0.75rem 1.5rem;
+background-color: #1f77b4;
+color: white;
+border: none;
+border-radius: 6px;
+cursor: pointer;
+font-weight: 600;
+transition: background-color 0.3s, transform 0.1s;
+}
+
+.submit-button:hover {
+background-color: #2ca02c;
+}
+
+.submit-button:active {
+transform: translateY(1px);
+}
+
+/* --- Output Area & Loading --- */
+.output-container {
+display: flex;
+flex-direction: column;
+gap: 2rem;
+}
+
+/* --- KPI Cards --- */
+.kpi-container {
+display: grid;
+grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+gap: 1.5rem;
+}
+
+.kpi-card {
+background-color: #1e1e1e;
+padding: 1.5rem;
+border-radius: 8px;
+text-align: center;
+border: 1px solid #333;
+}
+
+.kpi-card h3 {
+margin: 0 0 0.5rem 0;
+font-size: 1.1rem;
+color: #aaa;
+font-weight: 500;
+}
+
+.kpi-value {
+margin: 0;
+font-size: 2.5rem;
+font-weight: 600;
+color: #f0f0f0;
+}
+
+/* --- Plots --- */
+.plot-container {
+display: grid;
+grid-template-columns: 1fr;
+gap: 2rem;
+background-color: #1e1e1e;
+padding: 1rem;
+border-radius: 8px;
+border: 1px solid #333;
+position: relative; /* Added to fix plot resizing issue */
+overflow: hidden;   /* Prevents resize feedback loops */
+}

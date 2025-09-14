@@ -30,6 +30,15 @@ def load_model(model_dir: str, model_name: str) -> object:
     model = joblib.load(f'{model_dir}/{file_name}')
     return model
 
+def download_and_load_model() -> object:
+    """
+    Combined function to download and load the model.
+    """
+    model_dir, model_name = download_artifacts()
+    model = load_model(model_dir, model_name)
+    print(f"Model '{model_name}' loaded successfully.")
+    return model
+
 def get_inference_data(symbol: str) -> pd.DataFrame:
     """
     Complete pipeline to get inference-ready features for a single ticker.
@@ -93,14 +102,15 @@ def predict_quantiles(model: object, data: pd.DataFrame) -> pd.DataFrame:
         quantile_cols.append(quantile_col)
         data[quantile_col] = None  # Initialize columns
 
-    # Step 1: initial transforms 
-    transforms = model.named_steps.get('transforms')
+    # Step 1: initial transforms
+    transforms = model.named_steps["transformations"]
     x_inf_transformed = transforms.transform(data[config.modeling.features])
 
-    regressor = model.named_steps.get('model')
-    preds = regressor.predict(x_inf_transformed)
+    regressor = model.named_steps["model"]
+    preds = regressor.predict(x_inf_transformed, return_full_quantiles=True)
     for i, q in enumerate(config.modeling.quantiles):
-        quantile_col = f'pred_Q_{q*100}'
+        quantile_col = f'pred_Q_{int(q*100)}'
+        print(quantile_col)
         data[quantile_col] = preds[:, i]
 
     print(f"✅ Predictions completed")
