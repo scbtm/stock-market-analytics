@@ -20,7 +20,7 @@ class TestDataCollectionConfig:
         """Test default configuration values."""
         config = DataCollectionConfig()
 
-        assert config.tickers_file == "tickers.csv"
+        assert config.tickers_file == "top_200_tickers.csv"
         assert config.metadata_file == "metadata.csv"
         assert config.stocks_history_file == "stocks_history.parquet"
         assert "Symbol" in config.required_ticker_columns
@@ -41,7 +41,7 @@ class TestFeatureEngineeringConfig:
         """Test default configuration values."""
         config = FeatureEngineeringConfig()
 
-        assert config.horizon == 5
+        assert config.horizon == 3
         assert config.past_horizon == 7 * 280
 
     def test_window_properties(self):

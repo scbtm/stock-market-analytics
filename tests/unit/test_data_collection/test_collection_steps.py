@@ -6,6 +6,7 @@ import pytest
 from pathlib import Path
 from unittest.mock import Mock, patch, mock_open
 from datetime import date, datetime
+from stock_market_analytics.config import config
 
 from stock_market_analytics.data_collection.collection_steps import (
     load_tickers,
@@ -28,7 +29,7 @@ class TestLoadTickers:
 
     def test_load_tickers_success(self, tmp_path):
         """Test successful ticker loading."""
-        tickers_file = tmp_path / "tickers.csv"
+        tickers_file = tmp_path / config.data_collection.tickers_file
         tickers_data = """Symbol,Name,Country,IPO Year,Sector,Industry
 AAPL,Apple Inc.,USA,1980,Technology,Consumer Electronics
 GOOGL,Alphabet Inc.,USA,2004,Technology,Internet Content & Information"""
@@ -49,7 +50,7 @@ GOOGL,Alphabet Inc.,USA,2004,Technology,Internet Content & Information"""
 
     def test_load_tickers_invalid_format(self, tmp_path):
         """Test ValueError when file format is invalid."""
-        tickers_file = tmp_path / "tickers.csv"
+        tickers_file = tmp_path / config.data_collection.tickers_file
         tickers_file.write_text("invalid,format")
 
         with pytest.raises(ValueError, match="Error loading tickers file"):
