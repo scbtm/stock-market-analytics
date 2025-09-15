@@ -165,97 +165,94 @@ The system demonstrates **MLOps best practices**:
 
 ### CI/CD Pipeline
 
-The project implements a comprehensive **Continuous Integration** pipeline focusing on code quality, security, and reliability, leveraging GitHub Actions, Makefile, and pre-commit hooks.
+This project implements a modern CI/CD pipeline to automate testing and deployment, ensuring that the application is always in a deployable state. The pipeline is split into two main parts:
 
-**GitHub Actions Workflow**
+*   **Continuous Integration (CI)**, handled by GitHub Actions, focuses on running tests to ensure code quality.
+*   **Continuous Deployment (CD)**, handled by Google Cloud Build, focuses on deploying the application to production.
 
-A GitHub Actions workflow defined in `.github/workflows/ci.yml` automatically runs on every push and pull request to the `main` branch. This ensures that all changes are validated before being merged.
+---
 
-The workflow performs the following steps:
-1.  Sets up a Python 3.12 environment.
-2.  Installs the `uv` package manager.
-3.  Installs all project dependencies using `uv sync`.
-4.  Runs the test suite using the `uv run make ci-tests` command, which executes all tests not marked with `ci-exclude`.
+### Continuous Integration (CI)
 
-```yaml
-# .github/workflows/ci.yml
-name: CI
+The CI pipeline is designed to prevent regressions and maintain code quality by running a suite of tests on every pull request before it can be merged into the `main` branch.
 
-on:
-  push:
-    branches: [ main ]
-  pull_request:
-    branches: [ main ]
+*   **Tool**: GitHub Actions
+*   **Trigger**: On pull requests targeting the `main` branch.
+*   **Process**:
+    1.  Sets up a Python environment.
+    2.  Installs all dependencies using `uv`.
+    3.  Runs the test suite via the `make ci-tests` command.
+*   **Branch Protection**: The `main` branch is protected by a rule that requires the `build` job (our test suite) to pass before any pull request can be merged.
 
-jobs:
-  build:
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        python-version: ["3.12"]
+**Workflow Configuration: (`.github/workflows/ci.yml`)**
 
-    steps:
-    - uses: actions/checkout@v3
-    - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v4
-      with:
-        python-version: ${{ matrix.python-version }}
-    - name: Install uv
-      run: |
-        curl -LsSf https://astral.sh/uv/install.sh | sh
-        source $HOME/.cargo/env
-    - name: Install dependencies
-      run: |
-        uv sync
-    - name: Run tests
-      run: |
-        uv run make ci-tests
-```
+---
 
-**Branch Protection**
+### Continuous Deployment (CD)
 
-The `main` branch is protected by a rule that requires the **build** job from the GitHub Actions workflow to pass before a pull request can be merged. This enforces that all tests must pass, preventing broken code from being merged into the main branch.
+The CD pipeline is responsible for automatically deploying the dashboard application to Google Cloud Run whenever new code is merged into the `main` branch.
 
-**Makefile Automation**
+*   **Tool**: Google Cloud Build
+*   **Trigger**: On push to the `main` branch.
+*   **Process**:
+    1.  **Build**: Builds a Docker image of the application using the `Dockerfile`.
+    2.  **Push**: Pushes the newly built image to Google Artifact Registry.
+    3.  **Deploy**: Deploys the image to a Google Cloud Run service.
+    4.  **Smoke Test**: Performs a health check on the newly deployed service to ensure it's running correctly.
 
-The `Makefile` provides a set of commands to automate common development tasks, ensuring consistency and simplifying the development process.
-
-```makefile
-verify: format lint typecheck test security-check
-```
-
-The CI process includes:
-
-1.  **Code Formatting**: Automated `ruff` formatting for consistent style.
-2.  **Linting**: `ruff` linting catches common issues and enforces best practices.
-3.  **Type Checking**: `pyright` ensures type safety across the codebase.
-4.  **Testing**: `pytest` with coverage reporting and HTML reports.
-5.  **Security Auditing**: `pip-audit` scans for known vulnerabilities.
-
-**Pre-commit Integration**
-
-The project uses `pre-commit` to run a subset of the Makefile's verification steps before each commit. This provides a fast feedback loop for developers and helps maintain code quality.
+**Deployment Configuration: (`cloudbuild.yaml`)**
+Note: as of now the deployment is done in GC UI for simplicity, but to fully deploy continually we can use the following configuration:
 
 ```yaml
-repos:
-  - repo: local
-    hooks:
-      - id: make-pre-commit
-        name: Run Makefile checks
-        entry: uv run make pre-commit
-        language: system            # use system Python / shell
-        pass_filenames: false       # Make handles its own paths
+steps:
+# Build the container image
+- name: 'gcr.io/cloud-builders/docker'
+  args: ['build', '-t', '$_REGION-docker.pkg.dev/$_PROJECT_ID/$_REPO_NAME/$_IMAGE_NAME:latest', '.']
+
+# Push the container image to Artifact Registry
+- name: 'gcr.io/cloud-builders/docker'
+  args: ['push', '$_REGION-docker.pkg.dev/$_PROJECT_ID/$_REPO_NAME/$_IMAGE_NAME:latest']
+
+# Deploy container image to Cloud Run
+- name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+  id: 'Deploy to Cloud Run'
+  entrypoint: gcloud
+  args:
+    - 'run'
+    - 'deploy'
+    - '$_SERVICE_NAME'
+    - '--image=$_REGION-docker.pkg.dev/$_PROJECT_ID/$_REPO_NAME/$_IMAGE_NAME:latest'
+    - '--region=$_REGION'
+    - '--platform=managed'
+    - '--allow-unauthenticated'
+    - '--format=value(status.url)'
+
+# Smoke Test Step
+- name: 'alpine'
+  id: 'Smoke Test'
+  entrypoint: 'sh'
+  args:
+  - '-c'
+  - |
+    apk add curl
+    URL=$(cat /workspace/$(steps.'Deploy to Cloud Run'.outputs.result))
+    if curl -s -f "$URL" > /dev/null; then
+      echo "Smoke test passed!"
+    else
+      echo "Smoke test failed!"
+      exit 1
+    fi
 ```
 
-**Benefits of this approach**:
-- Prevents broken code from entering the repository.
-- Maintains consistent code quality across all contributions.
-- Automated security vulnerability detection.
-- Fast feedback loop for developers.
+---
 
-**CD Setup:**
-- Pending
+### Containerization
 
+The dashboard application is containerized using Docker for portability and consistent deployments.
+
+**Application Image: (`Dockerfile`)**
+
+---
 ## Installation
 
 ### Prerequisites
