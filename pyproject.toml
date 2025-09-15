@@ -45,3 +45,8 @@ build-features = "stock_market_analytics.feature_engineering.feature_building_fl
 train-model = "stock_market_analytics.modeling.training_flow_cbm_qr:TrainingFlow"
 monitor-model = "stock_market_analytics.monitoring.monitoring_flow:MonitoringFlow"
 dashboard = "stock_market_analytics.inference.dashboard:app.run"
+
+[tool.pytest.ini_options]
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+]
