@@ -1,8 +1,8 @@
 repos:
   - repo: local
     hooks:
-      - id: make-verify
+      - id: make-pre-commit
         name: Run Makefile checks
-        entry: uv run make verify
+        entry: uv run make pre-commit
         language: system            # use system Python / shell
         pass_filenames: false       # Make handles its own paths

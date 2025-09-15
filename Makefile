@@ -22,3 +22,5 @@ security-check:
 	uv run --with pip-audit pip-audit --local --skip-editable -v
 
 verify: format typecheck test security-check lint
+
+pre-commit: format typecheck lint
