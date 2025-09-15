@@ -110,11 +110,10 @@ class QuantileConformalCalibrator(BaseEstimator, TransformerMixin, BaseCalibrato
         self,
         y_pred_cal: Array,
         y_true_cal: Array,
-        X_cal: Frame | None = None,
         **kwargs: Any,
     ) -> Array:
         """Fit the calibrator and transform calibration data."""
-        self.fit(y_pred_cal, y_true_cal, X_cal, **kwargs)
+        self.fit(y_pred_cal, y_true_cal, **kwargs)
         return self.transform(y_pred_cal, **kwargs)
 
     # This class focuses on intervals; calibrated quantiles belong in the class below.
@@ -220,9 +219,8 @@ class ConformalizedQuantileCalibrator(
         self,
         y_pred_cal: Array,
         y_true_cal: Array,
-        X_cal: Frame | None = None,
         **kwargs: Any,
     ) -> Array:
         """Fit the calibrator and transform calibration data."""
-        self.fit(y_pred_cal, y_true_cal, X_cal, **kwargs)
+        self.fit(y_pred_cal, y_true_cal, **kwargs)
         return self.transform(y_pred_cal)

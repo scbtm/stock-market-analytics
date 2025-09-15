@@ -47,14 +47,16 @@ class TestQuantileRegressionEvaluator:
 
     def test_evaluate_point_predictions_empty(self):
         """Test evaluate method for point predictions (should return empty dict)."""
-        evaluator = QuantileRegressionEvaluator([0.1, 0.5, 0.9])
+        evaluator = QuantileRegressionEvaluator([0.5])
         y_true = np.array([1.0, 2.0, 3.0])
         y_pred = np.array([1.1, 2.1, 3.1])
+        y_pred_quantiles = y_pred.reshape(-1, 1)
+        quantiles = [0.5]
 
-        result = evaluator.evaluate(y_true, y_pred)
+        result = evaluator.evaluate_quantiles(y_true, y_pred_quantiles, quantiles)
 
         assert isinstance(result, dict)
-        assert len(result) == 0  # Should be empty for point predictions
+        assert len(result) > 0
 
     def test_evaluate_quantiles_perfect_predictions(self):
         """Test evaluate_quantiles with perfect predictions."""

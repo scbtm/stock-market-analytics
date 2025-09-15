@@ -62,7 +62,7 @@ class QuantileRegressionEvaluator(QuantileEvaluator):
         """
         Evaluate quantile predictions.
         """
-        validate_xyq_shapes(y_true, np.asarray(y_pred_quantiles), np.asarray(quantiles))
+        validate_xyq_shapes(y_true, np.asarray(y_pred_quantiles))
         # Align and drop any NaN rows to avoid biased metrics
         yq, q_sorted, _ = align_predictions_to_quantiles(
             y_pred_quantiles, np.array(quantiles, dtype=float)

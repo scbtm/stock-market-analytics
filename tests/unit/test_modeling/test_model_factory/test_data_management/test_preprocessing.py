@@ -729,7 +729,7 @@ class TestIntegrationScenarios:
 
         # Test that CV works with our preprocessing
         cv_scores = []
-        for train_idx, test_idx in splitter.split(X, y):
+        for train_idx, test_idx in splitter.split(X):
             X_train, X_test = X.iloc[train_idx], X.iloc[test_idx]
             y_train, y_test = y.iloc[train_idx], y.iloc[test_idx]
 

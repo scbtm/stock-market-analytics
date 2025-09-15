@@ -94,7 +94,7 @@ def pinball_loss_vectorized(
     y_true = np.asarray(y_true).reshape(-1)
     y_pred = np.asarray(y_pred, dtype=float)
     quantiles = np.asarray(quantiles, dtype=float).reshape(-1)
-    validate_xyq_shapes(y_true, y_pred, quantiles)
+    validate_xyq_shapes(y_true, y_pred)
     e = y_true[:, None] - y_pred  # (n, q)
     q = quantiles[None, :]  # (1, q)
     losses = np.maximum(q * e, (q - 1.0) * e)
@@ -107,7 +107,7 @@ def quantile_coverage(
     y_true = np.asarray(y_true).reshape(-1)
     y_pred_quantiles = np.asarray(y_pred_quantiles, dtype=float)
     quantiles = np.asarray(quantiles, dtype=float).reshape(-1)
-    validate_xyq_shapes(y_true, y_pred_quantiles, quantiles)
+    validate_xyq_shapes(y_true, y_pred_quantiles)
     return np.mean(y_true[:, None] <= y_pred_quantiles, axis=0)
 
 

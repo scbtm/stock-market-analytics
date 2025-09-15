@@ -110,7 +110,7 @@ class TestPipelineComponents:
         evaluator = get_evaluator()
 
         assert evaluator is not None
-        assert hasattr(evaluator, "evaluate")
+        assert hasattr(evaluator, "evaluate_quantiles")
 
     def test_get_baseline_model(self):
         """Test baseline model creation."""
