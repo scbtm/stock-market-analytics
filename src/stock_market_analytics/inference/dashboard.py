@@ -103,9 +103,12 @@ def build_initial_layout():
     State("symbol-input", "value"),
     prevent_initial_call=True,
 )
-def update_dashboard(symbol):  # type: ignore
+def update_dashboard(n_clicks, symbol):  # type: ignore
     if not symbol:
         raise PreventUpdate
+
+    if n_clicks:
+        print(f"Generating forecast for symbol: {symbol}")
 
     # 1. Load Model (will be cached after first run)
     model = download_and_load_model()

@@ -17,7 +17,6 @@ A production-grade machine learning project for quantitative finance, implementi
   - [Quality Assurance](#quality-assurance)
   - [CI/CD](#cicd-pipeline)
 - [Installation](#installation)
-- [Quick Start](#quick-start)
 - [Usage Guide](#usage-guide)
   - [Data Collection](#data-collection)
   - [Feature Engineering](#feature-engineering)
