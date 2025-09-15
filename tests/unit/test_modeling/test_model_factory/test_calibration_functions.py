@@ -10,18 +10,14 @@ from stock_market_analytics.modeling.model_factory.calibration.calibration_funct
     ensure_1d,
     check_same_length,
     ensure_sorted_unique_quantiles,
-
     # Core math functions
     finite_sample_quantile,
-
     # Conformity scores
     conformity_abs_residuals,
     conformity_normalized_abs,
     cqr_interval_scores,
-
     # Interval functions
     symmetric_interval_from_radius,
-
     # Quantile calibration functions
     residuals_for_quantile,
     residual_shift_for_tau,
@@ -353,17 +349,16 @@ class TestQuantileCalibrationFunctions:
 
     def test_apply_quantile_shifts(self):
         """Test apply_quantile_shifts function."""
-        y_pred_quantiles = np.array([
-            [1.0, 2.0, 3.0],  # Sample 1: q=[0.1, 0.5, 0.9]
-            [1.5, 2.5, 3.5]   # Sample 2
-        ])
+        y_pred_quantiles = np.array(
+            [
+                [1.0, 2.0, 3.0],  # Sample 1: q=[0.1, 0.5, 0.9]
+                [1.5, 2.5, 3.5],  # Sample 2
+            ]
+        )
         shifts = np.array([0.1, 0.0, -0.1])
 
         result = apply_quantile_shifts(y_pred_quantiles, shifts)
-        expected = np.array([
-            [1.1, 2.0, 2.9],
-            [1.6, 2.5, 3.4]
-        ])
+        expected = np.array([[1.1, 2.0, 2.9], [1.6, 2.5, 3.4]])
 
         np.testing.assert_array_almost_equal(result, expected)
 
@@ -386,25 +381,31 @@ class TestQuantileCalibrationFunctions:
     def test_enforce_monotone_across_quantiles(self):
         """Test enforce_monotone_across_quantiles function."""
         # Create non-monotonic quantiles (violating order)
-        yq = np.array([
-            [3.0, 2.0, 1.0],  # Sample 1: decreasing (should be fixed)
-            [1.0, 3.0, 2.0]   # Sample 2: non-monotonic
-        ])
+        yq = np.array(
+            [
+                [3.0, 2.0, 1.0],  # Sample 1: decreasing (should be fixed)
+                [1.0, 3.0, 2.0],  # Sample 2: non-monotonic
+            ]
+        )
 
         result = enforce_monotone_across_quantiles(yq)
-        expected = np.array([
-            [3.0, 3.0, 3.0],  # Cumulative max makes it non-decreasing
-            [1.0, 3.0, 3.0]
-        ])
+        expected = np.array(
+            [
+                [3.0, 3.0, 3.0],  # Cumulative max makes it non-decreasing
+                [1.0, 3.0, 3.0],
+            ]
+        )
 
         np.testing.assert_array_almost_equal(result, expected)
 
     def test_enforce_monotone_across_quantiles_already_monotonic(self):
         """Test enforce_monotone_across_quantiles with already monotonic data."""
-        yq = np.array([
-            [1.0, 2.0, 3.0],  # Already increasing
-            [1.5, 2.5, 3.5]
-        ])
+        yq = np.array(
+            [
+                [1.0, 2.0, 3.0],  # Already increasing
+                [1.5, 2.5, 3.5],
+            ]
+        )
 
         result = enforce_monotone_across_quantiles(yq)
 

@@ -2,14 +2,13 @@ import os
 from pathlib import Path
 from typing import Any
 
-from metaflow import FlowSpec, step
-import wandb
-from wandb.integration.metaflow import wandb_log
-
 import pandas as pd
+from metaflow import FlowSpec, step
 
-from stock_market_analytics.data_collection import collection_steps
+import wandb
 from stock_market_analytics.config import config
+from stock_market_analytics.data_collection import collection_steps
+from wandb.integration.metaflow import wandb_log
 
 # Initialize wandb
 wandb.login(key=config.wandb_key)
@@ -176,7 +175,14 @@ class BatchCollectionFlow(FlowSpec):
         print("✅ Successfully completed batch collection")
         self.next(self.log_artifacts)
 
-    @wandb_log(datasets=True, models=False, others=True, settings=wandb.Settings(project="stock-market-analytics", run_job_type="data-collection"))
+    @wandb_log(
+        datasets=True,
+        models=False,
+        others=True,
+        settings=wandb.Settings(
+            project="stock-market-analytics", run_job_type="data-collection"
+        ),
+    )
     @step
     def log_artifacts(self) -> None:
         """
@@ -200,12 +206,14 @@ class BatchCollectionFlow(FlowSpec):
 
             # Collection summary metrics
             self.collection_summary = {
-                "total_tickers_processed": len(self.metadata_info['symbol'].unique()),
+                "total_tickers_processed": len(self.metadata_info["symbol"].unique()),
                 "successful_data_collections": self.collected_data_count,
                 "metadata_updates_processed": len(self.metadata_updates),
                 "new_records_added": self.collection_results.get("new_records", 0),
                 "symbols_updated": self.collection_results.get("symbols_updated", 0),
-                "total_records_in_dataset": self.collection_results.get("total_records", 0),
+                "total_records_in_dataset": self.collection_results.get(
+                    "total_records", 0
+                ),
                 "collection_status": self.collection_results.get("status", "unknown"),
             }
 

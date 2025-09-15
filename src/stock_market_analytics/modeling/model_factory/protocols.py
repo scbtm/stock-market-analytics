@@ -17,7 +17,8 @@ These are structural types (Protocols) to decouple components while preserving t
 
 from __future__ import annotations
 
-from typing import Any, Protocol, runtime_checkable, Mapping, Sequence, Iterator
+from collections.abc import Iterator, Mapping, Sequence
+from typing import Any, Protocol, runtime_checkable
 
 import numpy as np
 import pandas as pd
@@ -25,14 +26,15 @@ from numpy.typing import NDArray
 
 # ----- Common type aliases ----------------------------------------------------
 
-Array = NDArray[np.float64]          # numeric arrays (preds, probs, quantiles)
-IndexArray = NDArray[np.intp]        # index arrays for CV splitters
+Array = NDArray[np.float64]  # numeric arrays (preds, probs, quantiles)
+IndexArray = NDArray[np.intp]  # index arrays for CV splitters
 Frame = pd.DataFrame
 Series = pd.Series
 Metrics = Mapping[str, float]
 
 
 # ----- Calibration ------------------------------------------------------------
+
 
 @runtime_checkable
 class BaseCalibrator(Protocol):
@@ -53,8 +55,7 @@ class BaseCalibrator(Protocol):
         y_true_cal: Array,
         X_cal: Frame | None = None,
         **kwargs: Any,
-    ) -> BaseCalibrator:
-        ...
+    ) -> BaseCalibrator: ...
 
     def transform(self, y_pred: Array, **kwargs: Any) -> Array:
         """Map raw model outputs to calibrated outputs."""
@@ -66,8 +67,7 @@ class BaseCalibrator(Protocol):
         y_true_cal: Array,
         X_cal: Frame | None = None,
         **kwargs: Any,
-    ) -> Array:
-        ...
+    ) -> Array: ...
 
 
 @runtime_checkable
@@ -80,18 +80,18 @@ class ProbabilityCalibrator(BaseCalibrator, Protocol):
     - Multiclass: (n, C) with rows summing to ~1.0
     """
 
-    def transform(self, y_score: Array, **kwargs: Any) -> Array:
-        ...
+    def transform(self, y_score: Array, **kwargs: Any) -> Array: ...
 
 
 @runtime_checkable
 class QuantileCalibrator(BaseCalibrator, Protocol):
     """Calibrate multi-quantile predictions (n_samples, n_quantiles)."""
 
-    def transform(self, y_pred_quantiles: Array, **kwargs: Any) -> Array:
-        ...
+    def transform(self, y_pred_quantiles: Array, **kwargs: Any) -> Array: ...
+
 
 # ----- Data splitting -------------------------------------------------------------#
+
 
 @runtime_checkable
 class DataSplitter(Protocol):
@@ -101,7 +101,9 @@ class DataSplitter(Protocol):
         """Split the DataFrame into training and testing sets."""
         ...
 
+
 # ----- Post-processing / business rules --------------------------------------
+
 
 @runtime_checkable
 class PostProcessor(Protocol):
@@ -111,30 +113,28 @@ class PostProcessor(Protocol):
         self,
         predictions: Array,
         context: dict[str, Any] | None = None,
-    ) -> Array:
-        ...
+    ) -> Array: ...
 
     def validate_predictions(self, predictions: Array) -> bool:
         """Return True if predictions satisfy business constraints."""
         ...
 
     # Optional but useful for debugging/monitoring:
-    def report_violations(self, predictions: Array) -> dict[str, Any]:  # pragma: no cover
+    def report_violations(
+        self, predictions: Array
+    ) -> dict[str, Any]:  # pragma: no cover
         """Return a structured report of constraint violations (empty dict if none)."""
         ...
 
 
 # ----- Evaluation -------------------------------------------------------------
 
+
 @runtime_checkable
 class ModelEvaluator(Protocol):
     """Standardized evaluation interface."""
 
-    def evaluate(self, y_true: Array, y_pred: Array) -> dict[str, float]:
-        ...
-
-    def get_metric_names(self) -> list[str]:
-        ...
+    def get_metric_names(self) -> list[str]: ...
 
 
 @runtime_checkable
@@ -146,8 +146,7 @@ class QuantileEvaluator(ModelEvaluator, Protocol):
         y_true: Array,
         y_pred_quantiles: Array,
         quantiles: Sequence[float],
-    ) -> dict[str, float]:
-        ...
+    ) -> dict[str, float]: ...
 
     def evaluate_intervals(
         self,
@@ -155,31 +154,28 @@ class QuantileEvaluator(ModelEvaluator, Protocol):
         y_lower: Array,
         y_upper: Array,
         alpha: float = 0.1,
-    ) -> dict[str, float]:
-        ...
+    ) -> dict[str, float]: ...
 
 
 # ----- Estimators -------------------------------------------------------------
+
 
 @runtime_checkable
 class SklearnCompatibleEstimator(Protocol):
     """Sklearn-compatible estimator surface (cloneable & tunable)."""
 
-    def fit(self, X: Frame | Array, y: Series | Array, **kwargs: Any) -> SklearnCompatibleEstimator:
-        ...
+    def fit(
+        self, X: Frame | Array, y: Series | Array, **kwargs: Any
+    ) -> SklearnCompatibleEstimator: ...
 
-    def predict(self, X: Frame | Array) -> Array:
-        ...
+    def predict(self, X: Frame | Array) -> Array: ...
 
-    def score(self, X: Any, y: Any, sample_weight: Any = None) -> float:
-        ...
+    def score(self, X: Any, y: Any, sample_weight: Any = None) -> float: ...
 
     # Required for sklearn cloning/grid-search compatibility
-    def get_params(self, deep: bool = True) -> dict[str, Any]:
-        ...
+    def get_params(self, deep: bool = True) -> dict[str, Any]: ...
 
-    def set_params(self, **params: Any) -> SklearnCompatibleEstimator:
-        ...
+    def set_params(self, **params: Any) -> SklearnCompatibleEstimator: ...
 
 
 @runtime_checkable
@@ -187,16 +183,14 @@ class SupportsFeatureImportances(Protocol):
     """Optional mixin for models exposing feature_importances_."""
 
     @property
-    def feature_importances_(self) -> Array:
-        ...
+    def feature_importances_(self) -> Array: ...
 
 
 @runtime_checkable
 class SupportsPredictProba(Protocol):
     """Optional mixin for classifiers exposing predict_proba."""
 
-    def predict_proba(self, X: Frame | Array) -> Array:
-        ...
+    def predict_proba(self, X: Frame | Array) -> Array: ...
 
 
 @runtime_checkable
@@ -216,18 +210,18 @@ class QuantileEstimator(SklearnCompatibleEstimator, Protocol):
 
 # ----- Pipeline ---------------------------------------------------------------
 
+
 @runtime_checkable
 class ModelingPipeline(Protocol):
     """End-to-end pipeline interface decoupled from concrete components."""
 
-    def fit(self, X: Frame, y: Series) -> ModelingPipeline:
-        ...
+    def fit(self, X: Frame, y: Series) -> ModelingPipeline: ...
 
-    def predict(self, X: Frame) -> Array:
-        ...
+    def predict(self, X: Frame) -> Array: ...
 
-    def evaluate(self, X: Frame, y: Series, evaluator: ModelEvaluator) -> dict[str, float]:
-        ...
+    def evaluate(
+        self, X: Frame, y: Series, evaluator: ModelEvaluator
+    ) -> dict[str, float]: ...
 
     def get_components(self) -> dict[str, Any]:
         """Return named subcomponents (e.g., {'preprocessor': ..., 'estimator': ..., 'calibrator': ...})."""
@@ -236,15 +230,25 @@ class ModelingPipeline(Protocol):
 
 __all__ = [
     # aliases
-    "Array", "IndexArray", "Frame", "Series", "Metrics",
+    "Array",
+    "IndexArray",
+    "Frame",
+    "Series",
+    "Metrics",
     # calibrators
-    "BaseCalibrator", "ProbabilityCalibrator", "QuantileCalibrator",
+    "BaseCalibrator",
+    "ProbabilityCalibrator",
+    "QuantileCalibrator",
     # post-processing
     "PostProcessor",
     # evaluation
-    "ModelEvaluator", "QuantileEvaluator",
+    "ModelEvaluator",
+    "QuantileEvaluator",
     # estimators
-    "SklearnCompatibleEstimator", "SupportsFeatureImportances", "SupportsPredictProba", "QuantileEstimator",
+    "SklearnCompatibleEstimator",
+    "SupportsFeatureImportances",
+    "SupportsPredictProba",
+    "QuantileEstimator",
     # pipeline
     "ModelingPipeline",
 ]

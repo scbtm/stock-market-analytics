@@ -234,9 +234,7 @@ class TestConformalizedQuantileCalibrator:
     def test_init_custom_params(self):
         """Test initialization with custom parameters."""
         quantiles = [0.25, 0.5, 0.75]
-        calibrator = ConformalizedQuantileCalibrator(
-            quantiles, enforce_monotonic=False
-        )
+        calibrator = ConformalizedQuantileCalibrator(quantiles, enforce_monotonic=False)
 
         np.testing.assert_array_equal(calibrator.quantiles, np.array([0.25, 0.5, 0.75]))
         assert calibrator.enforce_monotonic is False
@@ -263,15 +261,19 @@ class TestConformalizedQuantileCalibrator:
         calibrator = ConformalizedQuantileCalibrator(quantiles)
 
         y_true = np.array([1.0, 2.0, 3.0, 4.0, 5.0])
-        y_pred_quantiles = np.array([
-            [0.5, 1.0, 1.5],  # Sample 1 quantiles
-            [1.5, 2.0, 2.5],  # Sample 2 quantiles
-            [2.5, 3.0, 3.5],  # Sample 3 quantiles
-            [3.5, 4.0, 4.5],  # Sample 4 quantiles
-            [4.5, 5.0, 5.5],  # Sample 5 quantiles
-        ])
+        y_pred_quantiles = np.array(
+            [
+                [0.5, 1.0, 1.5],  # Sample 1 quantiles
+                [1.5, 2.0, 2.5],  # Sample 2 quantiles
+                [2.5, 3.0, 3.5],  # Sample 3 quantiles
+                [3.5, 4.0, 4.5],  # Sample 4 quantiles
+                [4.5, 5.0, 5.5],  # Sample 5 quantiles
+            ]
+        )
 
-        result = calibrator.fit(y_pred_quantiles, y_true, y_pred_cal_quantiles=y_pred_quantiles)
+        result = calibrator.fit(
+            y_pred_quantiles, y_true, y_pred_cal_quantiles=y_pred_quantiles
+        )
 
         assert result is calibrator
         assert calibrator.shifts_ is not None
@@ -297,7 +299,9 @@ class TestConformalizedQuantileCalibrator:
         y_pred_quantiles = np.array([[1.0, 2.0]])  # Wrong number of quantiles
 
         with pytest.raises(ValueError, match="must have shape"):
-            calibrator.fit(y_pred_quantiles, y_true, y_pred_cal_quantiles=y_pred_quantiles)
+            calibrator.fit(
+                y_pred_quantiles, y_true, y_pred_cal_quantiles=y_pred_quantiles
+            )
 
     def test_fit_mismatched_sample_counts(self):
         """Test fitting with mismatched sample counts."""
@@ -305,14 +309,18 @@ class TestConformalizedQuantileCalibrator:
         calibrator = ConformalizedQuantileCalibrator(quantiles)
 
         y_true = np.array([1.0, 2.0])  # 2 samples
-        y_pred_quantiles = np.array([
-            [0.5, 1.0, 1.5],
-            [1.5, 2.0, 2.5],
-            [2.5, 3.0, 3.5],  # 3 samples
-        ])
+        y_pred_quantiles = np.array(
+            [
+                [0.5, 1.0, 1.5],
+                [1.5, 2.0, 2.5],
+                [2.5, 3.0, 3.5],  # 3 samples
+            ]
+        )
 
         with pytest.raises(ValueError, match="must align on n_cal"):
-            calibrator.fit(y_pred_quantiles, y_true, y_pred_cal_quantiles=y_pred_quantiles)
+            calibrator.fit(
+                y_pred_quantiles, y_true, y_pred_cal_quantiles=y_pred_quantiles
+            )
 
     def test_predict_quantiles(self):
         """Test predict_quantiles method."""
@@ -321,18 +329,22 @@ class TestConformalizedQuantileCalibrator:
 
         # Fit first
         y_true = np.array([1.0, 2.0, 3.0])
-        y_pred_quantiles = np.array([
-            [0.8, 1.0, 1.2],
-            [1.8, 2.0, 2.2],
-            [2.8, 3.0, 3.2],
-        ])
+        y_pred_quantiles = np.array(
+            [
+                [0.8, 1.0, 1.2],
+                [1.8, 2.0, 2.2],
+                [2.8, 3.0, 3.2],
+            ]
+        )
         calibrator.fit(y_pred_quantiles, y_true, y_pred_cal_quantiles=y_pred_quantiles)
 
         # Predict on new data
-        y_new_quantiles = np.array([
-            [1.3, 1.5, 1.7],
-            [2.3, 2.5, 2.7],
-        ])
+        y_new_quantiles = np.array(
+            [
+                [1.3, 1.5, 1.7],
+                [2.3, 2.5, 2.7],
+            ]
+        )
 
         result = calibrator.predict_quantiles(y_new_quantiles)
 
@@ -348,17 +360,21 @@ class TestConformalizedQuantileCalibrator:
 
         # Fit with data that might create non-monotonic results after shifting
         y_true = np.array([1.0, 2.0, 3.0])
-        y_pred_quantiles = np.array([
-            [0.8, 1.0, 1.2],
-            [1.8, 2.0, 2.2],
-            [2.8, 3.0, 3.2],
-        ])
+        y_pred_quantiles = np.array(
+            [
+                [0.8, 1.0, 1.2],
+                [1.8, 2.0, 2.2],
+                [2.8, 3.0, 3.2],
+            ]
+        )
         calibrator.fit(y_pred_quantiles, y_true, y_pred_cal_quantiles=y_pred_quantiles)
 
         # Predict with potentially problematic data
-        y_new_quantiles = np.array([
-            [2.0, 1.5, 1.0],  # Non-monotonic input
-        ])
+        y_new_quantiles = np.array(
+            [
+                [2.0, 1.5, 1.0],  # Non-monotonic input
+            ]
+        )
 
         result = calibrator.predict_quantiles(y_new_quantiles)
 
@@ -382,11 +398,13 @@ class TestConformalizedQuantileCalibrator:
 
         # Fit first
         y_true = np.array([1.0, 2.0, 3.0])
-        y_pred_quantiles = np.array([
-            [0.8, 1.0, 1.2],
-            [1.8, 2.0, 2.2],
-            [2.8, 3.0, 3.2],
-        ])
+        y_pred_quantiles = np.array(
+            [
+                [0.8, 1.0, 1.2],
+                [1.8, 2.0, 2.2],
+                [2.8, 3.0, 3.2],
+            ]
+        )
         calibrator.fit(y_pred_quantiles, y_true, y_pred_cal_quantiles=y_pred_quantiles)
 
         # Try to predict with wrong dimensions
@@ -402,20 +420,24 @@ class TestConformalizedQuantileCalibrator:
 
         # Fit first
         y_true = np.array([1.0, 2.0, 3.0, 4.0, 5.0])
-        y_pred_quantiles = np.array([
-            [0.7, 0.9, 1.0, 1.1, 1.3],
-            [1.7, 1.9, 2.0, 2.1, 2.3],
-            [2.7, 2.9, 3.0, 3.1, 3.3],
-            [3.7, 3.9, 4.0, 4.1, 4.3],
-            [4.7, 4.9, 5.0, 5.1, 5.3],
-        ])
+        y_pred_quantiles = np.array(
+            [
+                [0.7, 0.9, 1.0, 1.1, 1.3],
+                [1.7, 1.9, 2.0, 2.1, 2.3],
+                [2.7, 2.9, 3.0, 3.1, 3.3],
+                [3.7, 3.9, 4.0, 4.1, 4.3],
+                [4.7, 4.9, 5.0, 5.1, 5.3],
+            ]
+        )
         calibrator.fit(y_pred_quantiles, y_true, y_pred_cal_quantiles=y_pred_quantiles)
 
         # Predict intervals (alpha=0.1 means 90% intervals, tau_lo=0.05, tau_hi=0.95)
-        y_new_quantiles = np.array([
-            [1.2, 1.4, 1.5, 1.6, 1.8],
-            [2.2, 2.4, 2.5, 2.6, 2.8],
-        ])
+        y_new_quantiles = np.array(
+            [
+                [1.2, 1.4, 1.5, 1.6, 1.8],
+                [2.2, 2.4, 2.5, 2.6, 2.8],
+            ]
+        )
 
         intervals = calibrator.predict(y_new_quantiles, alpha=0.1)
 
@@ -444,11 +466,13 @@ class TestConformalizedQuantileCalibrator:
 
         # Fit first
         y_true = np.array([1.0, 2.0, 3.0])
-        y_pred_quantiles = np.array([
-            [0.8, 1.0, 1.2],
-            [1.8, 2.0, 2.2],
-            [2.8, 3.0, 3.2],
-        ])
+        y_pred_quantiles = np.array(
+            [
+                [0.8, 1.0, 1.2],
+                [1.8, 2.0, 2.2],
+                [2.8, 3.0, 3.2],
+            ]
+        )
         calibrator.fit(y_pred_quantiles, y_true, y_pred_cal_quantiles=y_pred_quantiles)
 
         # This should use interpolation since we don't have exact 0.05 and 0.95 quantiles
@@ -464,13 +488,17 @@ class TestConformalizedQuantileCalibrator:
         calibrator = ConformalizedQuantileCalibrator(quantiles)
 
         y_true = np.array([1.0, 2.0, 3.0])
-        y_pred_quantiles = np.array([
-            [0.8, 1.0, 1.2],
-            [1.8, 2.0, 2.2],
-            [2.8, 3.0, 3.2],
-        ])
+        y_pred_quantiles = np.array(
+            [
+                [0.8, 1.0, 1.2],
+                [1.8, 2.0, 2.2],
+                [2.8, 3.0, 3.2],
+            ]
+        )
 
-        result = calibrator.calibrate(None, y_true, y_pred_cal_quantiles=y_pred_quantiles)
+        result = calibrator.calibrate(
+            None, y_true, y_pred_cal_quantiles=y_pred_quantiles
+        )
 
         assert result is calibrator
         assert calibrator.shifts_ is not None
@@ -482,11 +510,13 @@ class TestConformalizedQuantileCalibrator:
 
         # Fit first
         y_true = np.array([1.0, 2.0, 3.0])
-        y_pred_quantiles = np.array([
-            [0.8, 1.0, 1.2],
-            [1.8, 2.0, 2.2],
-            [2.8, 3.0, 3.2],
-        ])
+        y_pred_quantiles = np.array(
+            [
+                [0.8, 1.0, 1.2],
+                [1.8, 2.0, 2.2],
+                [2.8, 3.0, 3.2],
+            ]
+        )
         calibrator.fit(y_pred_quantiles, y_true, y_pred_cal_quantiles=y_pred_quantiles)
 
         # Transform should be same as predict_quantiles
@@ -502,11 +532,13 @@ class TestConformalizedQuantileCalibrator:
         calibrator = ConformalizedQuantileCalibrator(quantiles)
 
         y_true = np.array([1.0, 2.0, 3.0])
-        y_pred_quantiles = np.array([
-            [0.8, 1.0, 1.2],
-            [1.8, 2.0, 2.2],
-            [2.8, 3.0, 3.2],
-        ])
+        y_pred_quantiles = np.array(
+            [
+                [0.8, 1.0, 1.2],
+                [1.8, 2.0, 2.2],
+                [2.8, 3.0, 3.2],
+            ]
+        )
 
         result = calibrator.fit_transform(
             y_pred_quantiles, y_true, y_pred_cal_quantiles=y_pred_quantiles
@@ -559,24 +591,28 @@ class TestCalibratorIntegration:
 
         y_true_cal = np.random.normal(0, 1, n_cal)
         # Create systematically biased quantile predictions
-        y_pred_quantiles_cal = np.column_stack([
-            np.random.normal(-1.0, 0.8, n_cal),  # Biased low quantile
-            y_true_cal + np.random.normal(0.1, 0.2, n_cal),  # Slightly biased median
-            np.random.normal(1.2, 0.8, n_cal),   # Biased high quantile
-        ])
+        y_pred_quantiles_cal = np.column_stack(
+            [
+                np.random.normal(-1.0, 0.8, n_cal),  # Biased low quantile
+                y_true_cal
+                + np.random.normal(0.1, 0.2, n_cal),  # Slightly biased median
+                np.random.normal(1.2, 0.8, n_cal),  # Biased high quantile
+            ]
+        )
 
         y_true_test = np.random.normal(0, 1, n_test)
-        y_pred_quantiles_test = np.column_stack([
-            np.random.normal(-1.0, 0.8, n_test),
-            y_true_test + np.random.normal(0.1, 0.2, n_test),
-            np.random.normal(1.2, 0.8, n_test),
-        ])
+        y_pred_quantiles_test = np.column_stack(
+            [
+                np.random.normal(-1.0, 0.8, n_test),
+                y_true_test + np.random.normal(0.1, 0.2, n_test),
+                np.random.normal(1.2, 0.8, n_test),
+            ]
+        )
 
         # Fit calibrator
         calibrator = ConformalizedQuantileCalibrator(quantiles)
         calibrator.fit(
-            y_pred_quantiles_cal, y_true_cal,
-            y_pred_cal_quantiles=y_pred_quantiles_cal
+            y_pred_quantiles_cal, y_true_cal, y_pred_cal_quantiles=y_pred_quantiles_cal
         )
 
         # Get calibrated quantiles

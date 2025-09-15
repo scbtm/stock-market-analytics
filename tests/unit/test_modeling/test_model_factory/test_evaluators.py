@@ -62,11 +62,13 @@ class TestQuantileRegressionEvaluator:
 
         # Perfect predictions: true values at median, with reasonable bounds
         y_true = np.array([1.0, 2.0, 3.0])
-        y_pred_quantiles = np.array([
-            [0.5, 1.0, 1.5],  # Sample 1: bounds around true value 1.0
-            [1.5, 2.0, 2.5],  # Sample 2: bounds around true value 2.0
-            [2.5, 3.0, 3.5],  # Sample 3: bounds around true value 3.0
-        ])
+        y_pred_quantiles = np.array(
+            [
+                [0.5, 1.0, 1.5],  # Sample 1: bounds around true value 1.0
+                [1.5, 2.0, 2.5],  # Sample 2: bounds around true value 2.0
+                [2.5, 3.0, 3.5],  # Sample 3: bounds around true value 3.0
+            ]
+        )
         quantiles = [0.1, 0.5, 0.9]
 
         result = evaluator.evaluate_quantiles(y_true, y_pred_quantiles, quantiles)
@@ -94,13 +96,15 @@ class TestQuantileRegressionEvaluator:
 
         # Realistic predictions with some errors
         y_true = np.array([1.0, 2.0, 3.0, 4.0, 5.0])
-        y_pred_quantiles = np.array([
-            [0.8, 1.1, 1.4],  # Sample 1: slightly off
-            [1.8, 2.2, 2.4],  # Sample 2: slightly off
-            [2.7, 3.1, 3.3],  # Sample 3: slightly off
-            [3.6, 4.2, 4.4],  # Sample 4: slightly off
-            [4.5, 5.3, 5.5],  # Sample 5: slightly off
-        ])
+        y_pred_quantiles = np.array(
+            [
+                [0.8, 1.1, 1.4],  # Sample 1: slightly off
+                [1.8, 2.2, 2.4],  # Sample 2: slightly off
+                [2.7, 3.1, 3.3],  # Sample 3: slightly off
+                [3.6, 4.2, 4.4],  # Sample 4: slightly off
+                [4.5, 5.3, 5.5],  # Sample 5: slightly off
+            ]
+        )
         quantiles = [0.25, 0.5, 0.75]
 
         result = evaluator.evaluate_quantiles(y_true, y_pred_quantiles, quantiles)
@@ -117,7 +121,9 @@ class TestQuantileRegressionEvaluator:
         assert result["mean_pinball_loss"] >= 0.0  # Pinball loss is always non-negative
         assert result["crps"] >= 0.0  # CRPS is always non-negative
         assert 0.0 <= result["mean_coverage"] <= 1.0  # Coverage is between 0 and 1
-        assert 0.0 <= result["monotonicity_violation_rate"] <= 1.0  # Violation rate is a proportion
+        assert (
+            0.0 <= result["monotonicity_violation_rate"] <= 1.0
+        )  # Violation rate is a proportion
 
         # PIT statistics should be reasonable for uniform distribution
         assert 0.0 <= result["pit_mean"] <= 1.0
@@ -137,12 +143,14 @@ class TestQuantileRegressionEvaluator:
 
         # Data with some NaN values
         y_true = np.array([1.0, np.nan, 3.0, 4.0])
-        y_pred_quantiles = np.array([
-            [0.5, 1.0, 1.5],
-            [np.nan, np.nan, np.nan],  # This row should be dropped
-            [2.5, 3.0, 3.5],
-            [3.5, 4.0, 4.5],
-        ])
+        y_pred_quantiles = np.array(
+            [
+                [0.5, 1.0, 1.5],
+                [np.nan, np.nan, np.nan],  # This row should be dropped
+                [2.5, 3.0, 3.5],
+                [3.5, 4.0, 4.5],
+            ]
+        )
         quantiles = [0.1, 0.5, 0.9]
 
         result = evaluator.evaluate_quantiles(y_true, y_pred_quantiles, quantiles)
@@ -161,11 +169,13 @@ class TestQuantileRegressionEvaluator:
 
         y_true = np.array([1.0, 2.0, 3.0])
         # Intentionally create crossing violations (higher quantile < lower quantile)
-        y_pred_quantiles = np.array([
-            [1.5, 1.0, 0.5],  # Decreasing (violation)
-            [2.0, 2.0, 2.0],  # Flat (not technically a violation)
-            [3.5, 3.0, 2.5],  # Decreasing (violation)
-        ])
+        y_pred_quantiles = np.array(
+            [
+                [1.5, 1.0, 0.5],  # Decreasing (violation)
+                [2.0, 2.0, 2.0],  # Flat (not technically a violation)
+                [3.5, 3.0, 2.5],  # Decreasing (violation)
+            ]
+        )
         quantiles = [0.1, 0.5, 0.9]
 
         result = evaluator.evaluate_quantiles(y_true, y_pred_quantiles, quantiles)
@@ -180,13 +190,15 @@ class TestQuantileRegressionEvaluator:
 
         # Create data where we know the coverage outcomes
         y_true = np.array([1.0, 2.0, 3.0, 4.0, 5.0])  # Target values
-        y_pred_quantiles = np.array([
-            [0.9, 1.1, 1.3],  # True value 1.0: below q20, between q20-q50
-            [1.8, 2.2, 2.4],  # True value 2.0: below q20, above q50
-            [2.5, 3.5, 3.7],  # True value 3.0: below all quantiles
-            [3.2, 4.4, 4.6],  # True value 4.0: below q20, above q50
-            [4.1, 5.1, 5.3],  # True value 5.0: below q20, between q20-q50
-        ])
+        y_pred_quantiles = np.array(
+            [
+                [0.9, 1.1, 1.3],  # True value 1.0: below q20, between q20-q50
+                [1.8, 2.2, 2.4],  # True value 2.0: below q20, above q50
+                [2.5, 3.5, 3.7],  # True value 3.0: below all quantiles
+                [3.2, 4.4, 4.6],  # True value 4.0: below q20, above q50
+                [4.1, 5.1, 5.3],  # True value 5.0: below q20, between q20-q50
+            ]
+        )
         quantiles = [0.2, 0.5, 0.8]
 
         result = evaluator.evaluate_quantiles(y_true, y_pred_quantiles, quantiles)
@@ -260,8 +272,13 @@ class TestQuantileRegressionEvaluator:
 
         # Check for basic metrics
         expected_basic = [
-            "n_samples_evaluated", "n_rows_dropped_nan", "mean_pinball_loss",
-            "crps", "monotonicity_violation_rate", "pit_mean", "pit_ks"
+            "n_samples_evaluated",
+            "n_rows_dropped_nan",
+            "mean_pinball_loss",
+            "crps",
+            "monotonicity_violation_rate",
+            "pit_mean",
+            "pit_ks",
         ]
         for metric in expected_basic:
             assert metric in names
@@ -298,9 +315,7 @@ class TestQuantileRegressionEvaluator:
         names = evaluator.get_metric_names()
 
         # Should still have all basic metrics
-        basic_metrics = [
-            "n_samples_evaluated", "mean_pinball_loss", "crps", "pit_mean"
-        ]
+        basic_metrics = ["n_samples_evaluated", "mean_pinball_loss", "crps", "pit_mean"]
         for metric in basic_metrics:
             assert metric in names
 
@@ -330,11 +345,13 @@ class TestQuantileRegressionEvaluator:
         evaluator = QuantileRegressionEvaluator([0.1, 0.5, 0.9])
 
         y_true = np.array([0.0, 0.0, 0.0])
-        y_pred_quantiles = np.array([
-            [0.0, 0.0, 0.0],
-            [0.0, 0.0, 0.0],
-            [0.0, 0.0, 0.0],
-        ])
+        y_pred_quantiles = np.array(
+            [
+                [0.0, 0.0, 0.0],
+                [0.0, 0.0, 0.0],
+                [0.0, 0.0, 0.0],
+            ]
+        )
         quantiles = [0.1, 0.5, 0.9]
 
         result = evaluator.evaluate_quantiles(y_true, y_pred_quantiles, quantiles)
@@ -360,11 +377,13 @@ class TestQuantileRegressionEvaluator:
         evaluator = QuantileRegressionEvaluator([0.1, 0.5, 0.9])
 
         y_true = np.array([1.0, 2.0, 3.0])
-        y_pred_quantiles = np.array([
-            [1.0, 1.5, 2.0],
-            [2.0, 2.5, 3.0],
-            [3.0, 3.5, 4.0],
-        ])
+        y_pred_quantiles = np.array(
+            [
+                [1.0, 1.5, 2.0],
+                [2.0, 2.5, 3.0],
+                [3.0, 3.5, 4.0],
+            ]
+        )
         quantiles = [0.25, 0.75]  # Different quantiles than predictions
 
         # The function may actually handle this case by aligning quantiles
@@ -375,7 +394,9 @@ class TestQuantileRegressionEvaluator:
         assert isinstance(result, dict)
         assert "mean_pinball_loss" in result
 
-    @patch('stock_market_analytics.modeling.model_factory.evaluation.evaluators.ensure_sorted_unique_quantiles')
+    @patch(
+        "stock_market_analytics.modeling.model_factory.evaluation.evaluators.ensure_sorted_unique_quantiles"
+    )
     def test_init_calls_validation(self, mock_validate):
         """Test that initialization calls quantile validation."""
         mock_validate.return_value = np.array([0.1, 0.5, 0.9])
@@ -420,13 +441,15 @@ class TestQuantileRegressionEvaluator:
         y_true = np.random.normal(10, 2, n_samples)
 
         # Create predictions with some realistic error structure
-        y_pred_quantiles = np.column_stack([
-            y_true + np.random.normal(-3, 0.5, n_samples),  # q05: lower bound
-            y_true + np.random.normal(-1, 0.3, n_samples),  # q25
-            y_true + np.random.normal(0, 0.2, n_samples),   # q50: median
-            y_true + np.random.normal(1, 0.3, n_samples),   # q75
-            y_true + np.random.normal(3, 0.5, n_samples),   # q95: upper bound
-        ])
+        y_pred_quantiles = np.column_stack(
+            [
+                y_true + np.random.normal(-3, 0.5, n_samples),  # q05: lower bound
+                y_true + np.random.normal(-1, 0.3, n_samples),  # q25
+                y_true + np.random.normal(0, 0.2, n_samples),  # q50: median
+                y_true + np.random.normal(1, 0.3, n_samples),  # q75
+                y_true + np.random.normal(3, 0.5, n_samples),  # q95: upper bound
+            ]
+        )
         quantiles = [0.05, 0.25, 0.5, 0.75, 0.95]
 
         result = evaluator.evaluate_quantiles(y_true, y_pred_quantiles, quantiles)

@@ -1,10 +1,15 @@
-import wandb
 import os
+
 import joblib
 import pandas as pd
-from stock_market_analytics.config import config
 
-from stock_market_analytics.inference.inference_functions import collect_inference_data, generate_inference_features
+import wandb
+from stock_market_analytics.config import config
+from stock_market_analytics.inference.inference_functions import (
+    collect_inference_data,
+    generate_inference_features,
+)
+
 
 def download_artifacts() -> tuple[str, str]:
     """
@@ -12,7 +17,7 @@ def download_artifacts() -> tuple[str, str]:
     """
     api = wandb.Api(api_key=os.environ.get("WANDB_API_KEY"))
     model_name: str = os.environ.get("MODEL_NAME") or "pipeline:latest"
-    model_version: str = model_name.split(':')[1] if ':' in model_name else 'latest'
+    model_version: str = model_name.split(":")[1] if ":" in model_name else "latest"
     print(f"Downloading model '{model_name}' version '{model_version}' from W&B...")
     # Reference the artifact by entity/project/name:version or :latest
     model = api.artifact(f"san-cbtm/stock-market-analytics/{model_name}", type="model")
@@ -22,13 +27,15 @@ def download_artifacts() -> tuple[str, str]:
 
     return model_dir, model_name
 
+
 def load_model(model_dir: str, model_name: str) -> object:
     """
     Load the model from the downloaded artifact directory.
     """
-    file_name = model_name.split(':')[0] + '.pkl'
-    model = joblib.load(f'{model_dir}/{file_name}')
+    file_name = model_name.split(":")[0] + ".pkl"
+    model = joblib.load(f"{model_dir}/{file_name}")
     return model
+
 
 def download_and_load_model() -> object:
     """
@@ -38,6 +45,7 @@ def download_and_load_model() -> object:
     model = load_model(model_dir, model_name)
     print(f"Model '{model_name}' loaded successfully.")
     return model
+
 
 def get_inference_data(symbol: str) -> pd.DataFrame:
     """
@@ -66,13 +74,16 @@ def get_inference_data(symbol: str) -> pd.DataFrame:
         features = generate_inference_features(raw_data)
 
         print(f"🏁 Inference pipeline completed for {symbol.upper()}")
-        print(f"📊 Final dataset: {features.shape[0]} rows × {features.shape[1]} columns")
+        print(
+            f"📊 Final dataset: {features.shape[0]} rows × {features.shape[1]} columns"
+        )
 
         return features.to_pandas()
 
     except Exception as e:
         print(f"❌ Inference pipeline failed for {symbol}: {str(e)}")
         raise
+
 
 def make_prediction_intervals(model: object, data: pd.DataFrame) -> pd.DataFrame:
     """
@@ -81,9 +92,10 @@ def make_prediction_intervals(model: object, data: pd.DataFrame) -> pd.DataFrame
     print("🤖 Making predictions...")
     predictions = model.predict(data[config.modeling.features])
     low_quantile, high_quantile = predictions[:, 0], predictions[:, 1]
-    data['pred_low_quantile'] = low_quantile
-    data['pred_high_quantile'] = high_quantile
+    data["pred_low_quantile"] = low_quantile
+    data["pred_high_quantile"] = high_quantile
     return data
+
 
 def predict_quantiles(model: object, data: pd.DataFrame) -> pd.DataFrame:
     """
@@ -98,7 +110,7 @@ def predict_quantiles(model: object, data: pd.DataFrame) -> pd.DataFrame:
     """
     quantile_cols = []
     for q in config.modeling.quantiles:
-        quantile_col = f'pred_Q_{q*100}'
+        quantile_col = f"pred_Q_{q * 100}"
         quantile_cols.append(quantile_col)
         data[quantile_col] = None  # Initialize columns
 
@@ -109,9 +121,9 @@ def predict_quantiles(model: object, data: pd.DataFrame) -> pd.DataFrame:
     regressor = model.named_steps["model"]
     preds = regressor.predict(x_inf_transformed, return_full_quantiles=True)
     for i, q in enumerate(config.modeling.quantiles):
-        quantile_col = f'pred_Q_{int(q*100)}'
+        quantile_col = f"pred_Q_{int(q * 100)}"
         print(quantile_col)
         data[quantile_col] = preds[:, i]
 
-    print(f"✅ Predictions completed")
+    print("✅ Predictions completed")
     return data

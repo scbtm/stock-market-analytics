@@ -5,11 +5,14 @@ This module provides utility functions and preprocessing helpers
 for various machine learning estimators and model implementations.
 """
 
+from collections.abc import Sequence
+from typing import Any
+
 import pandas as pd
-from typing import Any, Sequence
 
 try:
     from catboost import Pool
+
     CATBOOST_AVAILABLE = True
 except ImportError:
     CATBOOST_AVAILABLE = False
@@ -32,20 +35,21 @@ def detect_categorical_features(
     categorical_cols = X.select_dtypes(include=["category", "object"]).columns.tolist()
     return categorical_cols
 
+
 def standardize_data(
     X: Any,
 ) -> pd.DataFrame:
-
     if not isinstance(X, pd.DataFrame):
         X = pd.DataFrame(X)  # Convert to Pandas DataFrame
 
     for col in X.columns:
         try:
-            X[col] = pd.to_numeric(X[col], errors='raise')
+            X[col] = pd.to_numeric(X[col], errors="raise")
         except (ValueError, TypeError):
-            X[col] = X[col].astype('category')
+            X[col] = X[col].astype("category")
 
     return X
+
 
 def create_catboost_pool(
     X: pd.DataFrame,
@@ -63,8 +67,10 @@ def create_catboost_pool(
         CatBoost Pool object
     """
     if not CATBOOST_AVAILABLE:
-        raise ImportError("CatBoost is not available. Please install it with 'pip install catboost'")
-        
+        raise ImportError(
+            "CatBoost is not available. Please install it with 'pip install catboost'"
+        )
+
     # Identify categorical feature indices
     X = standardize_data(X)
     cat_features = detect_categorical_features(X)

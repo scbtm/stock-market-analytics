@@ -25,8 +25,8 @@ Quick Usage:
 """
 
 from .inference_functions import (
-    create_inference_collection_plan,
     collect_inference_data,
+    create_inference_collection_plan,
     generate_inference_features,
 )
 

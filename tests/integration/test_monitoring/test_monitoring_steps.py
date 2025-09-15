@@ -70,7 +70,7 @@ class TestMonitoringStepsIntegration:
         result = monitoring_steps.get_covariate_drift_metrics(
             reference_df=reference_data,
             current_df=current_data,
-            feature_columns=feature_columns
+            feature_columns=feature_columns,
         )
 
         assert "aggregate" in result
@@ -83,8 +83,7 @@ class TestMonitoringStepsIntegration:
         current_targets = sample_monitoring_data["log_returns_1d"].iloc[50:]
 
         result = monitoring_steps.get_target_drift_metrics(
-            reference_targets=reference_targets,
-            current_targets=current_targets
+            reference_targets=reference_targets, current_targets=current_targets
         )
 
         assert "distribution_tests" in result
@@ -99,14 +98,14 @@ class TestMonitoringStepsIntegration:
         y_true = np.random.normal(0, 0.02, n_samples)
         y_pred_quantiles = pd.DataFrame(
             np.random.randn(n_samples, n_quantiles),
-            columns=[f"q_{q:.2f}" for q in [0.1, 0.25, 0.5, 0.75, 0.9]]
+            columns=[f"q_{q:.2f}" for q in [0.1, 0.25, 0.5, 0.75, 0.9]],
         )
         quantiles = [0.1, 0.25, 0.5, 0.75, 0.9]
 
         result = monitoring_steps.get_predicted_quantiles_metrics(
             y_true=pd.Series(y_true),
             y_pred_quantiles=y_pred_quantiles,
-            quantiles=quantiles
+            quantiles=quantiles,
         )
 
         assert "pinball_losses" in result
@@ -126,7 +125,7 @@ class TestMonitoringStepsIntegration:
             y_true=pd.Series(y_true),
             y_lower=pd.Series(y_lower),
             y_upper=pd.Series(y_upper),
-            confidence_level=0.8
+            confidence_level=0.8,
         )
 
         assert "coverage" in result

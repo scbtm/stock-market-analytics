@@ -6,26 +6,27 @@ drift and monitoring model performance for quantile regression models.
 """
 
 from __future__ import annotations
+
+from typing import Any
+
 import numpy as np
 import pandas as pd
-from typing import Dict, Any
-from scipy import stats
 from pandas.api.types import is_numeric_dtype  # robust numeric check
+from scipy import stats
 
 # Import existing evaluation functions
 from stock_market_analytics.modeling.model_factory.evaluation.evaluation_functions import (
-    pinball_loss_vectorized,
-    quantile_coverage,
     crps_from_quantiles,
     interval_score,  # Winkler score
-    prediction_interval_coverage_probability,
     mean_interval_width,
     normalized_interval_width,
-    pit_values,
-    pit_ks_statistic,
+    pinball_loss_vectorized,
     pit_ece,
+    pit_ks_statistic,
+    pit_values,
+    prediction_interval_coverage_probability,
+    quantile_coverage,
 )
-
 
 # ============================================
 # DISTRIBUTION SHIFT DETECTION
@@ -35,7 +36,10 @@ from stock_market_analytics.modeling.model_factory.evaluation.evaluation_functio
 # Covariate Drift Metrics
 # --------------------------------------------
 
-def kolmogorov_smirnov_test(reference_data: np.ndarray, current_data: np.ndarray) -> Dict[str, float]:
+
+def kolmogorov_smirnov_test(
+    reference_data: np.ndarray, current_data: np.ndarray
+) -> dict[str, float]:
     """
     Two-sample Kolmogorov–Smirnov (KS) test for distribution drift detection.
 
@@ -81,7 +85,7 @@ def wasserstein_distance(reference_data: np.ndarray, current_data: np.ndarray) -
 
 def population_stability_index(
     reference_data: np.ndarray, current_data: np.ndarray, n_bins: int = 10
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Population Stability Index (PSI) for feature drift detection.
 
@@ -171,13 +175,15 @@ def jensen_shannon_divergence(
 
     m = 0.5 * (ref_hist + curr_hist)
     # Use base=2 so JS divergence ∈ [0,1]; return JS distance = sqrt(JS divergence)
-    js_div = 0.5 * stats.entropy(ref_hist, m, base=2) + 0.5 * stats.entropy(curr_hist, m, base=2)
+    js_div = 0.5 * stats.entropy(ref_hist, m, base=2) + 0.5 * stats.entropy(
+        curr_hist, m, base=2
+    )
     return float(np.sqrt(js_div))
 
 
 def multivariate_covariate_drift_metrics(
     reference_df: pd.DataFrame, current_df: pd.DataFrame, feature_columns: list[str]
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Comprehensive multivariate drift detection over a set of **numeric** features.
 
@@ -191,7 +197,11 @@ def multivariate_covariate_drift_metrics(
         current_df: Current period data.
         feature_columns: List of feature columns to analyze.
     """
-    results: Dict[str, Any] = {"per_feature": {}, "aggregate": {}, "feature_columns": feature_columns}
+    results: dict[str, Any] = {
+        "per_feature": {},
+        "aggregate": {},
+        "feature_columns": feature_columns,
+    }
 
     psi_values: list[float] = []
     ks_p_values: list[float] = []
@@ -203,11 +213,14 @@ def multivariate_covariate_drift_metrics(
         if feature not in reference_df.columns or feature not in current_df.columns:
             continue
         # Only analyze numeric dtypes
-        if not (is_numeric_dtype(reference_df[feature]) and is_numeric_dtype(current_df[feature])):
+        if not (
+            is_numeric_dtype(reference_df[feature])
+            and is_numeric_dtype(current_df[feature])
+        ):
             continue
 
-        ref_data = reference_df[feature].dropna().values
-        curr_data = current_df[feature].dropna().values
+        ref_data = reference_df[feature].dropna().to_numpy()
+        curr_data = current_df[feature].dropna().to_numpy()
         if ref_data.size == 0 or curr_data.size == 0:
             continue
 
@@ -236,9 +249,15 @@ def multivariate_covariate_drift_metrics(
     results["aggregate"] = {
         "mean_psi": float(np.mean(psi_values)) if psi_values else np.nan,
         "max_psi": float(np.max(psi_values)) if psi_values else np.nan,
-        "fraction_drifted_features_psi": float(np.mean([x > 0.2 for x in psi_values])) if psi_values else np.nan,
-        "mean_wasserstein": float(np.mean(wasserstein_distances)) if wasserstein_distances else np.nan,
-        "fraction_significant_ks": float(np.mean([x < 0.05 for x in ks_p_values])) if ks_p_values else np.nan,
+        "fraction_drifted_features_psi": float(np.mean([x > 0.2 for x in psi_values]))
+        if psi_values
+        else np.nan,
+        "mean_wasserstein": float(np.mean(wasserstein_distances))
+        if wasserstein_distances
+        else np.nan,
+        "fraction_significant_ks": float(np.mean([x < 0.05 for x in ks_p_values]))
+        if ks_p_values
+        else np.nan,
         "n_features_analyzed": len(analyzed_features),
     }
 
@@ -249,9 +268,12 @@ def multivariate_covariate_drift_metrics(
 # Prediction Drift Metrics
 # --------------------------------------------
 
+
 def prediction_drift_metrics(
-    reference_predictions: np.ndarray, current_predictions: np.ndarray, quantiles: np.ndarray
-) -> Dict[str, Any]:
+    reference_predictions: np.ndarray,
+    current_predictions: np.ndarray,
+    quantiles: np.ndarray,
+) -> dict[str, Any]:
     """
     Drift metrics on **predicted quantiles**.
 
@@ -271,7 +293,11 @@ def prediction_drift_metrics(
     if reference.shape[1] != len(quantiles) or current.shape[1] != len(quantiles):
         raise ValueError("Number of quantiles must match prediction dimensions")
 
-    results: Dict[str, Any] = {"per_quantile": {}, "aggregate": {}, "quantiles": quantiles.tolist()}
+    results: dict[str, Any] = {
+        "per_quantile": {},
+        "aggregate": {},
+        "quantiles": quantiles.tolist(),
+    }
 
     ks_statistics: list[float] = []
     wasserstein_distances: list[float] = []
@@ -300,8 +326,12 @@ def prediction_drift_metrics(
     results["aggregate"] = {
         "mean_ks_statistic": float(np.mean(ks_statistics)) if ks_statistics else np.nan,
         "max_ks_statistic": float(np.max(ks_statistics)) if ks_statistics else np.nan,
-        "mean_wasserstein": float(np.mean(wasserstein_distances)) if wasserstein_distances else np.nan,
-        "max_wasserstein": float(np.max(wasserstein_distances)) if wasserstein_distances else np.nan,
+        "mean_wasserstein": float(np.mean(wasserstein_distances))
+        if wasserstein_distances
+        else np.nan,
+        "max_wasserstein": float(np.max(wasserstein_distances))
+        if wasserstein_distances
+        else np.nan,
     }
     return results
 
@@ -310,7 +340,10 @@ def prediction_drift_metrics(
 # Target Drift Metrics
 # --------------------------------------------
 
-def target_drift_metrics(reference_targets: np.ndarray, current_targets: np.ndarray) -> Dict[str, Any]:
+
+def target_drift_metrics(
+    reference_targets: np.ndarray, current_targets: np.ndarray
+) -> dict[str, Any]:
     """
     Detect drift in the **target** distribution.
 
@@ -341,7 +374,10 @@ def target_drift_metrics(reference_targets: np.ndarray, current_targets: np.ndar
     ref_mean, curr_mean = np.mean(reference), np.mean(current)
     ref_std, curr_std = np.std(reference), np.std(current)
     ref_skew, curr_skew = stats.skew(reference), stats.skew(current)
-    ref_kurt, curr_kurt = stats.kurtosis(reference), stats.kurtosis(current)  # excess kurtosis
+    ref_kurt, curr_kurt = (
+        stats.kurtosis(reference),
+        stats.kurtosis(current),
+    )  # excess kurtosis
 
     # Two-sample Welch t-test for means
     t_stat, t_p = stats.ttest_ind(reference, current, equal_var=False)
@@ -356,7 +392,10 @@ def target_drift_metrics(reference_targets: np.ndarray, current_targets: np.ndar
             "psi": psi_result["psi"],
             "psi_interpretation": psi_result["interpretation"],
         },
-        "distance_metrics": {"wasserstein_distance": wd, "jensen_shannon_distance": js_div},
+        "distance_metrics": {
+            "wasserstein_distance": wd,
+            "jensen_shannon_distance": js_div,
+        },
         "moments_comparison": {
             "ref_mean": float(ref_mean),
             "curr_mean": float(curr_mean),
@@ -389,9 +428,10 @@ def target_drift_metrics(reference_targets: np.ndarray, current_targets: np.ndar
 # Predicted Quantiles Metrics
 # --------------------------------------------
 
+
 def quantile_regression_performance_metrics(
     y_true: np.ndarray, y_pred_quantiles: np.ndarray, quantiles: np.ndarray
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Performance metrics for **quantile regression** predictions.
 
@@ -448,18 +488,30 @@ def quantile_regression_performance_metrics(
     from stock_market_analytics.modeling.model_factory.evaluation.evaluation_functions import (
         monotonicity_violation_rate,
     )
-    mono_violation_rate, mono_violation_count = monotonicity_violation_rate(y_pred_clean)
+
+    mono_violation_rate, mono_violation_count = monotonicity_violation_rate(
+        y_pred_clean
+    )
 
     return {
         "pinball_losses": {
-            "per_quantile": {f"q_{q:.2f}": float(loss) for q, loss in zip(quantiles, pinball_losses)},
+            "per_quantile": {
+                f"q_{q:.2f}": float(loss)
+                for q, loss in zip(quantiles, pinball_losses, strict=False)
+            },
             "mean": float(np.mean(pinball_losses)),
             "median": float(np.median(pinball_losses)),
             "max": float(np.max(pinball_losses)),
         },
         "coverage": {
-            "per_quantile": {f"q_{q:.2f}": float(cov) for q, cov in zip(quantiles, coverages)},
-            "errors": {f"q_{q:.2f}": float(err) for q, err in zip(quantiles, coverage_errors)},
+            "per_quantile": {
+                f"q_{q:.2f}": float(cov)
+                for q, cov in zip(quantiles, coverages, strict=False)
+            },
+            "errors": {
+                f"q_{q:.2f}": float(err)
+                for q, err in zip(quantiles, coverage_errors, strict=False)
+            },
             "mean_absolute_error": float(np.mean(np.abs(coverage_errors))),
             "max_absolute_error": float(np.max(np.abs(coverage_errors))),
             "bias": float(np.mean(coverage_errors)),  # negative = under-coverage
@@ -489,7 +541,7 @@ def quantile_performance_trends(
     quantiles: np.ndarray,
     dates: np.ndarray,
     window_size: int = 30,
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Rolling performance trends for quantile regression.
 
@@ -507,7 +559,7 @@ def quantile_performance_trends(
     y_true = np.asarray(y_true).flatten()
     y_pred_quantiles = np.asarray(y_pred_quantiles)
     quantiles = np.asarray(quantiles)
-    dates = pd.to_datetime(dates).values
+    dates = pd.to_datetime(dates).to_numpy()
 
     df = pd.DataFrame({"date": dates, "y_true": y_true})
     for i, q in enumerate(quantiles):
@@ -518,7 +570,7 @@ def quantile_performance_trends(
     if len(df) < window_size:
         return {"error": f"Insufficient data for window size {window_size}"}
 
-    results: Dict[str, Any] = {
+    results: dict[str, Any] = {
         "dates": [],
         "metrics": {"mean_pinball_loss": [], "mean_coverage_error": [], "crps": []},
         "window_size": window_size,
@@ -528,11 +580,13 @@ def quantile_performance_trends(
 
     for i in range(window_size - 1, len(df)):
         window_df = df.iloc[i - window_size + 1 : i + 1]
-        y_true_window = window_df["y_true"].values
-        y_pred_window = window_df[quantile_cols].values
+        y_true_window = window_df["y_true"].to_numpy()
+        y_pred_window = window_df[quantile_cols].to_numpy()
 
         try:
-            pinball_losses = pinball_loss_vectorized(y_true_window, y_pred_window, quantiles)
+            pinball_losses = pinball_loss_vectorized(
+                y_true_window, y_pred_window, quantiles
+            )
             coverages = quantile_coverage(y_true_window, y_pred_window, quantiles)
             coverage_errors = coverages - quantiles
 
@@ -542,8 +596,12 @@ def quantile_performance_trends(
                 crps = np.nan
 
             results["dates"].append(window_df.iloc[-1]["date"])
-            results["metrics"]["mean_pinball_loss"].append(float(np.mean(pinball_losses)))
-            results["metrics"]["mean_coverage_error"].append(float(np.mean(np.abs(coverage_errors))))
+            results["metrics"]["mean_pinball_loss"].append(
+                float(np.mean(pinball_losses))
+            )
+            results["metrics"]["mean_coverage_error"].append(
+                float(np.mean(np.abs(coverage_errors)))
+            )
             results["metrics"]["crps"].append(float(crps))
         except Exception:
             continue
@@ -555,9 +613,13 @@ def quantile_performance_trends(
 # Calibration Metrics (interval of lower and upper quantiles)
 # --------------------------------------------
 
+
 def prediction_interval_performance_metrics(
-    y_true: np.ndarray, y_lower: np.ndarray, y_upper: np.ndarray, confidence_level: float = 0.8
-) -> Dict[str, Any]:
+    y_true: np.ndarray,
+    y_lower: np.ndarray,
+    y_upper: np.ndarray,
+    confidence_level: float = 0.8,
+) -> dict[str, Any]:
     """
     Performance metrics for **prediction intervals** (PI).
 
@@ -588,12 +650,18 @@ def prediction_interval_performance_metrics(
     if len(y_true_clean) == 0:
         return {"error": "No valid data after removing NaNs"}
 
-    coverage = prediction_interval_coverage_probability(y_true_clean, y_lower_clean, y_upper_clean)
+    coverage = prediction_interval_coverage_probability(
+        y_true_clean, y_lower_clean, y_upper_clean
+    )
     mean_width = mean_interval_width(y_lower_clean, y_upper_clean)
-    normalized_width = normalized_interval_width(y_lower_clean, y_upper_clean, y_true_clean)
+    normalized_width = normalized_interval_width(
+        y_lower_clean, y_upper_clean, y_true_clean
+    )
 
     alpha = 1.0 - confidence_level
-    interval_score_value = interval_score(y_true_clean, y_lower_clean, y_upper_clean, alpha)
+    interval_score_value = interval_score(
+        y_true_clean, y_lower_clean, y_upper_clean, alpha
+    )
 
     coverage_error = coverage - confidence_level
     below_lower = np.mean(y_true_clean < y_lower_clean)
@@ -625,7 +693,10 @@ def prediction_interval_performance_metrics(
             "normalized_width": float(normalized_width),
             "width_statistics": width_stats,
         },
-        "scoring": {"interval_score": float(interval_score_value), "efficiency_ratio": float(efficiency_ratio)},
+        "scoring": {
+            "interval_score": float(interval_score_value),
+            "efficiency_ratio": float(efficiency_ratio),
+        },
         "sample_info": {
             "n_valid_samples": int(len(y_true_clean)),
             "n_total_samples": int(len(y_true)),
@@ -636,7 +707,7 @@ def prediction_interval_performance_metrics(
 
 def interval_calibration_curve(
     y_true: np.ndarray, y_lower: np.ndarray, y_upper: np.ndarray, n_bins: int = 10
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Calibration-by-width curve for prediction intervals.
 
@@ -673,7 +744,12 @@ def interval_calibration_curve(
     bin_indices = np.digitize(widths, bin_edges) - 1
     bin_indices = np.clip(bin_indices, 0, n_bins - 1)
 
-    calibration_data: Dict[str, Any] = {"bin_centers": [], "observed_coverage": [], "bin_counts": [], "mean_widths": []}
+    calibration_data: dict[str, Any] = {
+        "bin_centers": [],
+        "observed_coverage": [],
+        "bin_counts": [],
+        "mean_widths": [],
+    }
 
     for i in range(n_bins):
         bin_mask = bin_indices == i
@@ -690,7 +766,9 @@ def interval_calibration_curve(
     return calibration_data
 
 
-def interval_sharpness_metrics(y_lower: np.ndarray, y_upper: np.ndarray) -> Dict[str, Any]:
+def interval_sharpness_metrics(
+    y_lower: np.ndarray, y_upper: np.ndarray
+) -> dict[str, Any]:
     """
     Sharpness metrics for prediction intervals (narrower is better, if coverage holds).
 
@@ -720,7 +798,9 @@ def interval_sharpness_metrics(y_lower: np.ndarray, y_upper: np.ndarray) -> Dict
         "width_std": float(np.std(widths)),
         "width_iqr": float(np.percentile(widths, 75) - np.percentile(widths, 25)),
         "width_90th_percentile": float(np.percentile(widths, 90)),
-        "width_cv": float(np.std(widths) / np.mean(widths)) if np.mean(widths) > 0 else np.nan,
+        "width_cv": float(np.std(widths) / np.mean(widths))
+        if np.mean(widths) > 0
+        else np.nan,
         "n_samples": int(len(y_lower_clean)),
     }
 
@@ -729,7 +809,10 @@ def interval_sharpness_metrics(y_lower: np.ndarray, y_upper: np.ndarray) -> Dict
 # Optional: simple point-median metrics (recommended addition)
 # --------------------------------------------
 
-def median_point_metrics(y_true: np.ndarray, y_pred_quantiles: np.ndarray, quantiles: np.ndarray) -> Dict[str, float]:
+
+def median_point_metrics(
+    y_true: np.ndarray, y_pred_quantiles: np.ndarray, quantiles: np.ndarray
+) -> dict[str, float]:
     """
     Point-error sanity checks using the median (q=0.5) prediction.
 

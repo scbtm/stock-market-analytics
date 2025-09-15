@@ -47,7 +47,9 @@ class TestYFinanceCollectorIntegration:
         # Verify realistic stock price data
         prices = result["close"].to_list()
         assert all(price > 0 for price in prices)  # Prices should be positive
-        assert all(price < 1000 for price in prices)  # Sanity check for AAPL price range
+        assert all(
+            price < 1000 for price in prices
+        )  # Sanity check for AAPL price range
 
         # Verify collection status
         assert collector.collection_successful is True
@@ -58,7 +60,9 @@ class TestYFinanceCollectorIntegration:
     def test_get_historical_data_invalid_symbol(self):
         """Test data collection with an invalid symbol."""
         # Use a clearly invalid symbol that should return empty data
-        collection_plan = YFinanceCollectionPlan(symbol="INVALID_SYMBOL_123", period="5d")
+        collection_plan = YFinanceCollectionPlan(
+            symbol="INVALID_SYMBOL_123", period="5d"
+        )
         collector = YFinanceCollector(collection_plan=collection_plan)
 
         result = collector.get_historical_data()
@@ -107,6 +111,7 @@ class TestYFinanceCollectorIntegration:
 
         # Verify date range (allowing for weekends/holidays)
         from datetime import date
+
         dates = result["date"].to_list()
         assert min(dates) >= date(2024, 1, 1)
         assert max(dates) <= date(2024, 1, 10)
@@ -139,14 +144,14 @@ class TestYFinanceCollectorIntegration:
 
         # Verify that the collector attempted the operation and returned a proper structure
         # (Success/failure depends on YFinance API availability and supported parameters)
-        assert hasattr(collector, 'collection_successful')
-        assert hasattr(collector, 'collected_empty_data')
-        assert hasattr(collector, 'errors_during_collection')
+        assert hasattr(collector, "collection_successful")
+        assert hasattr(collector, "collected_empty_data")
+        assert hasattr(collector, "errors_during_collection")
 
         # If we got data, verify it has the right structure
         if len(result) > 0:
             # Verify required columns exist
-            required_cols = ['date', 'symbol', 'open', 'high', 'low', 'close', 'volume']
+            required_cols = ["date", "symbol", "open", "high", "low", "close", "volume"]
             assert all(col in result.columns for col in required_cols)
             # Verify symbol is correct
             assert all(symbol == "GOOGL" for symbol in result["symbol"].to_list())
@@ -183,10 +188,18 @@ class TestYFinanceCollectorIntegration:
 
                 # Basic financial data validation
                 assert high >= low, f"High ({high}) should be >= Low ({low})"
-                assert high >= open_price, f"High ({high}) should be >= Open ({open_price})"
-                assert high >= close_price, f"High ({high}) should be >= Close ({close_price})"
-                assert low <= open_price, f"Low ({low}) should be <= Open ({open_price})"
-                assert low <= close_price, f"Low ({low}) should be <= Close ({close_price})"
+                assert high >= open_price, (
+                    f"High ({high}) should be >= Open ({open_price})"
+                )
+                assert high >= close_price, (
+                    f"High ({high}) should be >= Close ({close_price})"
+                )
+                assert low <= open_price, (
+                    f"Low ({low}) should be <= Open ({open_price})"
+                )
+                assert low <= close_price, (
+                    f"Low ({low}) should be <= Close ({close_price})"
+                )
 
     @pytest.mark.slow
     def test_collector_state_management_real_api(self):

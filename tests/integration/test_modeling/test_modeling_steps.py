@@ -39,12 +39,12 @@ class TestModelingStepsIntegration:
 
         data = {}
         # Add required metadata columns
-        data['date'] = dates
-        data['symbol'] = ['AAPL'] * n_samples
+        data["date"] = dates
+        data["symbol"] = ["AAPL"] * n_samples
 
         # Add all the feature columns from config
         for feature in config.modeling.features:
-            if feature not in ['date', 'symbol']:  # Skip already added columns
+            if feature not in ["date", "symbol"]:  # Skip already added columns
                 data[feature] = np.random.randn(n_samples)
 
         # Add the target column
@@ -93,29 +93,29 @@ class TestModelingStepsIntegration:
         pipeline = modeling_steps.get_adhoc_transforms_pipeline()
 
         # Should return a sklearn transformer
-        assert hasattr(pipeline, 'fit')
-        assert hasattr(pipeline, 'transform')
+        assert hasattr(pipeline, "fit")
+        assert hasattr(pipeline, "transform")
 
     def test_get_catboost_multiquantile_model(self):
         """Test getting CatBoost model."""
         model = modeling_steps.get_catboost_multiquantile_model()
 
         # Should return a CatBoost model
-        assert hasattr(model, 'fit')
-        assert hasattr(model, 'predict')
+        assert hasattr(model, "fit")
+        assert hasattr(model, "predict")
 
     def test_get_calibrator(self):
         """Test getting calibrator."""
         calibrator = modeling_steps.get_calibrator()
 
         # Should return a calibrator with fit and transform methods
-        assert hasattr(calibrator, 'fit')
-        assert hasattr(calibrator, 'transform')
+        assert hasattr(calibrator, "fit")
+        assert hasattr(calibrator, "transform")
 
     def test_get_evaluator(self):
         """Test getting evaluator."""
         evaluator = modeling_steps.get_evaluator()
 
         # Should return an evaluator with evaluation methods
-        assert hasattr(evaluator, 'evaluate_intervals')
-        assert hasattr(evaluator, 'evaluate_quantiles')
+        assert hasattr(evaluator, "evaluate_intervals")
+        assert hasattr(evaluator, "evaluate_quantiles")

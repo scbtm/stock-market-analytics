@@ -70,6 +70,7 @@ class TestPrepareModelingData:
         # The actual return structure depends on the implementation
         # Just verify it returns a dictionary
 
+
 class TestPipelineComponents:
     """Test suite for pipeline component creation functions."""
 
@@ -86,8 +87,8 @@ class TestPipelineComponents:
 
         assert model is not None
         # Should have the expected protocol methods
-        assert hasattr(model, 'fit')
-        assert hasattr(model, 'predict')
+        assert hasattr(model, "fit")
+        assert hasattr(model, "predict")
 
     def test_get_catboost_model_with_params(self):
         """Test CatBoost model creation with custom params."""
@@ -101,30 +102,30 @@ class TestPipelineComponents:
         calibrator = get_calibrator()
 
         assert calibrator is not None
-        assert hasattr(calibrator, 'fit')
-        assert hasattr(calibrator, 'transform')
+        assert hasattr(calibrator, "fit")
+        assert hasattr(calibrator, "transform")
 
     def test_get_evaluator(self):
         """Test evaluator creation."""
         evaluator = get_evaluator()
 
         assert evaluator is not None
-        assert hasattr(evaluator, 'evaluate')
+        assert hasattr(evaluator, "evaluate")
 
     def test_get_baseline_model(self):
         """Test baseline model creation."""
         model = get_baseline_model()
 
         assert model is not None
-        assert hasattr(model, 'fit')
-        assert hasattr(model, 'predict')
+        assert hasattr(model, "fit")
+        assert hasattr(model, "predict")
 
 
 class TestAnalyzeFeatureImportance:
     """Test suite for analyze_feature_importance function."""
 
-    @patch('matplotlib.pyplot.show')
-    @patch('matplotlib.pyplot.savefig')
+    @patch("matplotlib.pyplot.show")
+    @patch("matplotlib.pyplot.savefig")
     def test_analyze_feature_importance_with_mock_model(self, mock_savefig, mock_show):
         """Test feature importance analysis with a mock model."""
         # Create a mock model with feature importance

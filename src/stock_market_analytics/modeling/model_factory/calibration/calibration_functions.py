@@ -6,8 +6,13 @@ various calibration tasks on model predictions.
 """
 
 from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from collections.abc import Iterable
+
 import numpy as np
-from typing import Iterable, Tuple
 
 # ---------- Validation ----------
 
@@ -101,7 +106,7 @@ def cqr_interval_scores(
 
 def symmetric_interval_from_radius(
     y_hat: np.ndarray, radius: float | np.ndarray
-) -> Tuple[np.ndarray, np.ndarray]:
+) -> tuple[np.ndarray, np.ndarray]:
     y_hat = ensure_1d(y_hat)
     r = np.asarray(radius, dtype=float)
     if r.ndim == 0:

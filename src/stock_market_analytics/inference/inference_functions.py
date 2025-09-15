@@ -11,10 +11,11 @@ Key principles:
 4. Collect sufficient historical data based on past_horizon configuration
 """
 
-
 import polars as pl
 
-from stock_market_analytics.data_collection.collection_steps import collect_and_process_symbol
+from stock_market_analytics.data_collection.collection_steps import (
+    collect_and_process_symbol,
+)
 from stock_market_analytics.feature_engineering import features_config
 from stock_market_analytics.feature_engineering.feature_steps import (
     create_feature_pipeline,
@@ -101,12 +102,14 @@ def generate_inference_features(raw_data: pl.DataFrame) -> pl.DataFrame:
         # Execute feature pipeline with configuration
         # Note: We do NOT apply time filters here since we want all available data
         # for inference, especially the most recent points
-        features = execute_feature_pipeline(
-            pipeline, raw_data, features_config.as_dict
-        )
+        features = execute_feature_pipeline(pipeline, raw_data, features_config.as_dict)
 
-        print(f"✅ Generated {features.shape[1]} features from {features.shape[0]} data points")
-        print(f"📅 Feature date range: {features['date'].min()} to {features['date'].max()}")
+        print(
+            f"✅ Generated {features.shape[1]} features from {features.shape[0]} data points"
+        )
+        print(
+            f"📅 Feature date range: {features['date'].min()} to {features['date'].max()}"
+        )
 
         return features
 

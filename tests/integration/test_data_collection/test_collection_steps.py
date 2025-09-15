@@ -27,14 +27,16 @@ class TestDataCollectionStepsIntegration:
     @pytest.fixture
     def sample_tickers_data(self):
         """Sample ticker data."""
-        return pd.DataFrame({
-            "Symbol": ["AAPL", "GOOGL", "MSFT"],
-            "Name": ["Apple Inc.", "Alphabet Inc.", "Microsoft Corp."],
-            "Country": ["USA", "USA", "USA"],
-            "IPO Year": [1980, 2004, 1986],
-            "Sector": ["Technology", "Technology", "Technology"],
-            "Industry": ["Consumer Electronics", "Internet Content", "Software"]
-        })
+        return pd.DataFrame(
+            {
+                "Symbol": ["AAPL", "GOOGL", "MSFT"],
+                "Name": ["Apple Inc.", "Alphabet Inc.", "Microsoft Corp."],
+                "Country": ["USA", "USA", "USA"],
+                "IPO Year": [1980, 2004, 1986],
+                "Sector": ["Technology", "Technology", "Technology"],
+                "Industry": ["Consumer Electronics", "Internet Content", "Software"],
+            }
+        )
 
     @pytest.fixture
     def sample_stock_data(self):
@@ -44,15 +46,17 @@ class TestDataCollectionStepsIntegration:
 
         for symbol in ["AAPL", "GOOGL", "MSFT"]:
             for date in dates:
-                data.append({
-                    "symbol": symbol,
-                    "date": date,
-                    "open": 150.0 + (hash(f"{symbol}{date}") % 10),
-                    "high": 155.0 + (hash(f"{symbol}{date}") % 10),
-                    "low": 148.0 + (hash(f"{symbol}{date}") % 10),
-                    "close": 152.0 + (hash(f"{symbol}{date}") % 10),
-                    "volume": 1000000 + (hash(f"{symbol}{date}") % 100000),
-                })
+                data.append(
+                    {
+                        "symbol": symbol,
+                        "date": date,
+                        "open": 150.0 + (hash(f"{symbol}{date}") % 10),
+                        "high": 155.0 + (hash(f"{symbol}{date}") % 10),
+                        "low": 148.0 + (hash(f"{symbol}{date}") % 10),
+                        "close": 152.0 + (hash(f"{symbol}{date}") % 10),
+                        "volume": 1000000 + (hash(f"{symbol}{date}") % 100000),
+                    }
+                )
 
         return pl.DataFrame(data)
 
@@ -78,12 +82,14 @@ class TestDataCollectionStepsIntegration:
     def test_load_metadata_success(self, mock_environment):
         """Test successful metadata loading."""
         # Create metadata file with correct column names from config
-        metadata_data = pd.DataFrame({
-            "symbol": ["AAPL", "GOOGL"],
-            "last_ingestion": ["2024-01-01", "2024-01-01"],
-            "max_date_recorded": ["2024-01-01", "2024-01-01"],
-            "status": ["success", "success"]
-        })
+        metadata_data = pd.DataFrame(
+            {
+                "symbol": ["AAPL", "GOOGL"],
+                "last_ingestion": ["2024-01-01", "2024-01-01"],
+                "max_date_recorded": ["2024-01-01", "2024-01-01"],
+                "status": ["success", "success"],
+            }
+        )
 
         metadata_path = Path(mock_environment) / "metadata.csv"
         metadata_data.to_csv(metadata_path, index=False)
@@ -115,17 +121,16 @@ class TestDataCollectionStepsIntegration:
 
         assert len(plans) == 3
         for plan in plans:
-            assert 'symbol' in plan
-            assert 'period' in plan
-            assert plan['symbol'] in ["AAPL", "GOOGL", "MSFT"]
+            assert "symbol" in plan
+            assert "period" in plan
+            assert plan["symbol"] in ["AAPL", "GOOGL", "MSFT"]
 
     @patch("stock_market_analytics.data_collection.collection_steps.YFinanceCollector")
-    @patch("stock_market_analytics.data_collection.collection_steps.ContinuousTimelineProcessor")
+    @patch(
+        "stock_market_analytics.data_collection.collection_steps.ContinuousTimelineProcessor"
+    )
     def test_collect_and_process_symbol_success(
-        self,
-        mock_processor_class,
-        mock_collector_class,
-        sample_stock_data
+        self, mock_processor_class, mock_collector_class, sample_stock_data
     ):
         """Test successful symbol collection and processing."""
         # Mock collector
@@ -142,11 +147,7 @@ class TestDataCollectionStepsIntegration:
         mock_processor_class.return_value = mock_processor
 
         # Create a collection plan dictionary
-        collection_plan = {
-            "symbol": "AAPL",
-            "period": "max",
-            "interval": "1d"
-        }
+        collection_plan = {"symbol": "AAPL", "period": "max", "interval": "1d"}
 
         # Test collection
         result = collection_steps.collect_and_process_symbol(collection_plan)
@@ -164,11 +165,7 @@ class TestDataCollectionStepsIntegration:
         mock_collector_class.return_value = mock_collector
 
         # Create a collection plan dictionary
-        collection_plan = {
-            "symbol": "AAPL",
-            "period": "max",
-            "interval": "1d"
-        }
+        collection_plan = {"symbol": "AAPL", "period": "max", "interval": "1d"}
 
         # Test collection
         result = collection_steps.collect_and_process_symbol(collection_plan)

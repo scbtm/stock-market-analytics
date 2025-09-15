@@ -116,20 +116,24 @@ class TestDistributionShiftDetection:
 
     def test_multivariate_covariate_drift_metrics(self):
         """Test multivariate drift detection."""
-        ref_df = pd.DataFrame({
-            'feature1': np.random.normal(0, 1, 100),
-            'feature2': np.random.uniform(0, 1, 100),
-            'non_numeric': ['A'] * 100  # Should be ignored
-        })
+        ref_df = pd.DataFrame(
+            {
+                "feature1": np.random.normal(0, 1, 100),
+                "feature2": np.random.uniform(0, 1, 100),
+                "non_numeric": ["A"] * 100,  # Should be ignored
+            }
+        )
 
-        curr_df = pd.DataFrame({
-            'feature1': np.random.normal(0.5, 1, 100),  # Slight shift
-            'feature2': np.random.uniform(0.2, 1.2, 100),  # Slight shift
-            'non_numeric': ['B'] * 100  # Should be ignored
-        })
+        curr_df = pd.DataFrame(
+            {
+                "feature1": np.random.normal(0.5, 1, 100),  # Slight shift
+                "feature2": np.random.uniform(0.2, 1.2, 100),  # Slight shift
+                "non_numeric": ["B"] * 100,  # Should be ignored
+            }
+        )
 
         result = multivariate_covariate_drift_metrics(
-            ref_df, curr_df, ['feature1', 'feature2', 'non_numeric']
+            ref_df, curr_df, ["feature1", "feature2", "non_numeric"]
         )
 
         assert "per_feature" in result
@@ -222,11 +226,13 @@ class TestQuantileRegressionMetrics:
         """Test metrics with perfect predictions."""
         y_true = np.array([1.0, 2.0, 3.0, 4.0, 5.0])
         # Perfect predictions: true value at median (q=0.5)
-        y_pred = np.column_stack([
-            y_true - 0.5,  # q=0.1
-            y_true,        # q=0.5 (median)
-            y_true + 0.5   # q=0.9
-        ])
+        y_pred = np.column_stack(
+            [
+                y_true - 0.5,  # q=0.1
+                y_true,  # q=0.5 (median)
+                y_true + 0.5,  # q=0.9
+            ]
+        )
         quantiles = np.array([0.1, 0.5, 0.9])
 
         result = quantile_regression_performance_metrics(y_true, y_pred, quantiles)
@@ -234,7 +240,9 @@ class TestQuantileRegressionMetrics:
         assert "pinball_losses" in result
         assert "coverage" in result
         assert "calibration" in result
-        assert result["coverage"]["per_quantile"]["q_0.50"] == 1.0  # Perfect median coverage
+        assert (
+            result["coverage"]["per_quantile"]["q_0.50"] == 1.0
+        )  # Perfect median coverage
 
     def test_quantile_regression_performance_metrics_with_nans(self):
         """Test metrics handling NaN values."""
@@ -274,7 +282,9 @@ class TestPredictionIntervalMetrics:
         )
 
         assert result["coverage"]["observed"] == 1.0  # Perfect coverage
-        assert abs(result["coverage"]["error"] - 0.2) < 1e-10  # 1.0 - 0.8 = 0.2 over-coverage
+        assert (
+            abs(result["coverage"]["error"] - 0.2) < 1e-10
+        )  # 1.0 - 0.8 = 0.2 over-coverage
         assert result["coverage"]["below_lower_rate"] == 0.0
         assert result["coverage"]["above_upper_rate"] == 0.0
 
@@ -324,11 +334,13 @@ class TestPointMetrics:
         """Test point metrics with perfect median predictions."""
         y_true = np.array([1.0, 2.0, 3.0, 4.0, 5.0])
         # Perfect median predictions (q=0.5)
-        y_pred = np.column_stack([
-            y_true - 0.5,  # q=0.1
-            y_true,        # q=0.5 (perfect median)
-            y_true + 0.5   # q=0.9
-        ])
+        y_pred = np.column_stack(
+            [
+                y_true - 0.5,  # q=0.1
+                y_true,  # q=0.5 (perfect median)
+                y_true + 0.5,  # q=0.9
+            ]
+        )
         quantiles = np.array([0.1, 0.5, 0.9])
 
         result = median_point_metrics(y_true, y_pred, quantiles)
@@ -340,11 +352,13 @@ class TestPointMetrics:
     def test_median_point_metrics_with_error(self):
         """Test point metrics with prediction error."""
         y_true = np.array([1.0, 2.0, 3.0])
-        y_pred = np.column_stack([
-            [0.5, 1.5, 2.5],  # q=0.1
-            [1.1, 2.1, 3.1],  # q=0.5 (median with +0.1 bias)
-            [1.5, 2.5, 3.5]   # q=0.9
-        ])
+        y_pred = np.column_stack(
+            [
+                [0.5, 1.5, 2.5],  # q=0.1
+                [1.1, 2.1, 3.1],  # q=0.5 (median with +0.1 bias)
+                [1.5, 2.5, 3.5],  # q=0.9
+            ]
+        )
         quantiles = np.array([0.1, 0.5, 0.9])
 
         result = median_point_metrics(y_true, y_pred, quantiles)
@@ -356,10 +370,12 @@ class TestPointMetrics:
     def test_median_point_metrics_no_median_quantile(self):
         """Test point metrics when 0.5 quantile not available."""
         y_true = np.array([1.0, 2.0, 3.0])
-        y_pred = np.column_stack([
-            [0.5, 1.5, 2.5],  # q=0.1
-            [1.5, 2.5, 3.5]   # q=0.9
-        ])
+        y_pred = np.column_stack(
+            [
+                [0.5, 1.5, 2.5],  # q=0.1
+                [1.5, 2.5, 3.5],  # q=0.9
+            ]
+        )
         quantiles = np.array([0.1, 0.9])  # No q=0.5
 
         result = median_point_metrics(y_true, y_pred, quantiles)

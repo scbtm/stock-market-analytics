@@ -7,14 +7,15 @@ steps and flow architecture pattern.
 """
 
 import os
+from pathlib import Path
+
 import pandas as pd
-
 from metaflow import FlowSpec, step
-import wandb
-from wandb.integration.metaflow import wandb_log
 
-from stock_market_analytics.monitoring import monitoring_steps
+import wandb
 from stock_market_analytics.config import config
+from stock_market_analytics.monitoring import monitoring_steps
+from wandb.integration.metaflow import wandb_log
 
 # Initialize wandb
 wandb.login(key=config.wandb_key)
@@ -72,11 +73,15 @@ class MonitoringFlow(FlowSpec):
 
         try:
             # Download model and reference data
-            model_dir, model_name, dataset_dir, dataset_name = monitoring_steps.download_artifacts()
+            model_dir, model_name, dataset_dir, dataset_name = (
+                monitoring_steps.download_artifacts()
+            )
 
             # Load model and reference data
             self.model = monitoring_steps.load_model(model_dir, model_name)
-            self.reference_data = monitoring_steps.load_reference_data(dataset_dir, dataset_name)
+            self.reference_data = monitoring_steps.load_reference_data(
+                dataset_dir, dataset_name
+            )
 
             print(f"✅ Model loaded: {model_name}")
             print(f"✅ Reference data loaded: {dataset_name}")
@@ -105,7 +110,9 @@ class MonitoringFlow(FlowSpec):
             self.current_data = monitoring_steps.load_monitoring_df(base_data_path)
 
             print(f"📈 Current data shape: {self.current_data.shape}")
-            print(f"📅 Current data date range: {self.current_data['date'].min()} to {self.current_data['date'].max()}")
+            print(
+                f"📅 Current data date range: {self.current_data['date'].min()} to {self.current_data['date'].max()}"
+            )
 
             # Validate feature alignment
             ref_features = set(self.reference_data.columns)
@@ -120,7 +127,9 @@ class MonitoringFlow(FlowSpec):
             print(f"✅ Common features for analysis: {len(self.common_features)}")
 
             if len(self.common_features) == 0:
-                raise ValueError("No common features found between reference and current data")
+                raise ValueError(
+                    "No common features found between reference and current data"
+                )
 
         except Exception as e:
             print(f"❌ Error loading current data: {e}")
@@ -146,22 +155,26 @@ class MonitoringFlow(FlowSpec):
             self.covariate_drift_results = monitoring_steps.get_covariate_drift_metrics(
                 reference_df=self.reference_data,
                 current_df=self.current_data,
-                feature_columns=self.common_features
+                feature_columns=self.common_features,
             )
 
             agg_drift = self.covariate_drift_results["aggregate"]
             print(f"   Mean PSI: {agg_drift['mean_psi']:.4f}")
-            print(f"   Features with major drift (PSI > 0.2): {agg_drift['fraction_drifted_features_psi']:.1%}")
+            print(
+                f"   Features with major drift (PSI > 0.2): {agg_drift['fraction_drifted_features_psi']:.1%}"
+            )
 
             # 2. Target Drift Analysis
             print("🎯 Analyzing target distribution drift...")
             self.target_drift_results = monitoring_steps.get_target_drift_metrics(
                 reference_targets=self.reference_data[target_col],
-                current_targets=self.current_data[target_col]
+                current_targets=self.current_data[target_col],
             )
 
             target_psi = self.target_drift_results["distribution_tests"]["psi"]
-            print(f"   Target PSI: {target_psi:.4f} ({self.target_drift_results['distribution_tests']['psi_interpretation']})")
+            print(
+                f"   Target PSI: {target_psi:.4f} ({self.target_drift_results['distribution_tests']['psi_interpretation']})"
+            )
 
             # 3. Generate Model Predictions
             print("🤖 Generating model predictions...")
@@ -170,39 +183,49 @@ class MonitoringFlow(FlowSpec):
             ref_X = self.reference_data.drop(columns=[target_col])
 
             ref_transformed = self.model.named_steps["transformations"].transform(ref_X)
-            ref_predictions = self.model.named_steps["model"].predict(ref_transformed, return_full_quantiles=True)
+            ref_predictions = self.model.named_steps["model"].predict(
+                ref_transformed, return_full_quantiles=True
+            )
 
             # Current predictions
-            curr_X = self.current_data.drop(columns=[target_col, 'date'])
+            curr_X = self.current_data.drop(columns=[target_col, "date"])
             curr_y = self.current_data[target_col]
 
-            curr_transformed = self.model.named_steps["transformations"].transform(curr_X)
-            curr_predictions = self.model.named_steps["model"].predict(curr_transformed, return_full_quantiles=True)
+            curr_transformed = self.model.named_steps["transformations"].transform(
+                curr_X
+            )
+            curr_predictions = self.model.named_steps["model"].predict(
+                curr_transformed, return_full_quantiles=True
+            )
 
             print(f"   Reference predictions shape: {ref_predictions.shape}")
             print(f"   Current predictions shape: {curr_predictions.shape}")
 
             # 4. Prediction Drift Analysis
             print("📈 Analyzing prediction drift...")
-            quantile_cols = [f'q_{q:.2f}' for q in self.config.modeling.quantiles]
+            quantile_cols = [f"q_{q:.2f}" for q in self.config.modeling.quantiles]
             ref_pred_df = pd.DataFrame(ref_predictions, columns=quantile_cols)
             curr_pred_df = pd.DataFrame(curr_predictions, columns=quantile_cols)
 
-            self.prediction_drift_results = monitoring_steps.get_prediction_drift_metrics(
-                reference_predictions=ref_pred_df,
-                current_predictions=curr_pred_df,
-                quantiles=self.config.modeling.quantiles
+            self.prediction_drift_results = (
+                monitoring_steps.get_prediction_drift_metrics(
+                    reference_predictions=ref_pred_df,
+                    current_predictions=curr_pred_df,
+                    quantiles=self.config.modeling.quantiles,
+                )
             )
 
             pred_drift = self.prediction_drift_results["aggregate"]
-            print(f"   Mean prediction KS statistic: {pred_drift['mean_ks_statistic']:.4f}")
+            print(
+                f"   Mean prediction KS statistic: {pred_drift['mean_ks_statistic']:.4f}"
+            )
 
             # 5. Model Performance Evaluation
             print("📊 Evaluating model performance...")
             self.current_performance = monitoring_steps.get_predicted_quantiles_metrics(
                 y_true=curr_y,
                 y_pred_quantiles=curr_pred_df,
-                quantiles=self.config.modeling.quantiles
+                quantiles=self.config.modeling.quantiles,
             )
 
             perf = self.current_performance
@@ -222,7 +245,7 @@ class MonitoringFlow(FlowSpec):
                 y_true=curr_y,
                 y_lower=pd.Series(y_lower),
                 y_upper=pd.Series(y_upper),
-                confidence_level=self.config.modeling.target_coverage
+                confidence_level=self.config.modeling.target_coverage,
             )
 
             calib = self.calibration_results
@@ -292,7 +315,7 @@ class MonitoringFlow(FlowSpec):
             self.html_report = monitoring_steps.generate_monitoring_report(
                 self.monitoring_results,
                 output_path=report_path,
-                title="Stock Market Analytics - Model Monitoring Report"
+                title="Stock Market Analytics - Model Monitoring Report",
             )
 
             # Store report path for artifact logging
@@ -306,7 +329,14 @@ class MonitoringFlow(FlowSpec):
 
         self.next(self.log_artifacts)
 
-    @wandb_log(datasets=False, models=False, others=True, settings=wandb.Settings(project="stock-market-analytics", run_job_type="monitoring"))
+    @wandb_log(
+        datasets=False,
+        models=False,
+        others=True,
+        settings=wandb.Settings(
+            project="stock-market-analytics", run_job_type="monitoring"
+        ),
+    )
     @step
     def log_artifacts(self) -> None:
         """
@@ -322,37 +352,54 @@ class MonitoringFlow(FlowSpec):
             self.covariate_drift_metrics = {
                 "mean_psi": self.covariate_drift_results["aggregate"]["mean_psi"],
                 "max_psi": self.covariate_drift_results["aggregate"]["max_psi"],
-                "fraction_drifted_features": self.covariate_drift_results["aggregate"]["fraction_drifted_features_psi"],
+                "fraction_drifted_features": self.covariate_drift_results["aggregate"][
+                    "fraction_drifted_features_psi"
+                ],
             }
 
             self.target_drift_metrics = {
                 "target_psi": self.target_drift_results["distribution_tests"]["psi"],
-                "target_ks_statistic": self.target_drift_results["distribution_tests"]["ks_statistic"],
-                "target_ks_p_value": self.target_drift_results["distribution_tests"]["ks_p_value"],
+                "target_ks_statistic": self.target_drift_results["distribution_tests"][
+                    "ks_statistic"
+                ],
+                "target_ks_p_value": self.target_drift_results["distribution_tests"][
+                    "ks_p_value"
+                ],
             }
 
             self.prediction_drift_metrics = {
-                "mean_pred_ks": self.prediction_drift_results["aggregate"]["mean_ks_statistic"],
-                "max_pred_ks": self.prediction_drift_results["aggregate"]["max_ks_statistic"],
-                "mean_wasserstein": self.prediction_drift_results["aggregate"]["mean_wasserstein"],
+                "mean_pred_ks": self.prediction_drift_results["aggregate"][
+                    "mean_ks_statistic"
+                ],
+                "max_pred_ks": self.prediction_drift_results["aggregate"][
+                    "max_ks_statistic"
+                ],
+                "mean_wasserstein": self.prediction_drift_results["aggregate"][
+                    "mean_wasserstein"
+                ],
             }
 
             self.performance_metrics = {
                 "mean_pinball_loss": self.current_performance["pinball_losses"]["mean"],
                 "crps": self.current_performance["distributional"]["crps"],
                 "coverage_bias": self.current_performance["coverage"]["bias"],
-                "mean_coverage_error": self.current_performance["coverage"]["mean_absolute_error"],
-                "monotonicity_violation_rate": self.current_performance["monotonicity"]["violation_rate"],
+                "mean_coverage_error": self.current_performance["coverage"][
+                    "mean_absolute_error"
+                ],
+                "monotonicity_violation_rate": self.current_performance["monotonicity"][
+                    "violation_rate"
+                ],
             }
 
             self.calibration_metrics = {
                 "observed_coverage": self.calibration_results["coverage"]["observed"],
                 "target_coverage": self.calibration_results["coverage"]["target"],
                 "coverage_error": self.calibration_results["coverage"]["error"],
-                "mean_interval_width": self.calibration_results["interval_width"]["mean_width"],
+                "mean_interval_width": self.calibration_results["interval_width"][
+                    "mean_width"
+                ],
                 "interval_score": self.calibration_results["scoring"]["interval_score"],
             }
-
 
             # Summary metrics for easy overview
             self.monitoring_summary = {
@@ -364,9 +411,8 @@ class MonitoringFlow(FlowSpec):
 
             # Log the HTML file
             path_to_html_file = self.report_path
-            with open(path_to_html_file, "r") as f:
+            with Path(path_to_html_file).open() as f:
                 wandb.log({"report": wandb.Html(f)})
-
 
             print("✅ Monitoring artifacts logged successfully")
 
@@ -397,14 +443,24 @@ class MonitoringFlow(FlowSpec):
         print("✅ All results and artifacts logged to Weights & Biases")
 
         # Key findings summary
-        print(f"\n🔍 Key Monitoring Findings:")
+        print("\n🔍 Key Monitoring Findings:")
         print(f"📊 Features analyzed: {len(self.common_features)}")
-        print(f"📈 Mean covariate PSI: {self.covariate_drift_results['aggregate']['mean_psi']:.4f}")
-        print(f"🎯 Target PSI: {self.target_drift_results['distribution_tests']['psi']:.4f}")
-        print(f"🤖 Mean prediction drift (KS): {self.prediction_drift_results['aggregate']['mean_ks_statistic']:.4f}")
-        print(f"📊 Model CRPS: {self.current_performance['distributional']['crps']:.6f}")
+        print(
+            f"📈 Mean covariate PSI: {self.covariate_drift_results['aggregate']['mean_psi']:.4f}"
+        )
+        print(
+            f"🎯 Target PSI: {self.target_drift_results['distribution_tests']['psi']:.4f}"
+        )
+        print(
+            f"🤖 Mean prediction drift (KS): {self.prediction_drift_results['aggregate']['mean_ks_statistic']:.4f}"
+        )
+        print(
+            f"📊 Model CRPS: {self.current_performance['distributional']['crps']:.6f}"
+        )
         print(f"🎯 Coverage error: {self.calibration_results['coverage']['error']:.3f}")
-        print(f"🔧 Monotonicity violations: {self.current_performance['monotonicity']['violation_rate']:.2%}")
+        print(
+            f"🔧 Monotonicity violations: {self.current_performance['monotonicity']['violation_rate']:.2%}"
+        )
 
         print(f"\n📄 Monitoring report saved to: {self.report_path}")
         print("=" * 50)

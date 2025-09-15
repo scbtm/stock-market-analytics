@@ -8,24 +8,31 @@ additional functionality for financial modeling.
 
 from __future__ import annotations
 
-from typing import Any, Sequence, Dict, Hashable
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from collections.abc import Hashable, Sequence
+
+from typing import Any
 
 import numpy as np
 import pandas as pd
 from sklearn.base import BaseEstimator, RegressorMixin
 from sklearn.metrics import r2_score
 
-from stock_market_analytics.modeling.model_factory.protocols import (
-    QuantileEstimator, Array, Frame, Series
-)
-
-
 from stock_market_analytics.modeling.model_factory.estimation.estimation_functions import (
     create_catboost_pool,
+)
+from stock_market_analytics.modeling.model_factory.protocols import (
+    Array,
+    Frame,
+    QuantileEstimator,
+    Series,
 )
 
 try:
     from catboost import CatBoostRegressor
+
     CATBOOST_AVAILABLE = True
 except ImportError:
     CATBOOST_AVAILABLE = False
@@ -65,7 +72,7 @@ class CatBoostMultiQuantileModel(BaseEstimator, RegressorMixin, QuantileEstimato
         X: Frame | Array,
         y: Series | Array,
         **fit_params: Any,
-    ) -> "CatBoostMultiQuantileModel":
+    ) -> CatBoostMultiQuantileModel:
         """Fit the CatBoost multi-quantile model.
 
         Parameters
@@ -82,7 +89,7 @@ class CatBoostMultiQuantileModel(BaseEstimator, RegressorMixin, QuantileEstimato
         self : CatBoostMultiQuantileModel
             Fitted estimator
         """
-        #X, y = check_X_y(X, y, accept_sparse=False, dtype=None)
+        # X, y = check_X_y(X, y, accept_sparse=False, dtype=None)
 
         # Build CatBoost parameters
         params = self.catboost_params.copy()
@@ -93,11 +100,15 @@ class CatBoostMultiQuantileModel(BaseEstimator, RegressorMixin, QuantileEstimato
         params["loss_function"] = f"MultiQuantile:alpha={alpha_str}"
         params["random_state"] = self.random_state
         params["verbose"] = self.verbose
-        params["use_best_model"] = True if "eval_set" in fit_params else False  # Enable best model tracking
+        params["use_best_model"] = (
+            "eval_set" in fit_params
+        )  # Enable early stopping if eval_set is provided
 
         # Create and fit model
         if not CATBOOST_AVAILABLE:
-            raise ImportError("CatBoost is not available. Please install it with 'pip install catboost'")
+            raise ImportError(
+                "CatBoost is not available. Please install it with 'pip install catboost'"
+            )
         self._model = CatBoostRegressor(**params)
 
         train_pool = create_catboost_pool(X, y)
@@ -152,7 +163,9 @@ class CatBoostMultiQuantileModel(BaseEstimator, RegressorMixin, QuantileEstimato
         """Alias for predict to enable transformer usage in pipelines."""
         return self.predict(X)
 
-    def score(self, X: Frame | Array, y: Series | Array, sample_weight: Any = None) -> float:
+    def score(
+        self, X: Frame | Array, y: Series | Array, sample_weight: Any = None
+    ) -> float:
         """Return the coefficient of determination R^2 for median quantile.
 
         Parameters
@@ -179,7 +192,7 @@ class CatBoostMultiQuantileModel(BaseEstimator, RegressorMixin, QuantileEstimato
         if self._model is None:
             raise ValueError("Model must be fitted to access feature importances")
         return self._model.feature_importances_
-    
+
     @property
     def feature_names_(self):
         """Feature names seen during fit."""
@@ -192,7 +205,7 @@ class CatBoostMultiQuantileModel(BaseEstimator, RegressorMixin, QuantileEstimato
             raise ValueError("Model must be fitted to access best iteration")
         return getattr(self._model, "best_iteration_", None)
 
-    def get_params(self, deep: bool = True) -> dict[str, Any]:
+    def get_params(self) -> dict[str, Any]:
         """Get parameters for this estimator.
 
         Returns
@@ -208,7 +221,7 @@ class CatBoostMultiQuantileModel(BaseEstimator, RegressorMixin, QuantileEstimato
         params.update(self.catboost_params)
         return params
 
-    def set_params(self, **params: Any) -> "CatBoostMultiQuantileModel":
+    def set_params(self, **params: Any) -> CatBoostMultiQuantileModel:
         """Set the parameters of this estimator.
 
         Parameters
@@ -229,7 +242,7 @@ class CatBoostMultiQuantileModel(BaseEstimator, RegressorMixin, QuantileEstimato
                 self.catboost_params[key] = value
 
         return self
-    
+
     def get_feature_importance(self, **kwargs: dict) -> pd.DataFrame:
         """Get feature importances from the trained model.
         Parameters
@@ -243,12 +256,13 @@ class CatBoostMultiQuantileModel(BaseEstimator, RegressorMixin, QuantileEstimato
         """
         if self._model is None:
             raise ValueError("Model must be fitted to access feature importances")
-        return self._model.get_feature_importance(**kwargs | {"prettified": True}) #type: ignore - this will always be a DF
+        return self._model.get_feature_importance(**kwargs | {"prettified": True})  # type: ignore - this will always be a DF
 
 
 # ---------------------------------------------------------------------------------------
 # Baseline Estimator
 # ---------------------------------------------------------------------------------------
+
 
 class HistoricalMultiQuantileBaseline(BaseEstimator, RegressorMixin, QuantileEstimator):
     """
@@ -275,8 +289,8 @@ class HistoricalMultiQuantileBaseline(BaseEstimator, RegressorMixin, QuantileEst
 
         # Fitted attributes
         self.quantiles_: list[float] | None = None
-        self.global_quantiles_: np.ndarray | None = None          # shape (n_q,)
-        self.group_quantiles_: Dict[Hashable, np.ndarray] | None = None  # each (n_q,)
+        self.global_quantiles_: np.ndarray | None = None  # shape (n_q,)
+        self.group_quantiles_: dict[Hashable, np.ndarray] | None = None  # each (n_q,)
         self.n_features_in_: int | None = None
         self.feature_names_in_: list[str] | None = None
         self._is_fitted: bool = False
@@ -287,7 +301,7 @@ class HistoricalMultiQuantileBaseline(BaseEstimator, RegressorMixin, QuantileEst
         X: Frame | Array,
         y: Series | Array,
         **fit_params: Any,
-    ) -> "HistoricalMultiQuantileBaseline":
+    ) -> HistoricalMultiQuantileBaseline:
         """
         Fit by computing empirical quantiles of y (globally or per group).
         """
@@ -318,11 +332,13 @@ class HistoricalMultiQuantileBaseline(BaseEstimator, RegressorMixin, QuantileEst
                 )
 
             df = pd.DataFrame(
-                {self.group_col: X[self.group_col].values, "__y__": y_arr}
+                {self.group_col: X[self.group_col].to_numpy(), "__y__": y_arr}
             )
             self.group_quantiles_ = {}
             for g, sub in df.groupby(self.group_col, sort=False, observed=True):
-                self.group_quantiles_[g] = np.quantile(sub["__y__"].to_numpy(), q_sorted)
+                self.group_quantiles_[g] = np.quantile(
+                    sub["__y__"].to_numpy(), q_sorted
+                )
         else:
             self.group_quantiles_ = None
 
@@ -363,7 +379,7 @@ class HistoricalMultiQuantileBaseline(BaseEstimator, RegressorMixin, QuantileEst
                 raise ValueError(
                     f"group_col '{self.group_col}' not found in X columns."
                 )
-            groups = X[self.group_col].values
+            groups = X[self.group_col].to_numpy()
             Q = np.empty((n_samples, n_q), dtype=float)
             for i, g in enumerate(groups):
                 if g in self.group_quantiles_:
@@ -385,17 +401,19 @@ class HistoricalMultiQuantileBaseline(BaseEstimator, RegressorMixin, QuantileEst
         """Alias for predict to enable transformer usage in pipelines."""
         return self.predict(X)
 
-    def score(self, X: Frame | Array, y: Series | Array, sample_weight: Any = None) -> float:
+    def score(
+        self, X: Frame | Array, y: Series | Array, sample_weight: Any = None
+    ) -> float:
         """R² of median quantile (same behavior as your CatBoost wrapper)."""
         y_arr = self._to_1d_numpy(y)
         y_hat = self.predict(X)
         return r2_score(y_arr, y_hat, sample_weight=sample_weight)
 
     # ---- sklearn plumbing ----
-    def get_params(self, deep: bool = True) -> dict[str, Any]:
+    def get_params(self) -> dict[str, Any]:
         return {"quantiles": self.quantiles, "group_col": self.group_col}
 
-    def set_params(self, **params: Any) -> "HistoricalMultiQuantileBaseline":
+    def set_params(self, **params: Any) -> HistoricalMultiQuantileBaseline:
         for k, v in params.items():
             setattr(self, k, v)
         return self
@@ -403,7 +421,7 @@ class HistoricalMultiQuantileBaseline(BaseEstimator, RegressorMixin, QuantileEst
     # ---- helpers ----
     @staticmethod
     def _to_1d_numpy(y: Series | Array) -> np.ndarray:
-        if isinstance(y, (pd.Series, pd.DataFrame)):
+        if isinstance(y, pd.Series | pd.DataFrame):
             y = np.asarray(y).ravel()
         else:
             y = np.asarray(y).ravel()

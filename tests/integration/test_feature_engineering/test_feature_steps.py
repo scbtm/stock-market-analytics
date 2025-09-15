@@ -35,16 +35,18 @@ class TestFeatureEngineeringStepsIntegration:
                 base_price = 150.0 if symbol == "AAPL" else 2800.0
                 volatility = 0.02 + (i % 10) * 0.001
 
-                data.append({
-                    "symbol": symbol,
-                    "date": date,
-                    "open": base_price * (1 + volatility),
-                    "high": base_price * (1 + volatility + 0.01),
-                    "low": base_price * (1 - volatility),
-                    "close": base_price * (1 + volatility - 0.005),
-                    "volume": 1000000 + (i % 50) * 10000,
-                    "adj_close": base_price * (1 + volatility - 0.005),
-                })
+                data.append(
+                    {
+                        "symbol": symbol,
+                        "date": date,
+                        "open": base_price * (1 + volatility),
+                        "high": base_price * (1 + volatility + 0.01),
+                        "low": base_price * (1 - volatility),
+                        "close": base_price * (1 + volatility - 0.005),
+                        "volume": 1000000 + (i % 50) * 10000,
+                        "adj_close": base_price * (1 + volatility - 0.005),
+                    }
+                )
 
         return pl.DataFrame(data)
 
@@ -66,14 +68,18 @@ class TestFeatureEngineeringStepsIntegration:
         with pytest.raises(FileNotFoundError):
             feature_steps.load_stock_data(Path(mock_environment))
 
-    @patch("stock_market_analytics.feature_engineering.feature_steps.execute_feature_pipeline")
-    @patch("stock_market_analytics.feature_engineering.feature_steps.create_feature_pipeline")
+    @patch(
+        "stock_market_analytics.feature_engineering.feature_steps.execute_feature_pipeline"
+    )
+    @patch(
+        "stock_market_analytics.feature_engineering.feature_steps.create_feature_pipeline"
+    )
     def test_build_features_from_data_success(
         self,
         mock_create_pipeline,
         mock_execute_pipeline,
         mock_environment,
-        sample_stock_data
+        sample_stock_data,
     ):
         """Test successful feature building."""
         # Create historical data file with correct name
@@ -84,13 +90,15 @@ class TestFeatureEngineeringStepsIntegration:
         mock_pipeline = Mock()
         mock_create_pipeline.return_value = mock_pipeline
 
-        features_data = pl.DataFrame({
-            "symbol": ["AAPL", "AAPL", "GOOGL", "GOOGL"],
-            "date": pd.date_range("2024-01-01", periods=4, freq="D"),
-            "returns_1d": [0.001, 0.002, -0.001, 0.0015],
-            "volatility_10d": [0.15, 0.16, 0.14, 0.155],
-            "rsi_14d": [55, 60, 45, 50],
-        })
+        features_data = pl.DataFrame(
+            {
+                "symbol": ["AAPL", "AAPL", "GOOGL", "GOOGL"],
+                "date": pd.date_range("2024-01-01", periods=4, freq="D"),
+                "returns_1d": [0.001, 0.002, -0.001, 0.0015],
+                "volatility_10d": [0.15, 0.16, 0.14, 0.155],
+                "rsi_14d": [55, 60, 45, 50],
+            }
+        )
         mock_execute_pipeline.return_value = features_data
 
         # Test feature building
@@ -101,14 +109,18 @@ class TestFeatureEngineeringStepsIntegration:
         assert result["output_records"] == 4
         assert "features_file" in result
 
-    @patch("stock_market_analytics.feature_engineering.feature_steps.execute_feature_pipeline")
-    @patch("stock_market_analytics.feature_engineering.feature_steps.create_feature_pipeline")
+    @patch(
+        "stock_market_analytics.feature_engineering.feature_steps.execute_feature_pipeline"
+    )
+    @patch(
+        "stock_market_analytics.feature_engineering.feature_steps.create_feature_pipeline"
+    )
     def test_build_features_from_data_empty_result(
         self,
         mock_create_pipeline,
         mock_execute_pipeline,
         mock_environment,
-        sample_stock_data
+        sample_stock_data,
     ):
         """Test feature building with empty result."""
         # Create historical data file with correct name
