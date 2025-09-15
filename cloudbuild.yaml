@@ -30,9 +30,9 @@ steps:
   - '-c'
   - |
     apk add curl
-    URL=$(cat /workspace/$(steps.'Deploy to Cloud Run'.outputs.result))
-    echo "Service deployed at: $URL"
-    if curl -s -f "$URL" > /dev/null; then
+    URL=$$(cat /workspace/$(steps.'Deploy to Cloud Run'.outputs.result))
+    echo "Service deployed at: $$URL"
+    if curl -s -f "$$URL" > /dev/null; then
       echo "Smoke test passed!"
     else
       echo "Smoke test failed!"
