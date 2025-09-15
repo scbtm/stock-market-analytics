@@ -1,3 +1,7 @@
+# Prevents issues with concurrent builds
+options:
+  logging: CLOUD_LOGGING_ONLY
+
 steps:
 # Build the container image
 - name: 'gcr.io/cloud-builders/docker'
@@ -18,7 +22,7 @@ steps:
   - '--platform=managed'
   - '--allow-unauthenticated'
   - '--format=value(status.url)' # Output the URL of the deployed service
-# NEW: Smoke Test Step
+# Smoke Test Step
 - name: 'alpine'
   id: 'Smoke Test'
   entrypoint: 'sh'
