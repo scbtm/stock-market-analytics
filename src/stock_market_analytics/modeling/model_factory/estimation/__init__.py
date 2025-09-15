@@ -3,5 +3,5 @@
 from .estimators import CatBoostMultiQuantileModel
 
 __all__ = [
-    'CatBoostMultiQuantileModel',
+    "CatBoostMultiQuantileModel",
 ]

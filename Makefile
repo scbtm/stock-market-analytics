@@ -22,3 +22,10 @@ security-check:
 	uv run --with pip-audit pip-audit --local --skip-editable -v
 
 verify: format typecheck test security-check lint
+
+pre-commit: format typecheck lint
+
+ci-tests:
+	uv run pytest -m "not ci-exclude"
+
+ci-verify: format lint typecheck ci-tests security-check

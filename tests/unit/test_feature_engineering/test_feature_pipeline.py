@@ -3,7 +3,6 @@
 from datetime import date
 
 import polars as pl
-import pytest
 
 from stock_market_analytics.feature_engineering.feature_pipeline import (
     basic_indicators_df,
@@ -625,12 +624,12 @@ class TestIchimokuFeatures:
                 "cloud_top_now": [101.0 + i * 0.2 for i in range(30)],
                 "cloud_bot_now": [99.0 + i * 0.2 for i in range(30)],
                 "atr": [2.0 + i * 0.05 for i in range(30)],
-                "price_above_cloud_atr": [0.5 for i in range(30)],
-                "price_below_cloud_atr": [-0.3 for i in range(30)],
-                "tenkan_kijun_spread_atr": [0.1 for i in range(30)],
-                "cloud_thickness_atr": [0.8 for i in range(30)],
-                "price_vs_lead_top_atr": [0.2 for i in range(30)],
-                "price_vs_lead_bot_atr": [-0.1 for i in range(30)],
+                "price_above_cloud_atr": [0.5 for _ in range(30)],
+                "price_below_cloud_atr": [-0.3 for _ in range(30)],
+                "tenkan_kijun_spread_atr": [0.1 for _ in range(30)],
+                "cloud_thickness_atr": [0.8 for _ in range(30)],
+                "price_vs_lead_top_atr": [0.2 for _ in range(30)],
+                "price_vs_lead_bot_atr": [-0.1 for _ in range(30)],
             }
         )
 
@@ -685,7 +684,6 @@ class TestIchimokuFeatures:
 
         # Should be sorted by symbol, then date
         symbols = result["symbol"].to_list()
-        dates = result["date"].to_list()
 
         # Check that symbols are grouped together and dates are ascending within each symbol
         aapl_indices = [i for i, s in enumerate(symbols) if s == "AAPL"]

@@ -10,30 +10,25 @@ following the steps architecture pattern.
 """
 
 from pathlib import Path
-from typing import Optional
 
 import pandas as pd
-from sklearn.pipeline import Pipeline
-from sklearn.decomposition import PCA
-from sklearn.preprocessing import StandardScaler
-from sklearn.impute import SimpleImputer
 from sklearn.compose import ColumnTransformer
+from sklearn.decomposition import PCA
+from sklearn.impute import SimpleImputer
+from sklearn.pipeline import Pipeline
+from sklearn.preprocessing import StandardScaler
 
 from stock_market_analytics.config import config
-
+from stock_market_analytics.modeling.model_factory.calibration.calibrators import (
+    QuantileConformalCalibrator,
+)
 from stock_market_analytics.modeling.model_factory.data_management.preprocessing import (
     get_modeling_sets,
 )
-
 from stock_market_analytics.modeling.model_factory.estimation.estimators import (
     CatBoostMultiQuantileModel,
     HistoricalMultiQuantileBaseline,
 )
-
-from stock_market_analytics.modeling.model_factory.calibration.calibrators import (
-    QuantileConformalCalibrator,
-)
-
 from stock_market_analytics.modeling.model_factory.evaluation.evaluators import (
     QuantileRegressionEvaluator,
 )
@@ -62,7 +57,7 @@ def load_features_data(data_path: str) -> pd.DataFrame:
         # load features data
         df = pd.read_parquet(features_file)
 
-        #drop nulls in target column
+        # drop nulls in target column
         df = df.dropna(subset=[config.modeling.target])
 
         if df.empty:
@@ -85,29 +80,31 @@ def prepare_modeling_data(
 
     Returns:
         Dictionary with keys for each data split containing (X, y) tuples
-        
+
     Raises:
         ValueError: If required columns are missing or data splits fail
     """
     try:
         # Validate required columns exist
-        required_cols = set(config.modeling.features + [config.modeling.target, 'date', 'symbol'])
+        required_cols = set(
+            config.modeling.features + [config.modeling.target, "date", "symbol"]
+        )
         missing_cols = required_cols - set(df.columns)
         if missing_cols:
             raise ValueError(f"Missing required columns: {missing_cols}")
-            
+
         # Get modeling sets
         modeling_sets = get_modeling_sets(
-            df, 
-            date_col='date', 
-            symbol_col='symbol', 
-            feature_cols=config.modeling.features, 
+            df,
+            date_col="date",
+            symbol_col="symbol",
+            feature_cols=config.modeling.features,
             target_col=config.modeling.target,
             fractions=config.modeling.fractions,
         )
-        
+
         # Validate that all splits have data
-        expected_splits = ['train', 'val', 'cal', 'test']
+        expected_splits = ["train", "val", "cal", "test"]
         for split_name in expected_splits:
             if split_name not in modeling_sets:
                 raise ValueError(f"Missing data split: {split_name}")
@@ -116,9 +113,10 @@ def prepare_modeling_data(
                 raise ValueError(f"Empty data in {split_name} split")
 
         return modeling_sets
-        
+
     except Exception as e:
         raise ValueError(f"Error preparing modeling data: {str(e)}") from e
+
 
 def get_adhoc_transforms_pipeline() -> Pipeline:
     """
@@ -126,7 +124,7 @@ def get_adhoc_transforms_pipeline() -> Pipeline:
 
     Returns:
         Pipeline with transformations
-        
+
     Raises:
         ValueError: If feature groups configuration is invalid
         KeyError: If PCA parameters are missing for feature groups
@@ -134,33 +132,40 @@ def get_adhoc_transforms_pipeline() -> Pipeline:
     try:
         # ------------------------------- PCA for feature groups -------------------------------
         feature_groups = config.modeling.feature_groups
-        
+
         if not feature_groups:
             raise ValueError("No feature groups defined in configuration")
 
         # Validate PCA parameters exist for all groups
-        missing_pca_params = set(feature_groups.keys()) - set(config.modeling.pca_group_params.keys())
+        missing_pca_params = set(feature_groups.keys()) - set(
+            config.modeling.pca_group_params.keys()
+        )
         if missing_pca_params:
             raise KeyError(f"Missing PCA parameters for groups: {missing_pca_params}")
 
         pca_groups = {
-            group.lower() + "_pca": PCA(**config.modeling.pca_group_params[group]) 
+            group.lower() + "_pca": PCA(**config.modeling.pca_group_params[group])
             for group in feature_groups
         }
 
         scaler_groups = {
-            group.lower() + "_scaler": Pipeline(steps=[
-                ("imputer", SimpleImputer(strategy="mean")),
-                ("scaler", StandardScaler()),
-            ]) 
+            group.lower() + "_scaler": Pipeline(
+                steps=[
+                    ("imputer", SimpleImputer(strategy="mean")),
+                    ("scaler", StandardScaler()),
+                ]
+            )
             for group in feature_groups
         }
 
         # ------------------------------- Transformation Pipeline -------------------------------
         _scalers = [
-            (name, scaler, feature_groups[group]) 
+            (name, scaler, feature_groups[group])
             for group, name, scaler in zip(
-                feature_groups, scaler_groups.keys(), scaler_groups.values(), strict=True
+                feature_groups,
+                scaler_groups.keys(),
+                scaler_groups.values(),
+                strict=True,
             )
         ]
 
@@ -172,12 +177,16 @@ def get_adhoc_transforms_pipeline() -> Pipeline:
         ).set_output(transform="pandas")
 
         _reducers = [
-            (name, pca, [f"{feature_name}__scaled" for feature_name in feature_groups[group]]) 
+            (
+                name,
+                pca,
+                [f"{feature_name}__scaled" for feature_name in feature_groups[group]],
+            )
             for group, name, pca in zip(
                 feature_groups, pca_groups.keys(), pca_groups.values(), strict=True
             )
         ]
-        
+
         reducers = ColumnTransformer(
             transformers=_reducers,
             remainder="passthrough",  # Keep any features not specified in the transformers
@@ -185,15 +194,19 @@ def get_adhoc_transforms_pipeline() -> Pipeline:
             verbose=False,
         ).set_output(transform="pandas")
 
-        transformation_pipeline = Pipeline(steps=[("scalers", scalers), ("reducers", reducers)])
+        transformation_pipeline = Pipeline(
+            steps=[("scalers", scalers), ("reducers", reducers)]
+        )
 
         return transformation_pipeline
-        
+
     except Exception as e:
         raise ValueError(f"Error creating transformation pipeline: {str(e)}") from e
 
 
-def get_catboost_multiquantile_model(params: Optional[dict] = None) -> CatBoostMultiQuantileModel:
+def get_catboost_multiquantile_model(
+    params: dict | None = None,
+) -> CatBoostMultiQuantileModel:
     """
     Create a CatBoost multi-quantile regression model.
 
@@ -202,27 +215,27 @@ def get_catboost_multiquantile_model(params: Optional[dict] = None) -> CatBoostM
 
     Returns:
         Configured CatBoostMultiQuantileModel instance
-        
+
     Raises:
         ValueError: If model parameters are invalid
     """
     try:
         if not params:
             params = config.modeling.cb_model_params
-            
+
         # Validate quantiles parameter if present
-        if 'quantiles' in params:
-            quantiles = params['quantiles']
-            if not isinstance(quantiles, (list, tuple)) or len(quantiles) == 0:
+        if "quantiles" in params:
+            quantiles = params["quantiles"]
+            if not isinstance(quantiles, list | tuple) or len(quantiles) == 0:
                 raise ValueError("Quantiles must be a non-empty list or tuple")
             if any(q <= 0 or q >= 1 for q in quantiles):
                 raise ValueError("All quantiles must be between 0 and 1 (exclusive)")
 
         return CatBoostMultiQuantileModel(**params)
-        
+
     except Exception as e:
         raise ValueError(f"Error creating CatBoost model: {str(e)}") from e
-    
+
 
 def analyze_feature_importance(model: CatBoostMultiQuantileModel) -> None:
     """
@@ -249,65 +262,70 @@ def analyze_feature_importance(model: CatBoostMultiQuantileModel) -> None:
 def get_calibrator() -> QuantileConformalCalibrator:
     """
     Create a quantile conformal calibrator.
-    
+
     Returns:
         Configured QuantileConformalCalibrator instance
-        
+
     Raises:
         ValueError: If calibrator configuration is invalid
     """
     try:
         # Initialize conformal calibrator for 80% prediction intervals
         alpha = 0.2  # 80% coverage
-        
+
         if alpha <= 0 or alpha >= 1:
             raise ValueError(f"Alpha must be between 0 and 1, got {alpha}")
-            
+
         conformal_calibrator = QuantileConformalCalibrator(
             alpha=alpha,
-            method="absolute"  # Could also use "normalized" with uncertainty estimates
+            method="absolute",  # Could also use "normalized" with uncertainty estimates
         )
 
         return conformal_calibrator
-        
+
     except Exception as e:
         raise ValueError(f"Error creating conformal calibrator: {str(e)}") from e
+
 
 def get_evaluator() -> QuantileRegressionEvaluator:
     """
     Create a quantile regression evaluator.
-    
+
     Returns:
         Configured QuantileRegressionEvaluator instance
-        
+
     Raises:
         ValueError: If evaluator configuration is invalid
     """
     try:
         quantiles = config.modeling.quantiles
-        
-        if not quantiles or not isinstance(quantiles, (list, tuple)):
+
+        if not quantiles or not isinstance(quantiles, list | tuple):
             raise ValueError("Quantiles must be a non-empty list or tuple")
-            
+
         if any(q <= 0 or q >= 1 for q in quantiles):
             raise ValueError("All quantiles must be between 0 and 1 (exclusive)")
 
         return QuantileRegressionEvaluator(quantiles=quantiles)
-        
+
     except Exception as e:
-        raise ValueError(f"Error creating quantile regression evaluator: {str(e)}") from e
+        raise ValueError(
+            f"Error creating quantile regression evaluator: {str(e)}"
+        ) from e
 
 
-def get_baseline_model(params: Optional[dict] = None) -> HistoricalMultiQuantileBaseline:
+def get_baseline_model(
+    params: dict | None = None,
+) -> HistoricalMultiQuantileBaseline:
     """
     Create a historical multi-quantile baseline model.
-    
+
     Args:
         params: Optional model parameters. If None, uses config defaults.
 
     Returns:
         Configured HistoricalMultiQuantileBaseline instance
-        
+
     Raises:
         ValueError: If model parameters are invalid
     """
@@ -316,33 +334,33 @@ def get_baseline_model(params: Optional[dict] = None) -> HistoricalMultiQuantile
             # Use same quantiles as the main model for fair comparison
             quantiles = config.modeling.quantiles
             params = {"quantiles": quantiles, "group_col": None}
-            
+
         # Validate quantiles parameter if present
-        if 'quantiles' in params:
-            quantiles = params['quantiles']
-            if not isinstance(quantiles, (list, tuple)) or len(quantiles) == 0:
+        if "quantiles" in params:
+            quantiles = params["quantiles"]
+            if not isinstance(quantiles, list | tuple) or len(quantiles) == 0:
                 raise ValueError("Quantiles must be a non-empty list or tuple")
             if any(q <= 0 or q >= 1 for q in quantiles):
                 raise ValueError("All quantiles must be between 0 and 1 (exclusive)")
 
         return HistoricalMultiQuantileBaseline(**params)
-        
+
     except Exception as e:
         raise ValueError(f"Error creating baseline model: {str(e)}") from e
 
 
 def train_baseline_model(
-    modeling_sets: dict[str, tuple[pd.DataFrame, pd.Series]]
+    modeling_sets: dict[str, tuple[pd.DataFrame, pd.Series]],
 ) -> HistoricalMultiQuantileBaseline:
     """
     Train the baseline model on training data.
-    
+
     Args:
         modeling_sets: Dictionary containing train/val/cal/test splits
-        
+
     Returns:
         Fitted baseline model
-        
+
     Raises:
         ValueError: If training fails
     """
@@ -350,18 +368,17 @@ def train_baseline_model(
         # Get training data
         xtrain, ytrain = modeling_sets["train"]
         xval, yval = modeling_sets["val"]
-        
+
         # Combine train and validation data for baseline training
         # (no need for early stopping with this simple model)
         xtrain_combined = pd.concat([xtrain, xval], axis=0)
         ytrain_combined = pd.concat([ytrain, yval], axis=0)
-        
+
         # Create and train baseline model
         baseline_model = get_baseline_model()
         baseline_model.fit(xtrain_combined, ytrain_combined)
-        
+
         return baseline_model
-        
+
     except Exception as e:
         raise ValueError(f"Error training baseline model: {str(e)}") from e
-

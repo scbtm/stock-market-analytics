@@ -1,11 +1,14 @@
-
 from __future__ import annotations
-from typing import Optional, Iterator
+
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from collections.abc import Iterator, Mapping
+
 import numpy as np
 import pandas as pd
-from collections.abc import Mapping
 
-from stock_market_analytics.modeling.model_factory.protocols import (DataSplitter)
+from stock_market_analytics.modeling.model_factory.protocols import DataSplitter
 
 
 def _as_dt(s: pd.Series) -> pd.Series:
@@ -80,7 +83,7 @@ def _apply_segment_masks(  # type: ignore
     cal_end: pd.Timestamp,
     date_col: str = "date",
     horizon_days: int = 5,
-    embargo_days: Optional[int] = None,
+    embargo_days: int | None = None,
 ) -> dict[str, np.ndarray]:
     d = df[date_col]
     # Embargo defaults to horizon (safe for 5-day-ahead labels)
@@ -94,7 +97,7 @@ def _apply_segment_masks(  # type: ignore
     test_mask_base = d > cal_end
 
     # Purge/embargo around boundaries by label overlap logic:
-    dates = df[date_col].values
+    dates = df[date_col].to_numpy()  # numpy datetime64[D]
     end_i = np.array([np.datetime64(ts + pd.Timedelta(days=h)) for ts in df[date_col]])
 
     # Purge train against val union and test union (calibration sits between, so train shouldn't see it either)
@@ -129,11 +132,11 @@ def _xy(
 ) -> tuple[pd.DataFrame, pd.Series]:  # type: ignore
     X = frame[feature_cols].copy()
     y = frame[target_col].copy()
-    return X, y
+    return X, y  # type: ignore
 
 
 def _build_test_windows(
-    u: np.ndarray, n_splits: int, test_span_days: Optional[int] = None
+    u: np.ndarray, n_splits: int, test_span_days: int | None = None
 ) -> list[tuple[pd.Timestamp, pd.Timestamp]]:
     if test_span_days is None:
         # equal partitions of the unique-date grid
@@ -154,15 +157,14 @@ def _build_test_windows(
 
 # --------------------------------------- Public API --------------------------------------- #
 def make_holdout_splits(
-        df: pd.DataFrame,
-        date_col: str,
-        symbol_col: str,
-        *,
-        fractions: tuple[float, float, float, float] = (0.7, 0.10, 0.10, 0.10),
-        cut_dates: Optional[tuple[pd.Timestamp, pd.Timestamp, pd.Timestamp]] = None,
-        return_frames: bool = False,
-    ) -> Mapping[str, pd.DataFrame] | Mapping[str, np.ndarray]:
-        
+    df: pd.DataFrame,
+    date_col: str,
+    symbol_col: str,
+    *,
+    fractions: tuple[float, float, float, float] = (0.7, 0.10, 0.10, 0.10),
+    cut_dates: tuple[pd.Timestamp, pd.Timestamp, pd.Timestamp] | None = None,
+    return_frames: bool = False,
+) -> Mapping[str, pd.DataFrame] | Mapping[str, np.ndarray]:
     """
     Build leakage-safe Train/Val/Cal/Test.
 
@@ -174,7 +176,7 @@ def make_holdout_splits(
 
     if cut_dates is None:
         train_end, val_end, cal_end = _cut_by_fractions(u, fractions)
-        
+
     else:
         train_end, val_end, cal_end = cut_dates
 
@@ -188,18 +190,18 @@ def make_holdout_splits(
         "val": df.iloc[idx["val_idx"]],
         "cal": df.iloc[idx["cal_idx"]],
         "test": df.iloc[idx["test_idx"]],
-        }
+    }
 
 
 def get_modeling_sets(
-        df: pd.DataFrame,
-        date_col: str = "date",
-        symbol_col: str = "symbol",
-        *,
-        feature_cols: list[str],
-        target_col: str,
-        fractions: tuple[float, float, float, float] = (0.7, 0.10, 0.10, 0.10),
-    ) -> dict[str, tuple[pd.DataFrame, pd.Series]]:
+    df: pd.DataFrame,
+    date_col: str = "date",
+    symbol_col: str = "symbol",
+    *,
+    feature_cols: list[str],
+    target_col: str,
+    fractions: tuple[float, float, float, float] = (0.7, 0.10, 0.10, 0.10),
+) -> dict[str, tuple[pd.DataFrame, pd.Series]]:
     """
     Convenience for CatBoost:
       - Train set for fitting
@@ -207,7 +209,13 @@ def get_modeling_sets(
       - Calibration set reserved for conformal
       - Test set final evaluation
     """
-    frames = make_holdout_splits(df, date_col=date_col, symbol_col=symbol_col, fractions=fractions, return_frames=True)
+    frames = make_holdout_splits(
+        df,
+        date_col=date_col,
+        symbol_col=symbol_col,
+        fractions=fractions,
+        return_frames=True,
+    )
 
     X_train, y_train = _xy(frames["train"], feature_cols, target_col)
     X_val, y_val = _xy(frames["val"], feature_cols, target_col)
@@ -218,7 +226,7 @@ def get_modeling_sets(
         "val": (X_val, y_val),
         "cal": (X_cal, y_cal),
         "test": (X_test, y_test),
-        }
+    }
 
 
 class PurgedTimeSeriesSplit(DataSplitter):
@@ -233,10 +241,10 @@ class PurgedTimeSeriesSplit(DataSplitter):
     def __init__(
         self,
         n_splits: int = 5,
-        date: Optional[pd.Series] = None,
+        date: pd.Series | None = None,
         horizon_days: int = 5,
-        embargo_days: Optional[int] = None,
-        test_span_days: Optional[int] = None,
+        embargo_days: int | None = None,
+        test_span_days: int | None = None,
         min_train_fraction: float = 0.05,  # optional safety
     ):
         if n_splits < 2:
@@ -252,8 +260,6 @@ class PurgedTimeSeriesSplit(DataSplitter):
     def split(
         self,
         X: pd.DataFrame,
-        y: Optional[pd.Series] = None,
-        groups: Optional[pd.Series] = None,
     ) -> Iterator[tuple[np.ndarray, np.ndarray]]:
         # Resolve date series
         if self._date is None:

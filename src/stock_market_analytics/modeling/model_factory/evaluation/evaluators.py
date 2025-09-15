@@ -5,30 +5,32 @@ This module contains evaluator classes that implement the evaluation protocols
 and provide standardized metrics for different modeling tasks.
 """
 
-import numpy as np
-from typing import Dict, Sequence
+from collections.abc import Sequence
 
-from stock_market_analytics.modeling.model_factory.protocols import (QuantileEvaluator, Array)
+import numpy as np
 
 from stock_market_analytics.modeling.model_factory.evaluation.evaluation_functions import (
+    align_predictions_to_quantiles,
+    crps_from_quantiles,
+    drop_nan_rows_for_quantiles,
+    ensure_sorted_unique_quantiles,
+    interval_score,
+    mean_interval_width,
+    monotonicity_violation_rate,
+    normalized_interval_width,
     pinball_loss_vectorized,
+    pit_ece,
+    pit_ks_statistic,
+    pit_values,
+    prediction_interval_coverage_probability,
     quantile_coverage,
     quantile_loss_differential,
-    interval_score,
-    prediction_interval_coverage_probability,
-    mean_interval_width,
-    normalized_interval_width,
-    crps_from_quantiles,
-    monotonicity_violation_rate,
-    ensure_sorted_unique_quantiles,
     validate_xyq_shapes,
-    align_predictions_to_quantiles,
-    drop_nan_rows_for_quantiles,
-    pit_values,
-    pit_ks_statistic,
-    pit_ece,
 )
-
+from stock_market_analytics.modeling.model_factory.protocols import (
+    Array,
+    QuantileEvaluator,
+)
 
 # -------------------------
 # Evaluator
@@ -54,17 +56,13 @@ class QuantileRegressionEvaluator(QuantileEvaluator):
             np.array(quantiles, dtype=float)
         )
 
-    def evaluate(self, y_true: Array, y_pred: Array) -> dict[str, float]:
-        # Intentionally empty for point predictions in a QR context.
-        return {}
-
     def evaluate_quantiles(
         self, y_true: Array, y_pred_quantiles: Array, quantiles: Sequence[float]
     ) -> dict[str, float]:
         """
         Evaluate quantile predictions.
         """
-        validate_xyq_shapes(y_true, np.asarray(y_pred_quantiles), np.asarray(quantiles))
+        validate_xyq_shapes(y_true, np.asarray(y_pred_quantiles))
         # Align and drop any NaN rows to avoid biased metrics
         yq, q_sorted, _ = align_predictions_to_quantiles(
             y_pred_quantiles, np.array(quantiles, dtype=float)
@@ -89,7 +87,7 @@ class QuantileRegressionEvaluator(QuantileEvaluator):
         pit_ks = pit_ks_statistic(pit)
         pit_ece20 = pit_ece(pit, n_bins=20)
 
-        metrics: Dict[str, float] = {
+        metrics: dict[str, float] = {
             "n_samples_evaluated": float(n),
             "n_rows_dropped_nan": float(n_dropped),
             "mean_pinball_loss": float(np.mean(pinball)),

@@ -15,7 +15,7 @@ from pydantic import BaseModel, Field, validator
 class DataCollectionConfig(BaseModel):
     """Configuration for data collection pipeline."""
 
-    tickers_file: str = "tickers.csv"
+    tickers_file: str = "top_200_tickers.csv"
     metadata_file: str = "metadata.csv"
     stocks_history_file: str = "stocks_history.parquet"
 
@@ -38,7 +38,7 @@ class DataCollectionConfig(BaseModel):
 class FeatureEngineeringConfig(BaseModel):
     """Configuration for feature engineering pipeline."""
 
-    horizon: int = Field(default=5, description="Days ahead to predict")
+    horizon: int = Field(default=3, description="Days ahead to predict")
     past_horizon: int = Field(
         default=7 * 280, description="Weeks of lookback for training"
     )
@@ -229,11 +229,11 @@ class ModelingConfig(BaseModel):
         return {
             "loss_function": f"MultiQuantile:alpha={alpha_str}",
             "num_boost_round": 1_000,
-            "learning_rate": 0.07,
+            "learning_rate": 0.02,
             "depth": 5,
-            "l2_leaf_reg": 10,
+            "l2_leaf_reg": 20,
             "grow_policy": "SymmetricTree",
-            "border_count": 128,
+            "border_count": 256,
             "bootstrap_type": "Bayesian",
             "bagging_temperature": 0.5,
             "random_state": 1,

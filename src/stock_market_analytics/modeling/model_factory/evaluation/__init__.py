@@ -3,5 +3,5 @@
 from .evaluators import QuantileRegressionEvaluator
 
 __all__ = [
-    'QuantileRegressionEvaluator',
+    "QuantileRegressionEvaluator",
 ]

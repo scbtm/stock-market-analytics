@@ -6,8 +6,8 @@ various evaluation tasks for machine learning models in financial contexts.
 """
 
 from __future__ import annotations
+
 import numpy as np
-from typing import Dict, Tuple
 
 # -------------------------
 # Core helpers (single task)
@@ -26,7 +26,7 @@ def ensure_sorted_unique_quantiles(q: np.ndarray) -> np.ndarray:
 
 def align_predictions_to_quantiles(
     y_pred_quantiles: np.ndarray, quantiles: np.ndarray
-) -> Tuple[np.ndarray, np.ndarray, np.ndarray]:
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
     """
     Sort quantiles and reorder prediction columns to match.
     Returns (y_pred_aligned, q_sorted, order_idx)
@@ -40,9 +40,7 @@ def align_predictions_to_quantiles(
     return y_pred_aligned, q_sorted, order_idx
 
 
-def validate_xyq_shapes(
-    y_true: np.ndarray, y_pred_quantiles: np.ndarray, quantiles: np.ndarray
-) -> None:
+def validate_xyq_shapes(y_true: np.ndarray, y_pred_quantiles: np.ndarray) -> None:
     y_true = np.asarray(y_true).reshape(-1)
     if y_pred_quantiles.ndim != 2:
         raise ValueError("y_pred_quantiles must be 2D (n_samples, n_quantiles).")
@@ -52,7 +50,7 @@ def validate_xyq_shapes(
 
 def drop_nan_rows_for_quantiles(
     y_true: np.ndarray, y_pred_quantiles: np.ndarray
-) -> Tuple[np.ndarray, np.ndarray, int]:
+) -> tuple[np.ndarray, np.ndarray, int]:
     """
     Remove rows with any NaNs in y_true or predicted quantiles.
     Returns (y_true_clean, yq_clean, n_dropped)
@@ -75,7 +73,7 @@ def enforce_monotone_across_quantiles(yq: np.ndarray) -> np.ndarray:
     return np.maximum.accumulate(yq, axis=1)
 
 
-def monotonicity_violation_rate(y_pred_quantiles: np.ndarray) -> Tuple[float, int]:
+def monotonicity_violation_rate(y_pred_quantiles: np.ndarray) -> tuple[float, int]:
     """
     Fraction and count of rows where any q_{k+1} < q_k (i.e., diff < 0).
     """
@@ -96,7 +94,7 @@ def pinball_loss_vectorized(
     y_true = np.asarray(y_true).reshape(-1)
     y_pred = np.asarray(y_pred, dtype=float)
     quantiles = np.asarray(quantiles, dtype=float).reshape(-1)
-    validate_xyq_shapes(y_true, y_pred, quantiles)
+    validate_xyq_shapes(y_true, y_pred)
     e = y_true[:, None] - y_pred  # (n, q)
     q = quantiles[None, :]  # (1, q)
     losses = np.maximum(q * e, (q - 1.0) * e)
@@ -109,13 +107,13 @@ def quantile_coverage(
     y_true = np.asarray(y_true).reshape(-1)
     y_pred_quantiles = np.asarray(y_pred_quantiles, dtype=float)
     quantiles = np.asarray(quantiles, dtype=float).reshape(-1)
-    validate_xyq_shapes(y_true, y_pred_quantiles, quantiles)
+    validate_xyq_shapes(y_true, y_pred_quantiles)
     return np.mean(y_true[:, None] <= y_pred_quantiles, axis=0)
 
 
 def quantile_loss_differential(
     y_true: np.ndarray, y_pred_quantiles: np.ndarray, quantiles: np.ndarray
-) -> Dict[str, float]:
+) -> dict[str, float]:
     pinball_losses = pinball_loss_vectorized(y_true, y_pred_quantiles, quantiles)
     cov = quantile_coverage(y_true, y_pred_quantiles, quantiles)
     cov_err = cov - quantiles
@@ -147,7 +145,6 @@ def crps_from_quantiles(
 def interval_score(
     y_true: np.ndarray, y_lower: np.ndarray, y_upper: np.ndarray, alpha: float = 0.1
 ) -> float:
-    
     """Compute the interval score for prediction intervals.
     The interval score is a proper scoring rule for evaluating prediction intervals.
     It balances the width of the interval and penalties for observations falling outside the interval.
@@ -198,7 +195,6 @@ def mean_interval_width(y_lower: np.ndarray, y_upper: np.ndarray) -> float:
 def normalized_interval_width(
     y_lower: np.ndarray, y_upper: np.ndarray, y_true: np.ndarray
 ) -> float:
-    
     y_lower = np.asarray(y_lower).reshape(-1)
     y_upper = np.asarray(y_upper).reshape(-1)
     y_true = np.asarray(y_true).reshape(-1)
@@ -216,7 +212,7 @@ def normalized_interval_width(
 
 def intervals_from_quantiles(
     y_pred_quantiles: np.ndarray, quantiles: np.ndarray, alpha: float
-) -> Tuple[np.ndarray, np.ndarray]:
+) -> tuple[np.ndarray, np.ndarray]:
     """
     Build (lower, upper) for a (1-alpha) PI from a quantile matrix using linear interpolation if needed.
     """
@@ -253,7 +249,7 @@ def pit_values(
     y_true = np.asarray(y_true).reshape(-1)
     # row-wise interpolation: tau = interp(y, Q_row, q), clipped to [0,1]
     pit = np.empty_like(y_true, dtype=float)
-    for i, (y, row) in enumerate(zip(y_true, yq)):
+    for i, (y, row) in enumerate(zip(y_true, yq, strict=False)):
         pit[i] = float(np.interp(y, row, q, left=0.0, right=1.0))
     return pit
 

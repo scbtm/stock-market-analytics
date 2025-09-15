@@ -13,23 +13,25 @@ import numpy as np
 from sklearn.base import BaseEstimator, TransformerMixin
 
 from stock_market_analytics.modeling.model_factory.calibration.calibration_functions import (
+    apply_quantile_shifts,
     check_alpha,
-    finite_sample_quantile,
+    check_same_length,
     conformity_abs_residuals,
     conformity_normalized_abs,
-    symmetric_interval_from_radius,
-    ensure_sorted_unique_quantiles,
-    residuals_for_quantile,
-    residual_shift_for_tau,
-    apply_quantile_shifts,
     enforce_monotone_across_quantiles,
-    check_same_length,
     ensure_1d,
+    ensure_sorted_unique_quantiles,
+    finite_sample_quantile,
+    residual_shift_for_tau,
+    residuals_for_quantile,
+    symmetric_interval_from_radius,
 )
-
-from typing import Any, List, Optional
 from stock_market_analytics.modeling.model_factory.protocols import (
-    BaseCalibrator, QuantileCalibrator, Array, Frame, Series
+    Array,
+    BaseCalibrator,
+    Frame,
+    QuantileCalibrator,
+    Series,
 )
 
 
@@ -47,22 +49,21 @@ class QuantileConformalCalibrator(BaseEstimator, TransformerMixin, BaseCalibrato
         self.alpha = alpha
         self.method = method
         self.eps = eps
-        self.radius_: Optional[float] = None  # q_{1-alpha} of scores
+        self.radius_: float | None = None  # q_{1-alpha} of scores
 
     # sklearn-style alias requested in your stub
     def calibrate(
         self, X_cal: Frame | None, y_cal: Series, **kwargs: Any
-    ) -> "QuantileConformalCalibrator":
+    ) -> QuantileConformalCalibrator:
         return self.fit(X_cal, y_cal, **kwargs)
 
     def fit(
         self,
         y_pred_cal: Array,
         y_true_cal: Array,
-        X_cal: Frame | None = None,
         **kwargs: Any,
-    ) -> "QuantileConformalCalibrator":
-        y_std_cal = kwargs.get('y_std_cal')
+    ) -> QuantileConformalCalibrator:
+        y_std_cal = kwargs.get("y_std_cal")
         y_true = np.asarray(y_true_cal).reshape(-1)
         y_pred_cal = np.asarray(y_pred_cal).reshape(-1)
         check_same_length(y_true, y_pred_cal)
@@ -99,21 +100,20 @@ class QuantileConformalCalibrator(BaseEstimator, TransformerMixin, BaseCalibrato
             lo, hi = symmetric_interval_from_radius(y_hat, r)
 
         return np.column_stack((lo, hi))
-        
+
     def transform(self, y_pred: Array, **kwargs: Any) -> Array:
         """Map raw model outputs to calibrated outputs."""
-        y_std = kwargs.get('y_std')
+        y_std = kwargs.get("y_std")
         return self.predict(y_pred, y_std)
-        
+
     def fit_transform(
         self,
         y_pred_cal: Array,
         y_true_cal: Array,
-        X_cal: Frame | None = None,
         **kwargs: Any,
     ) -> Array:
         """Fit the calibrator and transform calibration data."""
-        self.fit(y_pred_cal, y_true_cal, X_cal, **kwargs)
+        self.fit(y_pred_cal, y_true_cal, **kwargs)
         return self.transform(y_pred_cal, **kwargs)
 
     # This class focuses on intervals; calibrated quantiles belong in the class below.
@@ -124,7 +124,9 @@ class QuantileConformalCalibrator(BaseEstimator, TransformerMixin, BaseCalibrato
         )
 
 
-class ConformalizedQuantileCalibrator(BaseEstimator, TransformerMixin, QuantileCalibrator):
+class ConformalizedQuantileCalibrator(
+    BaseEstimator, TransformerMixin, QuantileCalibrator
+):
     """
     Per-τ **quantile calibration** via conservative residual shifts:
       r_i^τ = y_i - ŷ_τ(x_i),  ŝ_τ = Q̂_τ({r_i^τ}) with finite-sample 'higher' quantile,
@@ -134,24 +136,23 @@ class ConformalizedQuantileCalibrator(BaseEstimator, TransformerMixin, QuantileC
     This produces calibrated **quantiles**; you can derive intervals by choosing τ_l=α/2, τ_u=1-α/2.
     """
 
-    def __init__(self, quantiles: List[float], enforce_monotonic: bool = True):
+    def __init__(self, quantiles: list[float], enforce_monotonic: bool = True):
         self.quantiles = ensure_sorted_unique_quantiles(quantiles)
         self.enforce_monotonic = enforce_monotonic
-        self.shifts_: Optional[np.ndarray] = None  # shape (n_quantiles,)
+        self.shifts_: np.ndarray | None = None  # shape (n_quantiles,)
 
     def calibrate(
         self, X_cal: Frame | None, y_cal: Series, **kwargs: Any
-    ) -> "ConformalizedQuantileCalibrator":
+    ) -> ConformalizedQuantileCalibrator:
         return self.fit(X_cal, y_cal, **kwargs)
 
     def fit(
         self,
         y_pred_cal: Array,
         y_true_cal: Array,
-        X_cal: Frame | None = None,
         **kwargs: Any,
-    ) -> "ConformalizedQuantileCalibrator":
-        y_pred_cal_quantiles = kwargs.get('y_pred_cal_quantiles', y_pred_cal)
+    ) -> ConformalizedQuantileCalibrator:
+        y_pred_cal_quantiles = kwargs.get("y_pred_cal_quantiles", y_pred_cal)
         if y_pred_cal_quantiles is None:
             raise ValueError(
                 "y_pred_cal_quantiles must be provided with shape (n_cal, n_quantiles)."
@@ -189,7 +190,7 @@ class ConformalizedQuantileCalibrator(BaseEstimator, TransformerMixin, QuantileC
         if self.enforce_monotonic:
             Yq_cal = enforce_monotone_across_quantiles(Yq_cal)
         return Yq_cal
-    
+
     def predict(self, y_pred_quantiles: np.ndarray, alpha: float = 0.1) -> np.ndarray:
         check_alpha(alpha)
         Yq_cal = self.predict_quantiles(y_pred_quantiles)  # (n_samples, n_quantiles)
@@ -209,18 +210,17 @@ class ConformalizedQuantileCalibrator(BaseEstimator, TransformerMixin, QuantileC
             hi = np.array([np.interp(tau_hi, q, row) for row in Yq_cal], dtype=float)
 
         return np.column_stack((lo, hi))
-        
-    def transform(self, y_pred_quantiles: Array, **kwargs: Any) -> Array:
+
+    def transform(self, y_pred_quantiles: Array) -> Array:
         """Map raw quantile outputs to calibrated quantile outputs."""
         return self.predict_quantiles(y_pred_quantiles)
-        
+
     def fit_transform(
         self,
         y_pred_cal: Array,
         y_true_cal: Array,
-        X_cal: Frame | None = None,
         **kwargs: Any,
     ) -> Array:
         """Fit the calibrator and transform calibration data."""
-        self.fit(y_pred_cal, y_true_cal, X_cal, **kwargs)
-        return self.transform(y_pred_cal, **kwargs)
+        self.fit(y_pred_cal, y_true_cal, **kwargs)
+        return self.transform(y_pred_cal)
