@@ -14,11 +14,11 @@ ENV PATH="/root/.local/bin:${PATH}"
 # Copy the dependency files
 COPY pyproject.toml uv.lock ./
 
-# Install dependencies
-RUN uv sync --all-groups
-
 # Copy the application code
 COPY src/ ./src/
+
+# Install dependencies
+RUN uv sync --all-groups
 
 # Expose the port the app runs on
 EXPOSE 8080
