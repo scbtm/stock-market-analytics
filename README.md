@@ -165,9 +165,60 @@ The system demonstrates **MLOps best practices**:
 
 ### CI/CD Pipeline
 
-The project implements a comprehensive **Continuous Integration** pipeline focusing on code quality, security, and reliability:
+The project implements a comprehensive **Continuous Integration** pipeline focusing on code quality, security, and reliability, leveraging GitHub Actions, Makefile, and pre-commit hooks.
+
+**GitHub Actions Workflow**
+
+A GitHub Actions workflow defined in `.github/workflows/ci.yml` automatically runs on every push and pull request to the `main` branch. This ensures that all changes are validated before being merged.
+
+The workflow performs the following steps:
+1.  Sets up a Python 3.12 environment.
+2.  Installs the `uv` package manager.
+3.  Installs all project dependencies using `uv sync`.
+4.  Runs the test suite using the `uv run make ci-tests` command, which executes all tests not marked with `ci-exclude`.
+
+```yaml
+# .github/workflows/ci.yml
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.12"]
+
+    steps:
+    - uses: actions/checkout@v3
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.python-version }}
+    - name: Install uv
+      run: |
+        curl -LsSf https://astral.sh/uv/install.sh | sh
+        source $HOME/.cargo/env
+    - name: Install dependencies
+      run: |
+        uv sync
+    - name: Run tests
+      run: |
+        uv run make ci-tests
+```
+
+**Branch Protection**
+
+The `main` branch is protected by a rule that requires the **build** job from the GitHub Actions workflow to pass before a pull request can be merged. This enforces that all tests must pass, preventing broken code from being merged into the main branch.
 
 **Makefile Automation**
+
+The `Makefile` provides a set of commands to automate common development tasks, ensuring consistency and simplifying the development process.
 
 ```makefile
 verify: format lint typecheck test security-check
@@ -175,30 +226,32 @@ verify: format lint typecheck test security-check
 
 The CI process includes:
 
-1. **Code Formatting**: Automated `ruff` formatting for consistent style
-2. **Linting**: `ruff` linting catches common issues and enforces best practices  
-3. **Type Checking**: `pyright` ensures type safety across the codebase
-4. **Testing**: `pytest` with coverage reporting and HTML reports
-5. **Security Auditing**: `pip-audit` scans for known vulnerabilities
+1.  **Code Formatting**: Automated `ruff` formatting for consistent style.
+2.  **Linting**: `ruff` linting catches common issues and enforces best practices.
+3.  **Type Checking**: `pyright` ensures type safety across the codebase.
+4.  **Testing**: `pytest` with coverage reporting and HTML reports.
+5.  **Security Auditing**: `pip-audit` scans for known vulnerabilities.
 
 **Pre-commit Integration**
+
+The project uses `pre-commit` to run a subset of the Makefile's verification steps before each commit. This provides a fast feedback loop for developers and helps maintain code quality.
 
 ```yaml
 repos:
   - repo: local
     hooks:
-      - id: make-verify
+      - id: make-pre-commit
         name: Run Makefile checks
-        entry: uv run make verify
-        language: system
-        pass_filenames: false
+        entry: uv run make pre-commit
+        language: system            # use system Python / shell
+        pass_filenames: false       # Make handles its own paths
 ```
 
 **Benefits of this approach**:
-- Prevents broken code from entering the repository
-- Maintains consistent code quality across all contributions
-- Automated security vulnerability detection
-- Fast feedback loop for developers
+- Prevents broken code from entering the repository.
+- Maintains consistent code quality across all contributions.
+- Automated security vulnerability detection.
+- Fast feedback loop for developers.
 
 **CD Setup:**
 - Pending
