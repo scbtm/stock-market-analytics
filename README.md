@@ -170,34 +170,57 @@ This project implements a modern CI/CD pipeline to automate testing and deployme
 #### **📊 Pipeline Architecture Overview**
 
 ```mermaid
-graph TB
-    A[👨‍💻 Developer] -->|Push Code| B[📁 GitHub Repository]
-    B -->|Pull Request| C[🔄 GitHub Actions CI]
-    C -->|Tests Pass| D[✅ Merge to Main]
-    D -->|Trigger Build| E[🏗️ Google Cloud Build]
+%%{init: {
+  "theme": "base",
+  "themeVariables": {
+    "fontFamily": "Inter, ui-sans-serif, system-ui, Segoe UI, Roboto, Helvetica, Arial",
+    "primaryColor": "#0f172a",
+    "primaryTextColor": "#f8fafc",
+    "primaryBorderColor": "#334155",
+    "lineColor": "#94a3b8",
+    "edgeLabelBackground": "#0f172a",
+    "clusterBkg": "#111827",
+    "clusterBorder": "#334155"
+}}%%
+
+flowchart TB
+    A[👨‍💻 Developer] -->|Push code| B[📁 GitHub Repository]
+    B -->|Pull request| C[🔄 GitHub Actions CI]
+    C -->|Tests pass| D[✅ Merge to Main]
+    D -->|Trigger build| E[🏗️ Google Cloud Build]
 
     E --> F[🐳 Build Unified Docker Image]
     F --> G[📦 Push to Artifact Registry]
+    G --> H
 
-    G --> H[☁️ Single Image, Multiple Services]
+    subgraph H[☁️ Single Image → Multiple Services]
+      direction TB
+      I[🌐 Dashboard Service\nENTRYPOINT_COMMAND=dashboard]
+      J[🤖 Training Service\nENTRYPOINT_COMMAND=train-model]
+      K[📊 Data Collection\nENTRYPOINT_COMMAND=batch-collect]
+      L[⚙️ Feature Engineering\nENTRYPOINT_COMMAND=build-features]
+      M[📈 Model Monitoring\nENTRYPOINT_COMMAND=monitor-model]
+    end
 
-    H --> I[🌐 Dashboard Service<br/>ENTRYPOINT_COMMAND=dashboard]
-    H --> J[🤖 Training Service<br/>ENTRYPOINT_COMMAND=train-model]
-    H --> K[📊 Data Collection<br/>ENTRYPOINT_COMMAND=batch-collect]
-    H --> L[⚙️ Feature Engineering<br/>ENTRYPOINT_COMMAND=build-features]
-    H --> M[📈 Model Monitoring<br/>ENTRYPOINT_COMMAND=monitor-model]
+    %% Modern, high-contrast palette (reads well in light & dark)
+    classDef dev fill:#1d4ed8,stroke:#93c5fd,color:#f8fafc,stroke-width:1.5px;
+    classDef ci fill:#0ea5e9,stroke:#7dd3fc,color:#0b1220,stroke-width:1.5px;
+    classDef merge fill:#10b981,stroke:#6ee7b7,color:#062418,stroke-width:1.5px;
+    classDef build fill:#a855f7,stroke:#c084fc,color:#1f0a33,stroke-width:1.5px;
+    classDef image fill:#f59e0b,stroke:#fcd34d,color:#1a1200,stroke-width:1.5px;
+    classDef registry fill:#f97316,stroke:#fdba74,color:#1a0d00,stroke-width:1.5px;
+    classDef group fill:#111827,stroke:#334155,color:#e5e7eb,stroke-width:1.5px;
+    classDef svc fill:#0f766e,stroke:#34d399,color:#ecfeff,stroke-width:1.5px;
 
-    style A fill:#e1f5fe
-    style E fill:#fff3e0
-    style F fill:#f3e5f5
-    style G fill:#e8f5e8
-    style H fill:#fff9c4
-    style I fill:#ffebee
-    style J fill:#e3f2fd
-    style K fill:#f1f8e9
-    style L fill:#fce4ec
-    style M fill:#e0f2f1
-```
+    class A,B dev;
+    class C ci;
+    class D merge;
+    class E build;
+    class F image;
+    class G registry;
+    class H group;
+    class I,J,K,L,M svc;
+``
 
 The pipeline is split into two main parts:
 
@@ -310,24 +333,47 @@ The application uses a **unified Docker container** that can run any service com
 The Docker image includes an intelligent entrypoint script (`docker-entrypoint.sh`) that dynamically selects which service to run:
 
 ```mermaid
-graph LR
+%%{init: {
+  "theme": "base",
+  "themeVariables": {
+    "fontFamily": "Inter, ui-sans-serif, system-ui, Segoe UI, Roboto, Helvetica, Arial",
+    "primaryColor": "#0f172a",
+    "primaryTextColor": "#f8fafc",
+    "primaryBorderColor": "#334155",
+    "lineColor": "#94a3b8",
+    "edgeLabelBackground": "#0f172a",
+    "clusterBkg": "#111827",
+    "clusterBorder": "#334155"
+}}%%
+
+flowchart LR
     A[🐳 Unified Docker Image] --> B{docker-entrypoint.sh}
 
-    B -->|ENTRYPOINT_COMMAND=dashboard| C[🌐 Web Dashboard<br/>Gunicorn + Dash]
-    B -->|ENTRYPOINT_COMMAND=train-model| D[🤖 ML Training<br/>CatBoost + W&B]
-    B -->|ENTRYPOINT_COMMAND=batch-collect| E[📊 Data Collection<br/>YFinance + Validation]
-    B -->|ENTRYPOINT_COMMAND=build-features| F[⚙️ Feature Engineering<br/>Hamilton + Polars]
-    B -->|ENTRYPOINT_COMMAND=monitor-model| G[📈 Model Monitoring<br/>Metaflow + Metrics]
+    B -->|ENTRYPOINT_COMMAND=dashboard| C[🌐 Web Dashboard\nGunicorn + Dash]
+    B -->|ENTRYPOINT_COMMAND=train-model| D[🤖 ML Training\nCatBoost + W&B]
+    B -->|ENTRYPOINT_COMMAND=batch-collect| E[📊 Data Collection\nYFinance + Validation]
+    B -->|ENTRYPOINT_COMMAND=build-features| F[⚙️ Feature Engineering\nHamilton + Polars]
+    B -->|ENTRYPOINT_COMMAND=monitor-model| G[📈 Model Monitoring\nMetaflow + Metrics]
 
     B -->|Default/Unknown| C
 
-    style A fill:#e3f2fd
-    style B fill:#fff9c4
-    style C fill:#ffebee
-    style D fill:#e8f5e8
-    style E fill:#f3e5f5
-    style F fill:#fce4ec
-    style G fill:#e0f2f1
+    %% Modern, accessible palette (renders well in light & dark)
+    classDef img fill:#f59e0b,stroke:#fcd34d,color:#1a1200,stroke-width:1.5px;
+    classDef ep fill:#0ea5e9,stroke:#7dd3fc,color:#0b1220,stroke-width:1.5px;
+
+    classDef svcDash fill:#1d4ed8,stroke:#93c5fd,color:#f8fafc,stroke-width:1.5px;
+    classDef svcTrain fill:#a855f7,stroke:#c084fc,color:#1f0a33,stroke-width:1.5px;
+    classDef svcCollect fill:#f97316,stroke:#fdba74,color:#1a0d00,stroke-width:1.5px;
+    classDef svcFeat fill:#0ea5e9,stroke:#7dd3fc,color:#0b1220,stroke-width:1.5px;
+    classDef svcMonitor fill:#10b981,stroke:#6ee7b7,color:#062418,stroke-width:1.5px;
+
+    class A img;
+    class B ep;
+    class C svcDash;
+    class D svcTrain;
+    class E svcCollect;
+    class F svcFeat;
+    class G svcMonitor;
 ```
 
 **Environment Variable Controls:**
