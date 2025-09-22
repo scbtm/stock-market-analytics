@@ -37,7 +37,7 @@ class TestLoadStockData:
         )
         test_data.write_parquet(stocks_file)
 
-        result = load_stock_data(tmp_path)
+        result = load_stock_data(str(stocks_file))
 
         assert isinstance(result, pl.DataFrame)
         assert len(result) == 2
@@ -46,8 +46,8 @@ class TestLoadStockData:
 
     def test_load_stock_data_file_not_found(self, tmp_path):
         """Test FileNotFoundError when stocks file doesn't exist."""
-        with pytest.raises(FileNotFoundError, match="Stocks history file not found"):
-            load_stock_data(tmp_path)
+        with pytest.raises(ValueError, match="Error loading stocks history file"):
+            load_stock_data(str(tmp_path / "stocks_history.parquet"))
 
     def test_load_stock_data_custom_filename(self, tmp_path):
         """Test loading with custom filename."""
@@ -57,7 +57,7 @@ class TestLoadStockData:
         )
         test_data.write_parquet(custom_file)
 
-        result = load_stock_data(tmp_path, "custom_stocks.parquet")
+        result = load_stock_data(str(custom_file))
 
         assert len(result) == 1
         assert result["symbol"][0] == "AAPL"
@@ -68,7 +68,7 @@ class TestLoadStockData:
         stocks_file.write_text("corrupted parquet data")
 
         with pytest.raises(ValueError, match="Error loading stocks history file"):
-            load_stock_data(tmp_path)
+            load_stock_data(str(stocks_file))
 
 
 class TestApplyTimeFilters:
@@ -205,9 +205,8 @@ class TestSaveFeatures:
             }
         )
 
-        save_features(features_data, tmp_path)
-
         features_file = tmp_path / "stock_history_features.parquet"
+        save_features(features_data, str(features_file))
         assert features_file.exists()
 
         # Verify saved data
@@ -218,9 +217,8 @@ class TestSaveFeatures:
         """Test saving features with custom filename."""
         features_data = pl.DataFrame({"symbol": ["AAPL"], "feature1": [0.5]})
 
-        save_features(features_data, tmp_path, "custom_features.parquet")
-
         features_file = tmp_path / "custom_features.parquet"
+        save_features(features_data, str(features_file))
         assert features_file.exists()
 
 
@@ -253,7 +251,7 @@ class TestBuildFeaturesFromData:
                 "stock_market_analytics.feature_engineering.feature_steps.execute_feature_pipeline"
             ) as mock_execute,
             patch(
-                "stock_market_analytics.feature_engineering.feature_steps.features_config"
+                "stock_market_analytics.feature_engineering.feature_steps.config.feature_engineering"
             ) as mock_config,
         ):
             # Setup mocks
@@ -273,20 +271,21 @@ class TestBuildFeaturesFromData:
             mock_config.past_horizon = 30
             mock_config.as_dict = {"param1": "value1"}
 
-            result = build_features_from_data(tmp_path)
+            stocks_file = tmp_path / "stocks_history.parquet"
+            features_file = tmp_path / "stock_history_features.parquet"
+            result = build_features_from_data(str(stocks_file), str(features_file))
 
             # Verify result
             assert result["status"] == "success"
             assert result["input_records"] == 3  # All records in filtered data
             assert result["output_records"] == 2  # Features output
-            assert result["features_file"] == "stock_history_features.parquet"
+            assert result["features_file"] == str(features_file)
 
             # Verify pipeline was called correctly
             mock_create.assert_called_once()
             mock_execute.assert_called_once()
 
             # Verify features file was created
-            features_file = tmp_path / "stock_history_features.parquet"
             assert features_file.exists()
 
     def test_build_features_from_data_custom_files(self, tmp_path):
@@ -315,7 +314,7 @@ class TestBuildFeaturesFromData:
                 "stock_market_analytics.feature_engineering.feature_steps.execute_feature_pipeline"
             ) as mock_execute,
             patch(
-                "stock_market_analytics.feature_engineering.feature_steps.features_config"
+                "stock_market_analytics.feature_engineering.feature_steps.config.feature_engineering"
             ) as mock_config,
         ):
             mock_pipeline = Mock()
@@ -327,23 +326,25 @@ class TestBuildFeaturesFromData:
             mock_config.past_horizon = 0  # No time filtering
             mock_config.as_dict = {}
 
+            custom_features_file = tmp_path / "custom_features.parquet"
             result = build_features_from_data(
-                tmp_path,
-                stocks_history_file="custom_stocks.parquet",
-                features_file="custom_features.parquet",
+                str(custom_stocks_file),
+                str(custom_features_file),
             )
 
             assert result["status"] == "success"
-            assert result["features_file"] == "custom_features.parquet"
+            assert result["features_file"] == str(custom_features_file)
 
             # Verify custom features file was created
-            features_file = tmp_path / "custom_features.parquet"
-            assert features_file.exists()
+            assert custom_features_file.exists()
 
     def test_build_features_from_data_missing_stock_file(self, tmp_path):
         """Test feature building when stock file is missing."""
-        with pytest.raises(FileNotFoundError):
-            build_features_from_data(tmp_path)
+        with pytest.raises(ValueError):
+            build_features_from_data(
+                str(tmp_path / "stocks_history.parquet"),
+                str(tmp_path / "features.parquet"),
+            )
 
     def test_build_features_from_data_empty_input(self, tmp_path):
         """Test feature building with empty input data."""
@@ -371,7 +372,7 @@ class TestBuildFeaturesFromData:
                 "stock_market_analytics.feature_engineering.feature_steps.execute_feature_pipeline"
             ) as mock_execute,
             patch(
-                "stock_market_analytics.feature_engineering.feature_steps.features_config"
+                "stock_market_analytics.feature_engineering.feature_steps.config.feature_engineering"
             ) as mock_config,
         ):
             mock_pipeline = Mock()
@@ -386,7 +387,9 @@ class TestBuildFeaturesFromData:
             mock_config.past_horizon = 30
             mock_config.as_dict = {}
 
-            result = build_features_from_data(tmp_path)
+            stocks_file = tmp_path / "stocks_history.parquet"
+            features_file = tmp_path / "features.parquet"
+            result = build_features_from_data(str(stocks_file), str(features_file))
 
             assert result["status"] == "success"
             assert result["input_records"] == 0
@@ -408,9 +411,11 @@ class TestBuildFeaturesFromData:
         mock_create.side_effect = Exception("Pipeline creation failed")
 
         with patch(
-            "stock_market_analytics.feature_engineering.feature_steps.features_config"
+            "stock_market_analytics.feature_engineering.feature_steps.config.feature_engineering"
         ) as mock_config:
             mock_config.past_horizon = 30
 
             with pytest.raises(Exception, match="Pipeline creation failed"):
-                build_features_from_data(tmp_path)
+                build_features_from_data(
+                    str(stocks_file), str(tmp_path / "features.parquet")
+                )

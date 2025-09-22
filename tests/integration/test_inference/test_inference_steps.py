@@ -86,9 +86,16 @@ class TestWandBArtifactIntegration:
 
     def test_download_and_load_model_full_workflow(self, mock_wandb_api, mock_joblib):
         """Test complete download and load workflow integration."""
-        with patch.dict(
-            os.environ, {"WANDB_API_KEY": "test_key", "MODEL_NAME": "pipeline:v1.0"}
+        with (
+            patch.dict(
+                os.environ, {"WANDB_API_KEY": "test_key", "MODEL_NAME": "pipeline:v1.0"}
+            ),
+            patch(
+                "stock_market_analytics.inference.inference_steps.config"
+            ) as mock_config,
         ):
+            mock_config.wandb_key = "test_key"
+            mock_config.model_name = "pipeline:v1.0"
             # Test the full workflow
             result = download_and_load_model()
 
@@ -116,7 +123,14 @@ class TestWandBArtifactIntegration:
         ]
 
         for env_vars, expected_model in test_cases:
-            with patch.dict(os.environ, env_vars, clear=True):
+            with (
+                patch.dict(os.environ, env_vars, clear=True),
+                patch(
+                    "stock_market_analytics.inference.inference_steps.config"
+                ) as mock_config,
+            ):
+                mock_config.wandb_key = env_vars["WANDB_API_KEY"]
+                mock_config.model_name = env_vars.get("MODEL_NAME")
                 model_dir, model_name = download_artifacts()
 
                 assert model_dir == "/tmp/model_dir"
