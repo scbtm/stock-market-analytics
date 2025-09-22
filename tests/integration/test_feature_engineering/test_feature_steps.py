@@ -104,7 +104,11 @@ class TestFeatureEngineeringStepsIntegration:
         mock_execute_pipeline.return_value = features_data
 
         # Test feature building
-        result = feature_steps.build_features_from_data(Path(mock_environment))
+        stocks_path = Path(mock_environment) / "stocks_history.parquet"
+        features_path = Path(mock_environment) / "stock_history_features.parquet"
+        result = feature_steps.build_features_from_data(
+            str(stocks_path), str(features_path)
+        )
 
         assert result["status"] == "success"
         assert result["input_records"] == 200  # 100 days * 2 symbols
@@ -138,7 +142,11 @@ class TestFeatureEngineeringStepsIntegration:
         mock_execute_pipeline.return_value = empty_features
 
         # Test feature building
-        result = feature_steps.build_features_from_data(Path(mock_environment))
+        stocks_path = Path(mock_environment) / "stocks_history.parquet"
+        features_path = Path(mock_environment) / "stock_history_features.parquet"
+        result = feature_steps.build_features_from_data(
+            str(stocks_path), str(features_path)
+        )
 
         assert result["status"] == "success"
         assert result["output_records"] == 0
