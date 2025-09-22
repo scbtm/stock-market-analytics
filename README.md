@@ -195,6 +195,7 @@ flowchart TB
 
     subgraph H[☁️ Single Image → Multiple Services]
       direction TB
+      padTop[" "]:::spacer
       I[🌐 Dashboard Service<br/>ENTRYPOINT_COMMAND=dashboard]
       J[🤖 Training Service<br/>ENTRYPOINT_COMMAND=train-model]
       K[📊 Data Collection<br/>ENTRYPOINT_COMMAND=batch-collect]
