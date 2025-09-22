@@ -1,6 +1,5 @@
 import base64
 import io
-import os
 from datetime import datetime
 from pathlib import Path
 
@@ -54,8 +53,8 @@ def download_artifacts() -> tuple[str, str, str, str]:
     """
     Download model artifacts from Weights & Biases.
     """
-    api = wandb.Api(api_key=os.environ.get("WANDB_API_KEY"))
-    model_name: str = os.environ.get("MODEL_NAME") or "pipeline:latest"
+    api = wandb.Api(api_key=config.wandb_key)
+    model_name: str = config.model_name or "pipeline:latest"
     model_version: str = model_name.split(":")[1] if ":" in model_name else "latest"
     dataset_name: str = "test_set:" + model_version
 
@@ -90,14 +89,13 @@ def load_reference_data(dataset_dir: str, dataset_name: str) -> pd.DataFrame:
     return dataset
 
 
-def load_monitoring_df(data_path: str) -> pd.DataFrame:
+def load_monitoring_df(features_path: str) -> pd.DataFrame:
     """
     Load the features data for monitoring.
     """
-    features_file = Path(data_path) / config.modeling.features_file
 
     # load features data
-    df = pd.read_parquet(features_file)
+    df = pd.read_parquet(features_path)
     df = _validate(df, date_col="date", symbol_col="symbol")
     # get fully labeled data
     df_labeled = df.dropna(subset=[config.modeling.target])

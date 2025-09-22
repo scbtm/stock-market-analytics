@@ -15,9 +15,12 @@ from pydantic import BaseModel, Field, validator
 class DataCollectionConfig(BaseModel):
     """Configuration for data collection pipeline."""
 
-    tickers_file: str = "top_200_tickers.csv"
-    metadata_file: str = "metadata.csv"
-    stocks_history_file: str = "stocks_history.parquet"
+    # Use environment variable for files:
+    tickers_file: str = os.getenv("TICKERS_FILE", "top_200_tickers.csv")
+    metadata_file: str = os.getenv("METADATA_FILE", "metadata.csv")
+    stocks_history_file: str = os.getenv(
+        "STOCKS_HISTORY_FILE", "stocks_history.parquet"
+    )
 
     required_ticker_columns: list[str] = Field(
         default=["Symbol", "Name", "Country", "IPO Year", "Sector", "Industry"]
@@ -80,7 +83,7 @@ class FeatureEngineeringConfig(BaseModel):
 class ModelingConfig(BaseModel):
     """Configuration for modeling pipeline."""
 
-    features_file: str = "stock_history_features.parquet"
+    features_file: str = os.getenv("FEATURES_FILE", "stock_history_features.parquet")
     quantiles: list[float] = Field(default=[0.1, 0.25, 0.5, 0.75, 0.9])
     target: str = "y_log_returns"
     target_coverage: float = 0.8
@@ -90,11 +93,6 @@ class ModelingConfig(BaseModel):
     fractions: tuple[float, float, float, float] = Field(
         default=(0.6, 0.1, 0.2, 0.1), description="Train/val/cal/test split fractions"
     )
-
-    # Deprecated tuning parameters (no longer used since tuning flow was removed)
-    timeout_mins: int = 10
-    n_trials: int = 200
-    study_name: str = "catboost_hyperparameter_optimization_dummy"
 
     # Feature groups
     features: list[str] = Field(
@@ -325,6 +323,22 @@ class AppConfig(BaseModel):
     )
     modeling: ModelingConfig = Field(default_factory=ModelingConfig)
 
+    model_name: str | None = Field(
+        default=None, description="Model name in Weights & Biases"
+    )
+
+    tickers_path: Path | None = Field(default=None, description="Path for tickers file")
+
+    metadata_path: Path | None = Field(
+        default=None, description="Path for metadata file"
+    )
+    stocks_history_path: Path | None = Field(
+        default=None, description="Path for stocks history file"
+    )
+    features_path: Path | None = Field(
+        default=None, description="Path for features file"
+    )
+
     @validator("base_data_path", pre=True, always=True)
     def validate_base_data_path(cls, v: Any) -> Any:
         """Load base data path from environment if not provided."""
@@ -339,6 +353,49 @@ class AppConfig(BaseModel):
         """Load WANDB key from environment if not provided."""
         if v is None:
             return os.environ.get("WANDB_KEY")
+        return v
+
+    @validator("model_name", pre=True, always=True)
+    def validate_model_name(cls, v: Any) -> Any:
+        """Load model name from environment if not provided."""
+        if v is None:
+            return os.environ.get("MODEL_NAME")
+        return v
+
+    @validator("tickers_path", pre=True, always=True)
+    def validate_tickers_path(cls, v: Any, values: dict[str, Any]) -> Any:
+        """Construct tickers path from base data path and tickers file name."""
+        if v is None:
+            base_path = values.get("base_data_path")
+            if base_path:
+                return base_path / values["data_collection"].tickers_file
+        return v
+
+    @validator("metadata_path", pre=True, always=True)
+    def validate_metadata_path(cls, v: Any, values: dict[str, Any]) -> Any:
+        """Construct metadata path from base data path and metadata file name."""
+        if v is None:
+            base_path = values.get("base_data_path")
+            if base_path:
+                return base_path / values["data_collection"].metadata_file
+        return v
+
+    @validator("stocks_history_path", pre=True, always=True)
+    def validate_stocks_history_path(cls, v: Any, values: dict[str, Any]) -> Any:
+        """Construct stocks history path from base data path and stocks history file name."""
+        if v is None:
+            base_path = values.get("base_data_path")
+            if base_path:
+                return base_path / values["data_collection"].stocks_history_file
+        return v
+
+    @validator("features_path", pre=True, always=True)
+    def validate_features_path(cls, v: Any, values: dict[str, Any]) -> Any:
+        """Construct features path from base data path and features file name."""
+        if v is None:
+            base_path = values.get("base_data_path")
+            if base_path:
+                return base_path / values["modeling"].features_file
         return v
 
 

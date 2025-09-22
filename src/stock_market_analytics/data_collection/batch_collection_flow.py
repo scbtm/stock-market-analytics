@@ -1,5 +1,3 @@
-import os
-from pathlib import Path
 from typing import Any
 
 import pandas as pd
@@ -39,10 +37,10 @@ class BatchCollectionFlow(FlowSpec):
         print("🚀 Starting Batch Collection Flow...")
 
         # Validate required environment variables
-        if not os.environ.get("BASE_DATA_PATH"):
+        if not config.base_data_path:
             raise ValueError("BASE_DATA_PATH environment variable is required")
 
-        print(f"📁 Data directory: {os.environ['BASE_DATA_PATH']}")
+        print(f"📁 Data directory: {config.base_data_path}")
         self.next(self.load_inputs)
 
     @step
@@ -62,14 +60,12 @@ class BatchCollectionFlow(FlowSpec):
         """
         print("📊 Loading ticker symbols and metadata...")
 
-        base_data_path = Path(os.environ["BASE_DATA_PATH"])
-
         # Load and validate tickers
-        self.tickers = collection_steps.load_tickers(base_data_path)
+        self.tickers = collection_steps.load_tickers(config.tickers_path)
         print(f"✅ Loaded {len(self.tickers)} ticker symbols")
 
         # Load existing metadata if available
-        self.metadata_info = collection_steps.load_metadata(base_data_path)
+        self.metadata_info = collection_steps.load_metadata(config.metadata_path)
         if self.metadata_info:
             print(f"📋 Found existing metadata for {len(self.metadata_info)} symbols")
         else:
@@ -137,7 +133,6 @@ class BatchCollectionFlow(FlowSpec):
         print("🔄 Joining results from all collection tasks...")
 
         results = [input_item.results for input_item in inputs]
-        base_data_path = Path(os.environ["BASE_DATA_PATH"])
 
         # Separate successful data collections from metadata updates
         collected_data = []
@@ -154,11 +149,11 @@ class BatchCollectionFlow(FlowSpec):
         print(f"📋 Processing {len(metadata_updates)} metadata updates")
 
         # Update metadata
-        collection_steps.update_metadata(base_data_path, metadata_updates)
+        collection_steps.update_metadata(config.metadata_path, metadata_updates)
 
         # Update historical data
         update_result = collection_steps.update_historical_data(
-            base_data_path, collected_data
+            config.stocks_history_path, collected_data
         )
 
         if update_result["status"] == "success":
@@ -195,9 +190,7 @@ class BatchCollectionFlow(FlowSpec):
 
         try:
             # Store new metadata file:
-            base_data_path = Path(os.environ["BASE_DATA_PATH"])
-            metadata_file = config.data_collection.metadata_file
-            metadata_path = base_data_path / metadata_file
+            metadata_path = config.metadata_path
 
             self.metadata_info = pd.read_csv(metadata_path)
 

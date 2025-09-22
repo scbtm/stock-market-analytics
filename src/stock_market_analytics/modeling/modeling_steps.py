@@ -9,8 +9,6 @@ These are pure business logic functions with no Metaflow dependencies,
 following the steps architecture pattern.
 """
 
-from pathlib import Path
-
 import pandas as pd
 from sklearn.compose import ColumnTransformer
 from sklearn.decomposition import PCA
@@ -34,12 +32,12 @@ from stock_market_analytics.modeling.model_factory.evaluation.evaluators import 
 )
 
 
-def load_features_data(data_path: str) -> pd.DataFrame:
+def load_features_data(features_path: str) -> pd.DataFrame:
     """
     Load the features dataset for modeling.
 
     Args:
-        data_path: Path to data directory
+        features_path: Path to features file
 
     Returns:
         Features DataFrame
@@ -48,14 +46,10 @@ def load_features_data(data_path: str) -> pd.DataFrame:
         FileNotFoundError: If features file not found
         ValueError: If data is invalid
     """
-    features_file = Path(data_path) / config.modeling.features_file
-
-    if not features_file.exists():
-        raise FileNotFoundError(f"Features file not found: {features_file}")
 
     try:
         # load features data
-        df = pd.read_parquet(features_file)
+        df = pd.read_parquet(features_path)
 
         # drop nulls in target column
         df = df.dropna(subset=[config.modeling.target])

@@ -6,7 +6,6 @@ This flow orchestrates the complete monitoring workflow following the establishe
 steps and flow architecture pattern.
 """
 
-import os
 from pathlib import Path
 
 import pandas as pd
@@ -50,10 +49,10 @@ class MonitoringFlow(FlowSpec):
         print("🚀 Starting Model Monitoring Flow...")
 
         # Validate required environment variables
-        if not os.environ.get("BASE_DATA_PATH"):
-            raise ValueError("BASE_DATA_PATH environment variable is required")
+        if not config.base_data_path:
+            raise ValueError("BASE_DATA_PATH configuration is required")
 
-        print(f"📁 Data directory: {os.environ['BASE_DATA_PATH']}")
+        print(f"📁 Data directory: {config.base_data_path}")
         print("✅ Configuration loaded successfully")
 
         self.config = config
@@ -104,10 +103,10 @@ class MonitoringFlow(FlowSpec):
         print("📊 Loading current production data...")
 
         try:
-            base_data_path = os.environ["BASE_DATA_PATH"]
-
             # Load current production data
-            self.current_data = monitoring_steps.load_monitoring_df(base_data_path)
+            self.current_data = monitoring_steps.load_monitoring_df(
+                config.features_path
+            )
 
             print(f"📈 Current data shape: {self.current_data.shape}")
             print(

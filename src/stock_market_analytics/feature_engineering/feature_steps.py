@@ -3,27 +3,20 @@ Simple functions that coordinate core feature engineering components and can be
 reused across different flows and scenarios.
 """
 
-from pathlib import Path
 from typing import Any
 
 import pandas as pd
 import polars as pl
 from hamilton import driver
 
-from stock_market_analytics.feature_engineering import feature_pipeline, features_config
+from stock_market_analytics.config import config
+from stock_market_analytics.feature_engineering import feature_pipeline
 
 
 def load_stock_data(
-    base_data_path: Path, stocks_history_file: str = "stocks_history.parquet"
+    stocks_history_path: str,
 ) -> pl.DataFrame:
     """Load and validate stock data from Parquet file."""
-    stocks_history_path = base_data_path / stocks_history_file
-
-    if not stocks_history_path.exists():
-        raise FileNotFoundError(
-            f"Stocks history file not found at {stocks_history_path}. "
-            "Stock data must be provided."
-        )
 
     try:
         return pl.read_parquet(stocks_history_path)
@@ -61,38 +54,35 @@ def execute_feature_pipeline(
 
 def save_features(
     data: pl.DataFrame,
-    base_data_path: Path,
-    features_file: str = "stock_history_features.parquet",
+    features_path: str,
 ) -> None:
     """Save engineered features to parquet file."""
-    features_path = base_data_path / features_file
     data.write_parquet(features_path)
 
 
 def build_features_from_data(
-    base_data_path: Path,
-    stocks_history_file: str = "stocks_history.parquet",
-    features_file: str = "stock_history_features.parquet",
+    stocks_history_path: str = "stocks_history.parquet",
+    features_path: str = "stock_history_features.parquet",
 ) -> dict[str, Any]:
     """Complete feature building workflow from data path."""
     # Load data
-    data = load_stock_data(base_data_path, stocks_history_file)
+    data = load_stock_data(stocks_history_path)
 
     # Apply time filters
-    filtered_data = apply_time_filters(data, features_config.past_horizon)
+    filtered_data = apply_time_filters(data, config.feature_engineering.past_horizon)
 
     # Create and execute pipeline
     pipeline = create_feature_pipeline()
     features = execute_feature_pipeline(
-        pipeline, filtered_data, features_config.as_dict
+        pipeline, filtered_data, config.feature_engineering.as_dict
     )
 
     # Save features
-    save_features(features, base_data_path, features_file)
+    save_features(features, features_path)
 
     return {
         "status": "success",
         "input_records": len(filtered_data),
         "output_records": len(features),
-        "features_file": features_file,
+        "features_file": features_path,
     }
