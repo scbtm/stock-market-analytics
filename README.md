@@ -220,7 +220,7 @@ flowchart TB
     class G registry;
     class H group;
     class I,J,K,L,M svc;
-``
+```
 
 The pipeline is split into two main parts:
 
