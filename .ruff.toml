@@ -27,6 +27,7 @@ ignore = [
     "E501",  # line too long (handled by formatter)
     "PD901", # pandas df variable name
     "NPY002", # numpy legacy random
+    "PTH118", # using Path is not ideal for some scenarios
 ]
 
 # Allow these names which are common in scientific computing

@@ -67,7 +67,7 @@ class TestDataCollectionStepsIntegration:
         sample_tickers_data.to_csv(tickers_path, index=False)
 
         # Test loading
-        result = collection_steps.load_tickers(Path(mock_environment))
+        result = collection_steps.load_tickers(str(tickers_path))
 
         assert len(result) == 3
         assert result[0]["symbol"] == "AAPL"
@@ -76,8 +76,10 @@ class TestDataCollectionStepsIntegration:
 
     def test_load_tickers_missing_file(self, mock_environment):
         """Test loading tickers when file doesn't exist."""
-        with pytest.raises(FileNotFoundError):
-            collection_steps.load_tickers(Path(mock_environment))
+        with pytest.raises(ValueError):
+            collection_steps.load_tickers(
+                str(Path(mock_environment) / "top_200_tickers.csv")
+            )
 
     def test_load_metadata_success(self, mock_environment):
         """Test successful metadata loading."""
@@ -95,7 +97,7 @@ class TestDataCollectionStepsIntegration:
         metadata_data.to_csv(metadata_path, index=False)
 
         # Test loading
-        result = collection_steps.load_metadata(Path(mock_environment))
+        result = collection_steps.load_metadata(str(metadata_path))
 
         assert result is not None
         assert len(result) == 2
@@ -104,7 +106,9 @@ class TestDataCollectionStepsIntegration:
 
     def test_load_metadata_missing_file(self, mock_environment):
         """Test loading metadata when file doesn't exist."""
-        result = collection_steps.load_metadata(Path(mock_environment))
+        result = collection_steps.load_metadata(
+            str(Path(mock_environment) / "metadata.csv")
+        )
         assert result == []
 
     def test_create_collection_plans(self, mock_environment, sample_tickers_data):
@@ -114,7 +118,7 @@ class TestDataCollectionStepsIntegration:
         sample_tickers_data.to_csv(tickers_path, index=False)
 
         # Load tickers using the actual function to get proper format
-        tickers_list = collection_steps.load_tickers(Path(mock_environment))
+        tickers_list = collection_steps.load_tickers(str(tickers_path))
 
         # Test with no existing metadata (full collection)
         plans = collection_steps.create_collection_plans(tickers_list, [])

@@ -69,8 +69,10 @@ class TestModelingStepsIntegration:
 
     def test_load_features_data_missing_file(self, mock_environment):
         """Test loading features when file doesn't exist."""
-        with pytest.raises(FileNotFoundError):
-            modeling_steps.load_features_data(Path(mock_environment))
+        with pytest.raises(ValueError):
+            modeling_steps.load_features_data(
+                str(Path(mock_environment) / "stock_history_features.parquet")
+            )
 
     def test_prepare_modeling_data(self, sample_features_data):
         """Test data preparation for modeling."""

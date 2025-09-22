@@ -35,7 +35,7 @@ AAPL,Apple Inc.,USA,1980,Technology,Consumer Electronics
 GOOGL,Alphabet Inc.,USA,2004,Technology,Internet Content & Information"""
         tickers_file.write_text(tickers_data)
 
-        result = load_tickers(tmp_path)
+        result = load_tickers(str(tickers_file))
 
         assert len(result) == 2
         assert result[0]["symbol"] == "AAPL"
@@ -45,8 +45,8 @@ GOOGL,Alphabet Inc.,USA,2004,Technology,Internet Content & Information"""
 
     def test_load_tickers_file_not_found(self, tmp_path):
         """Test FileNotFoundError when tickers file doesn't exist."""
-        with pytest.raises(FileNotFoundError, match="Tickers file not found"):
-            load_tickers(tmp_path)
+        with pytest.raises(ValueError, match="Error loading tickers file"):
+            load_tickers(str(tmp_path / config.data_collection.tickers_file))
 
     def test_load_tickers_invalid_format(self, tmp_path):
         """Test ValueError when file format is invalid."""
@@ -54,7 +54,7 @@ GOOGL,Alphabet Inc.,USA,2004,Technology,Internet Content & Information"""
         tickers_file.write_text("invalid,format")
 
         with pytest.raises(ValueError, match="Error loading tickers file"):
-            load_tickers(tmp_path)
+            load_tickers(str(tickers_file))
 
 
 class TestLoadMetadata:
@@ -68,7 +68,7 @@ AAPL,2023-01-01,2023-01-01,active
 GOOGL,2023-01-02,2023-01-02,active"""
         metadata_file.write_text(metadata_data)
 
-        result = load_metadata(tmp_path)
+        result = load_metadata(str(metadata_file))
 
         assert len(result) == 2
         assert result[0]["symbol"] == "AAPL"
@@ -76,16 +76,16 @@ GOOGL,2023-01-02,2023-01-02,active"""
 
     def test_load_metadata_file_not_found(self, tmp_path):
         """Test empty list when metadata file doesn't exist."""
-        result = load_metadata(tmp_path)
+        result = load_metadata(str(tmp_path / "metadata.csv"))
         assert result == []
 
     def test_load_metadata_empty_file(self, tmp_path):
-        """Test ValueError when metadata file is empty."""
+        """Test empty list when metadata file is empty."""
         metadata_file = tmp_path / "metadata.csv"
         metadata_file.write_text("symbol,last_ingestion,max_date_recorded,status\n")
 
-        with pytest.raises(ValueError, match="Metadata file is empty"):
-            load_metadata(tmp_path)
+        result = load_metadata(str(metadata_file))
+        assert result == []
 
     def test_load_metadata_missing_columns(self, tmp_path):
         """Test ValueError when required columns are missing."""
@@ -93,7 +93,7 @@ GOOGL,2023-01-02,2023-01-02,active"""
         metadata_file.write_text("symbol,status\nAAPL,active")
 
         with pytest.raises(ValueError, match="Metadata file is missing columns"):
-            load_metadata(tmp_path)
+            load_metadata(str(metadata_file))
 
 
 class TestCreateCollectionPlan:
@@ -334,7 +334,7 @@ class TestUpdateMetadata:
 
     def test_update_metadata_no_updates(self, tmp_path):
         """Test update metadata with no updates."""
-        update_metadata(tmp_path, [])
+        update_metadata(str(tmp_path / "metadata.csv"), [])
         # Should not create any files
         assert not (tmp_path / "metadata.csv").exists()
 
@@ -343,10 +343,9 @@ class TestUpdateMetadata:
         metadata_updates = [
             {"symbol": "AAPL", "status": "active", "last_ingestion": "2023-01-01"}
         ]
-
-        update_metadata(tmp_path, metadata_updates)
-
         metadata_file = tmp_path / "metadata.csv"
+
+        update_metadata(str(metadata_file), metadata_updates)
         assert metadata_file.exists()
 
         df = pd.read_csv(metadata_file)
@@ -364,7 +363,7 @@ class TestUpdateMetadata:
             {"symbol": "AAPL", "status": "active", "last_ingestion": "2023-01-02"}
         ]
 
-        update_metadata(tmp_path, metadata_updates)
+        update_metadata(str(existing_file), metadata_updates)
 
         df = pd.read_csv(existing_file)
         assert len(df) == 2
@@ -391,7 +390,7 @@ class TestCombineWithExistingData:
             }
         )
 
-        result = _combine_with_existing_data(stocks_history_path, new_data)
+        result = _combine_with_existing_data(str(stocks_history_path), new_data)
 
         assert result.equals(new_data)
 
@@ -425,7 +424,7 @@ class TestCombineWithExistingData:
             }
         )
 
-        result = _combine_with_existing_data(stocks_history_path, new_data)
+        result = _combine_with_existing_data(str(stocks_history_path), new_data)
 
         assert len(result) == 2
         symbols = result["symbol"].to_list()
@@ -464,7 +463,7 @@ class TestUpdateHistoricalData:
 
     def test_update_historical_data_no_data(self, tmp_path):
         """Test update with no collected data."""
-        result = update_historical_data(tmp_path, [])
+        result = update_historical_data(str(tmp_path / "stocks_history.parquet"), [])
 
         assert result["status"] == "no_new_data"
 
@@ -484,7 +483,9 @@ class TestUpdateHistoricalData:
             )
         ]
 
-        result = update_historical_data(tmp_path, collected_data)
+        result = update_historical_data(
+            str(tmp_path / "stocks_history.parquet"), collected_data
+        )
 
         assert result["status"] == "success"
         assert result["total_records"] == 1

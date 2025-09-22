@@ -66,10 +66,10 @@ class TrainingFlow(FlowSpec):
             ValueError: If no valid data remains after preparation
         """
         print("📊 Loading and preparing modeling data...")
-        print(f"🗂️  Data path: {self.config.base_data_path}")
+        print(f"🗂️  Features path: {self.config.features_path}")
 
         # Load features data (error handling is in load_features_data)
-        df = modeling_steps.load_features_data(self.config.base_data_path)
+        df = modeling_steps.load_features_data(self.config.features_path)
         print(f"✅ Loaded raw data with shape: {df.shape}")
         print(f"📈 Data date range: {df.index.min()} to {df.index.max()}")
         print(f"🔢 Number of features: {df.shape[1]}")

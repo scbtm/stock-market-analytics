@@ -1,5 +1,3 @@
-import os
-
 import joblib
 import pandas as pd
 
@@ -16,7 +14,7 @@ def download_artifacts() -> tuple[str, str]:
     Download model artifacts from Weights & Biases.
     """
     api = wandb.Api(api_key=config.wandb_key)
-    model_name: str = os.environ.get("MODEL_NAME") or "pipeline:latest"
+    model_name: str = config.model_name or "pipeline:latest"
     model_version: str = model_name.split(":")[1] if ":" in model_name else "latest"
     print(f"Downloading model '{model_name}' version '{model_version}' from W&B...")
     # Reference the artifact by entity/project/name:version or :latest

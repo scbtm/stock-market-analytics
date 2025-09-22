@@ -38,15 +38,15 @@ class TestLoadFeaturesData:
 
         test_data.to_parquet(features_file)
 
-        result = load_features_data(str(tmp_path))
+        result = load_features_data(str(features_file))
 
         assert isinstance(result, pd.DataFrame)
         assert len(result) == 2
 
     def test_load_features_data_file_not_found(self, tmp_path):
         """Test file not found error."""
-        with pytest.raises(FileNotFoundError):
-            load_features_data(str(tmp_path / "nonexistent"))
+        with pytest.raises(ValueError):
+            load_features_data(str(tmp_path / "nonexistent.parquet"))
 
 
 class TestPrepareModelingData:

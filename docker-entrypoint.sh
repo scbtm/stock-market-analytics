@@ -8,7 +8,7 @@ case "$ENTRYPOINT_COMMAND" in
         exec uv run gunicorn -w 4 -b 0.0.0.0:8080 stock_market_analytics.inference.dashboard:server
         ;;
     "batch-collect")
-        exec uv run batch-collect run
+        exec uv run batch-collect run --max-num-splits 1000
         ;;
     "build-features")
         exec uv run build-features run

@@ -57,7 +57,7 @@ class TestFeatureEngineeringStepsIntegration:
         sample_stock_data.write_parquet(historical_path)
 
         # Test loading
-        result = feature_steps.load_stock_data(Path(mock_environment))
+        result = feature_steps.load_stock_data(str(historical_path))
 
         assert not result.is_empty()
         assert "symbol" in result.columns
@@ -65,8 +65,10 @@ class TestFeatureEngineeringStepsIntegration:
 
     def test_load_stock_data_missing_file(self, mock_environment):
         """Test loading stock data when file doesn't exist."""
-        with pytest.raises(FileNotFoundError):
-            feature_steps.load_stock_data(Path(mock_environment))
+        with pytest.raises(ValueError):
+            feature_steps.load_stock_data(
+                str(Path(mock_environment) / "stocks_history.parquet")
+            )
 
     @patch(
         "stock_market_analytics.feature_engineering.feature_steps.execute_feature_pipeline"
@@ -102,7 +104,11 @@ class TestFeatureEngineeringStepsIntegration:
         mock_execute_pipeline.return_value = features_data
 
         # Test feature building
-        result = feature_steps.build_features_from_data(Path(mock_environment))
+        stocks_path = Path(mock_environment) / "stocks_history.parquet"
+        features_path = Path(mock_environment) / "stock_history_features.parquet"
+        result = feature_steps.build_features_from_data(
+            str(stocks_path), str(features_path)
+        )
 
         assert result["status"] == "success"
         assert result["input_records"] == 200  # 100 days * 2 symbols
@@ -136,7 +142,11 @@ class TestFeatureEngineeringStepsIntegration:
         mock_execute_pipeline.return_value = empty_features
 
         # Test feature building
-        result = feature_steps.build_features_from_data(Path(mock_environment))
+        stocks_path = Path(mock_environment) / "stocks_history.parquet"
+        features_path = Path(mock_environment) / "stock_history_features.parquet"
+        result = feature_steps.build_features_from_data(
+            str(stocks_path), str(features_path)
+        )
 
         assert result["status"] == "success"
         assert result["output_records"] == 0

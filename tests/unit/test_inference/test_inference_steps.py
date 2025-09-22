@@ -116,9 +116,14 @@ def test_download_artifacts_with_latest_version(mock_wandb_api):
 
 def test_download_artifacts_with_specific_version(mock_wandb_api):
     """Test download_artifacts with specific version."""
-    with patch.dict(
-        os.environ, {"WANDB_API_KEY": "test_key", "MODEL_NAME": "pipeline:v1.0"}
+    with (
+        patch.dict(
+            os.environ, {"WANDB_API_KEY": "test_key", "MODEL_NAME": "pipeline:v1.0"}
+        ),
+        patch("stock_market_analytics.inference.inference_steps.config") as mock_config,
     ):
+        mock_config.wandb_key = "test_key"
+        mock_config.model_name = "pipeline:v1.0"
         model_dir, model_name = download_artifacts()
 
         assert model_dir == "/tmp/model_dir"
@@ -139,9 +144,12 @@ def test_download_artifacts_no_model_name(mock_wandb_api):
 
 def test_download_artifacts_no_version_in_name(mock_wandb_api):
     """Test download_artifacts with model name without version."""
-    with patch.dict(
-        os.environ, {"WANDB_API_KEY": "test_key", "MODEL_NAME": "pipeline"}
+    with (
+        patch.dict(os.environ, {"WANDB_API_KEY": "test_key", "MODEL_NAME": "pipeline"}),
+        patch("stock_market_analytics.inference.inference_steps.config") as mock_config,
     ):
+        mock_config.wandb_key = "test_key"
+        mock_config.model_name = "pipeline"
         model_dir, model_name = download_artifacts()
 
         assert model_dir == "/tmp/model_dir"

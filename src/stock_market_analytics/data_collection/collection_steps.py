@@ -3,7 +3,6 @@ Coordinate core data collection components and
 reuse across different flows and scenarios.
 """
 
-from pathlib import Path
 from typing import Any
 
 import pandas as pd
@@ -17,19 +16,10 @@ from stock_market_analytics.data_collection import (
 )
 
 
-def load_tickers(base_data_path: Path) -> list[dict[str, Any]]:
+def load_tickers(tickers_path: str) -> list[dict[str, Any]]:
     """Load and validate ticker symbols from CSV file."""
-    tickers_file = config.data_collection.tickers_file
     required_columns = config.data_collection.required_ticker_columns
     column_mapping = config.data_collection.ticker_column_mapping
-
-    tickers_path = base_data_path / tickers_file
-
-    if not tickers_path.exists():
-        raise FileNotFoundError(
-            f"Tickers file not found at {tickers_path}. "
-            "A set of stocks to collect must be provided."
-        )
 
     try:
         tickers_df = pd.read_csv(tickers_path, usecols=required_columns)
@@ -40,22 +30,22 @@ def load_tickers(base_data_path: Path) -> list[dict[str, Any]]:
         raise ValueError(f"Error loading tickers file: {str(e)}") from e
 
 
-def load_metadata(base_data_path: Path) -> list[dict[str, Any]]:
+def load_metadata(metadata_path: str) -> list[dict[str, Any]]:
     """Load and validate existing metadata from CSV file."""
-    metadata_file = config.data_collection.metadata_file
     required_columns = config.data_collection.required_metadata_columns
-
-    metadata_path = base_data_path / metadata_file
-
-    if not metadata_path.exists():
-        return []
 
     try:
         metadata_df = pd.read_csv(metadata_path)
-
         if metadata_df.empty:
-            raise ValueError("Metadata file is empty")
+            return []
 
+    except FileNotFoundError:
+        return []
+
+    except Exception as e:
+        raise ValueError(f"Error reading metadata file: {str(e)}") from e
+
+    try:
         # Validate required columns
         missing_cols = set(required_columns) - set(metadata_df.columns)
         if missing_cols:
@@ -179,22 +169,24 @@ def collect_and_process_symbol(collection_plan: dict[str, str]) -> dict[str, Any
         return {"data": None, "new_metadata": new_metadata}
 
 
-def update_metadata(
-    base_data_path: Path, metadata_updates: list[dict[str, Any]]
-) -> None:
+def update_metadata(metadata_path: str, metadata_updates: list[dict[str, Any]]) -> None:
     """Update the metadata file with new collection information."""
     if not metadata_updates:
         return
 
-    metadata_file = config.data_collection.metadata_file
-    metadata_path = base_data_path / metadata_file
     new_metadata_df = pd.DataFrame(metadata_updates)
 
-    if metadata_path.exists():
+    try:
         existing_metadata_df = pd.read_csv(metadata_path)
-        combined_df = pd.concat([existing_metadata_df, new_metadata_df])
-    else:
+        if not existing_metadata_df.empty:
+            combined_df = pd.concat([existing_metadata_df, new_metadata_df])
+        else:
+            combined_df = new_metadata_df
+
+    except FileNotFoundError:
         combined_df = new_metadata_df
+    except Exception as e:
+        raise ValueError(f"Error reading existing metadata file: {str(e)}") from e
 
     # Clean up metadata: keep only the latest entry per symbol
     final_metadata_df = (
@@ -208,16 +200,18 @@ def update_metadata(
 
 
 def _combine_with_existing_data(
-    stocks_history_path: Path, new_data: pl.DataFrame
+    stocks_history_path: str, new_data: pl.DataFrame
 ) -> pl.DataFrame:
     """Combine new data with existing historical data."""
-    if stocks_history_path.exists():
+
+    try:
         existing_data = pl.read_parquet(stocks_history_path)
         existing_data = existing_data.select(
             ["date", "symbol", "open", "high", "low", "close", "volume"]
         ).cast({"volume": pl.Int64})
         return pl.concat([existing_data, new_data])
-    return new_data
+    except FileNotFoundError:
+        return new_data
 
 
 def _clean_and_deduplicate(data: pl.DataFrame) -> pl.DataFrame:
@@ -232,14 +226,12 @@ def _clean_and_deduplicate(data: pl.DataFrame) -> pl.DataFrame:
 
 
 def update_historical_data(
-    base_data_path: Path, collected_data: list[pl.DataFrame]
+    stocks_history_path: str, collected_data: list[pl.DataFrame]
 ) -> dict[str, Any]:
     """Update the historical data parquet file with newly collected data."""
     if not collected_data:
         return {"status": "no_new_data"}
 
-    stocks_history_file = config.data_collection.stocks_history_file
-    stocks_history_path = base_data_path / stocks_history_file
     new_data = pl.concat(collected_data)
 
     # Combine and clean data

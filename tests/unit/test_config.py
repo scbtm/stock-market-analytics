@@ -1,7 +1,6 @@
 """Simple unit tests for configuration module."""
 
 import os
-from pathlib import Path
 
 import pytest
 
@@ -108,7 +107,7 @@ class TestAppConfig:
 
         config = AppConfig()
 
-        assert config.base_data_path == Path("/tmp/test_data")
+        assert config.base_data_path == "/tmp/test_data"
         assert config.wandb_key == "test_key"
 
         # Clean up

@@ -6,18 +6,20 @@ of the system: data collection, feature engineering, and modeling.
 """
 
 import os
-from pathlib import Path
 from typing import Any
 
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 class DataCollectionConfig(BaseModel):
     """Configuration for data collection pipeline."""
 
-    tickers_file: str = "top_200_tickers.csv"
-    metadata_file: str = "metadata.csv"
-    stocks_history_file: str = "stocks_history.parquet"
+    # Use environment variable for files:
+    tickers_file: str = os.getenv("TICKERS_FILE", "top_200_tickers.csv")
+    metadata_file: str = os.getenv("METADATA_FILE", "metadata.csv")
+    stocks_history_file: str = os.getenv(
+        "STOCKS_HISTORY_FILE", "stocks_history.parquet"
+    )
 
     required_ticker_columns: list[str] = Field(
         default=["Symbol", "Name", "Country", "IPO Year", "Sector", "Industry"]
@@ -80,7 +82,7 @@ class FeatureEngineeringConfig(BaseModel):
 class ModelingConfig(BaseModel):
     """Configuration for modeling pipeline."""
 
-    features_file: str = "stock_history_features.parquet"
+    features_file: str = os.getenv("FEATURES_FILE", "stock_history_features.parquet")
     quantiles: list[float] = Field(default=[0.1, 0.25, 0.5, 0.75, 0.9])
     target: str = "y_log_returns"
     target_coverage: float = 0.8
@@ -90,11 +92,6 @@ class ModelingConfig(BaseModel):
     fractions: tuple[float, float, float, float] = Field(
         default=(0.6, 0.1, 0.2, 0.1), description="Train/val/cal/test split fractions"
     )
-
-    # Deprecated tuning parameters (no longer used since tuning flow was removed)
-    timeout_mins: int = 10
-    n_trials: int = 200
-    study_name: str = "catboost_hyperparameter_optimization_dummy"
 
     # Feature groups
     features: list[str] = Field(
@@ -314,8 +311,8 @@ class ModelingConfig(BaseModel):
 class AppConfig(BaseModel):
     """Main application configuration."""
 
-    base_data_path: Path | None = Field(
-        default=None, description="Base path for data files"
+    base_data_path: str | None = Field(
+        default=None, description="Base path for data files (local path or cloud URL)"
     )
     wandb_key: str | None = Field(default=None, description="Weights & Biases API key")
 
@@ -325,21 +322,121 @@ class AppConfig(BaseModel):
     )
     modeling: ModelingConfig = Field(default_factory=ModelingConfig)
 
-    @validator("base_data_path", pre=True, always=True)
-    def validate_base_data_path(cls, v: Any) -> Any:
-        """Load base data path from environment if not provided."""
-        if v is None:
-            env_path = os.environ.get("BASE_DATA_PATH")
-            if env_path:
-                return Path(env_path)
-        return v
+    model_name: str | None = Field(
+        default=None, description="Model name in Weights & Biases"
+    )
 
-    @validator("wandb_key", pre=True, always=True)
-    def validate_wandb_key(cls, v: Any) -> Any:
+    tickers_path: str | None = Field(default=None, description="Path for tickers file")
+    metadata_path: str | None = Field(
+        default=None, description="Path for metadata file"
+    )
+    stocks_history_path: str | None = Field(
+        default=None, description="Path for stocks history file"
+    )
+    features_path: str | None = Field(
+        default=None, description="Path for features file"
+    )
+
+    def _join_path(self, base: str, filename: str) -> str:
+        """
+        URL-aware path joining that works for both local paths and cloud URLs.
+
+        Args:
+            base: Base path (local or URL)
+            filename: Filename to append
+
+        Returns:
+            Properly joined path/URL
+        """
+        if not base:
+            return filename
+
+        # For URLs, always use forward slashes
+        if base.startswith(("http://", "https://", "gs://", "s3://", "gcs://")):
+            return f"{base.rstrip('/')}/{filename}"
+
+        # For local paths, use os.path.join for OS compatibility
+        # but normalize to forward slashes for consistency
+        import os.path
+
+        joined = os.path.join(base, filename)
+        # Convert to forward slashes for consistency (works on all platforms)
+        return joined.replace("\\", "/")
+
+    @field_validator("base_data_path", mode="before")
+    @classmethod
+    def validate_base_data_path(cls, v: Any) -> str | None:
+        """Load base data path from environment if not provided."""
+        # In Pydantic v2, None may not be passed if it's the default
+        if v is None or v == "":
+            env_val = os.environ.get("BASE_DATA_PATH")
+            return env_val if env_val else None
+        return str(v) if v is not None else None
+
+    @field_validator("wandb_key", mode="before")
+    @classmethod
+    def validate_wandb_key(cls, v: Any) -> str | None:
         """Load WANDB key from environment if not provided."""
-        if v is None:
-            return os.environ.get("WANDB_KEY")
-        return v
+        if v is None or v == "":
+            env_val = os.environ.get("WANDB_KEY")
+            return env_val if env_val else None
+        return str(v) if v is not None else None
+
+    @field_validator("model_name", mode="before")
+    @classmethod
+    def validate_model_name(cls, v: Any) -> str | None:
+        """Load model name from environment if not provided."""
+        if v is None or v == "":
+            env_val = os.environ.get("MODEL_NAME")
+            return env_val if env_val else None
+        return str(v) if v is not None else None
+
+    @model_validator(mode="after")
+    def validate_paths(self) -> "AppConfig":
+        """Handle environment variables and construct file paths."""
+        # Load from environment if fields are None
+        if self.base_data_path is None:
+            env_base = os.environ.get("BASE_DATA_PATH")
+            if env_base:
+                self.base_data_path = env_base
+
+        if self.wandb_key is None:
+            env_wandb = os.environ.get("WANDB_KEY")
+            if env_wandb:
+                self.wandb_key = env_wandb
+
+        if self.model_name is None:
+            env_model = os.environ.get("MODEL_NAME")
+            if env_model:
+                self.model_name = env_model
+
+        # Construct file paths if base_data_path is available
+        if self.base_data_path:
+            # Set tickers_path if not provided
+            if not self.tickers_path:
+                self.tickers_path = self._join_path(
+                    self.base_data_path, self.data_collection.tickers_file
+                )
+
+            # Set metadata_path if not provided
+            if not self.metadata_path:
+                self.metadata_path = self._join_path(
+                    self.base_data_path, self.data_collection.metadata_file
+                )
+
+            # Set stocks_history_path if not provided
+            if not self.stocks_history_path:
+                self.stocks_history_path = self._join_path(
+                    self.base_data_path, self.data_collection.stocks_history_file
+                )
+
+            # Set features_path if not provided
+            if not self.features_path:
+                self.features_path = self._join_path(
+                    self.base_data_path, self.modeling.features_file
+                )
+
+        return self
 
 
 # Global configuration instance
