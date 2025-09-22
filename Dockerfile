@@ -16,8 +16,15 @@ COPY src/ ./src/
 # This creates a .venv and installs the project in it.
 RUN uv sync --all-groups
 
+# Copy entrypoint script
+COPY docker-entrypoint.sh /usr/local/bin/
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
+
 # Expose the port the app runs on
 EXPOSE 8080
 
-# Run the application using `uv run` to ensure it uses the virtual environment
-CMD ["uv", "run", "gunicorn", "-w", "4", "-b", "0.0.0.0:8080", "stock_market_analytics.inference.dashboard:server"]
+# Default entrypoint - can be overridden via ENTRYPOINT_COMMAND env var
+ENV ENTRYPOINT_COMMAND=dashboard
+
+# Use entrypoint script to handle different commands
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]

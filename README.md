@@ -165,10 +165,69 @@ The system demonstrates **MLOps best practices**:
 
 ### CI/CD Pipeline
 
-This project implements a modern CI/CD pipeline to automate testing and deployment, ensuring that the application is always in a deployable state. The pipeline is split into two main parts:
+This project implements a modern CI/CD pipeline to automate testing and deployment, ensuring that the application is always in a deployable state. The pipeline uses a **unified Docker image** approach that enables flexible microservices deployment.
+
+#### **📊 Pipeline Architecture Overview**
+
+```mermaid
+%%{init: {
+  "theme": "base",
+  "themeVariables": {
+    "fontFamily": "Inter, ui-sans-serif, system-ui, Segoe UI, Roboto, Helvetica, Arial",
+    "primaryColor": "#0f172a",
+    "primaryTextColor": "#f8fafc",
+    "primaryBorderColor": "#334155",
+    "lineColor": "#94a3b8",
+    "edgeLabelBackground": "#0f172a",
+    "clusterBkg": "#111827",
+    "clusterBorder": "#334155"
+},
+"flowchart": { "nodeSpacing": 80, "rankSpacing": 80, "titleTopMargin": 120, "height": 50 }
+}%%
+
+flowchart TB
+    A[👨‍💻 Developer] -->|Push code| B[📁 GitHub Repository]
+    B -->|Pull request| C[🔄 GitHub Actions CI]
+    C -->|Tests pass| D[✅ Merge to Main]
+    D -->|Trigger build| E[🏗️ Google Cloud Build]
+
+    E --> F[🐳 Build Unified Docker Image]
+    F --> G[📦 Push to Artifact Registry]
+    G --> H
+
+    subgraph H[☁️ Google Cloud]
+      direction TB
+      X[Single Image → Multiple Services] --> I[🌐 Dashboard Service<br/>ENTRYPOINT_COMMAND=dashboard]
+      X[Single Image → Multiple Services] --> J[🤖 Training Service<br/>ENTRYPOINT_COMMAND=train-model]
+      X[Single Image → Multiple Services] --> K[📊 Data Collection<br/>ENTRYPOINT_COMMAND=batch-collect]
+      X[Single Image → Multiple Services] --> L[⚙️ Feature Engineering<br/>ENTRYPOINT_COMMAND=build-features]
+      X[Single Image → Multiple Services] --> M[📈 Model Monitoring<br/>ENTRYPOINT_COMMAND=monitor-model]
+    end
+
+    %% Modern, high-contrast palette (reads well in light & dark)
+    classDef dev fill:#1d4ed8,stroke:#93c5fd,color:#f8fafc,stroke-width:2.5px;
+    classDef ci fill:#0ea5e9,stroke:#7dd3fc,color:#0b1220,stroke-width:2.5px;
+    classDef merge fill:#10b981,stroke:#6ee7b7,color:#062418,stroke-width:2.5px;
+    classDef build fill:#a855f7,stroke:#c084fc,color:#1f0a33,stroke-width:2.5px;
+    classDef image fill:#f59e0b,stroke:#fcd34d,color:#1a1200,stroke-width:2.5px;
+    classDef registry fill:#f97316,stroke:#fdba74,color:#1a0d00,stroke-width:2.5px;
+    classDef group fill:#111827,stroke:#334155,color:#e5e7eb,stroke-width:2.5px;
+    classDef svc fill:#0f766e,stroke:#34d399,color:#ecfeff,stroke-width:2.5px;
+
+    class A,B dev;
+    class C ci;
+    class D merge;
+    class E build;
+    class F image;
+    class G registry;
+    class H group;
+    class I,J,K,L,M svc;
+```
+
+The pipeline is split into two main parts:
 
 *   **Continuous Integration (CI)**, handled by GitHub Actions, focuses on running tests to ensure code quality.
-*   **Continuous Deployment (CD)**, handled by Google Cloud Build, focuses on deploying the application to production.
+*   **Continuous Deployment (CD)**, handled by Google Cloud Build, focuses on building a unified image that can deploy any service component.
 
 ---
 
@@ -190,18 +249,39 @@ The CI pipeline is designed to prevent regressions and maintain code quality by 
 
 ### Continuous Deployment (CD)
 
-The CD pipeline is responsible for automatically deploying the dashboard application to Google Cloud Run whenever new code is merged into the `main` branch.
+The CD pipeline implements a **flexible microservices deployment strategy** using a single Docker image that can run any component of the system. This approach builds the entire codebase into one image and uses environment variables to control which service runs.
+
+#### **🚀 Flexible Multi-Service Architecture**
+
+**Key Benefits:**
+- **Single Source of Truth**: One Docker image contains all services, ensuring consistency
+- **Simplified Dependency Management**: No need to maintain separate repositories or images
+- **Rapid Deployment**: Deploy any service (dashboard, training, data collection) instantly
+- **Cost-Effective**: Shared image layers reduce storage and build time
+- **Easy Scaling**: Deploy the same image with different configurations for horizontal scaling
+
+#### **Pipeline Process:**
 
 *   **Tool**: Google Cloud Build
 *   **Trigger**: On push to the `main` branch.
 *   **Process**:
-    1.  **Build**: Builds a Docker image of the application using the `Dockerfile`.
-    2.  **Push**: Pushes the newly built image to Google Artifact Registry.
-    3.  **Deploy**: Deploys the image to a Google Cloud Run service.
-    4.  **Smoke Test**: Performs a health check on the newly deployed service to ensure it's running correctly.
+    1.  **Build**: Builds a unified Docker image containing all application components
+    2.  **Push**: Pushes the image to Google Artifact Registry
+    3.  **Deploy**: Deploy to multiple Cloud Run services using the same image with different configurations
+
+#### **Multi-Service Deployment Strategy:**
+
+```bash
+# Same Docker image, different services via environment variables
+DASHBOARD_SERVICE:     ENTRYPOINT_COMMAND=dashboard
+TRAINING_SERVICE:      ENTRYPOINT_COMMAND=train-model + WANDB_KEY + BASE_DATA_PATH
+DATA_COLLECTION:       ENTRYPOINT_COMMAND=batch-collect + BASE_DATA_PATH
+FEATURE_ENGINEERING:   ENTRYPOINT_COMMAND=build-features + BASE_DATA_PATH
+MODEL_MONITORING:      ENTRYPOINT_COMMAND=monitor-model + WANDB_KEY + BASE_DATA_PATH
+```
 
 **Deployment Configuration: (`cloudbuild.yaml`)**
-Note: as of now the deployment is done in GC UI for simplicity, but to fully deploy continually we can use the following configuration:
+The current configuration builds and pushes the unified image to Artifact Registry. Individual services are deployed through the Google Cloud UI for flexibility and simplicity. To deploy the dashboard directly at build time, the following code ilustrates the process:
 
 ```yaml
 steps:
@@ -248,7 +328,83 @@ steps:
 
 ### Containerization
 
-The dashboard application is containerized using Docker for portability and consistent deployments.
+The application uses a **unified Docker container** that can run any service component through environment variable configuration. This approach combines all pipeline components into a single, flexible image.
+
+#### **🎯 Smart Entrypoint System**
+
+The Docker image includes an intelligent entrypoint script (`docker-entrypoint.sh`) that dynamically selects which service to run:
+
+```mermaid
+%%{init: {
+  "theme": "base",
+  "themeVariables": {
+    "fontFamily": "Inter, ui-sans-serif, system-ui, Segoe UI, Roboto, Helvetica, Arial",
+    "primaryColor": "#0f172a",
+    "primaryTextColor": "#f8fafc",
+    "primaryBorderColor": "#334155",
+    "lineColor": "#94a3b8",
+    "edgeLabelBackground": "#0f172a",
+    "clusterBkg": "#111827",
+    "clusterBorder": "#334155"
+}}%%
+
+flowchart LR
+    A[🐳 Unified Docker Image] --> B{docker-entrypoint.sh}
+
+    B -->|ENTRYPOINT_COMMAND=dashboard| C[🌐 Web Dashboard<br/>Gunicorn + Dash]
+    B -->|ENTRYPOINT_COMMAND=train-model| D[🤖 ML Training<br/>CatBoost + W&B]
+    B -->|ENTRYPOINT_COMMAND=batch-collect| E[📊 Data Collection<br/>YFinance + Validation]
+    B -->|ENTRYPOINT_COMMAND=build-features| F[⚙️ Feature Engineering<br/>Hamilton + Polars]
+    B -->|ENTRYPOINT_COMMAND=monitor-model| G[📈 Model Monitoring<br/>Metaflow + Metrics]
+
+    B -->|Default/Unknown| C
+
+    %% Modern, accessible palette (renders well in light & dark)
+    classDef img fill:#f59e0b,stroke:#fcd34d,color:#1a1200,stroke-width:1.5px;
+    classDef ep fill:#0ea5e9,stroke:#7dd3fc,color:#0b1220,stroke-width:1.5px;
+
+    classDef svcDash fill:#1d4ed8,stroke:#93c5fd,color:#f8fafc,stroke-width:1.5px;
+    classDef svcTrain fill:#a855f7,stroke:#c084fc,color:#1f0a33,stroke-width:1.5px;
+    classDef svcCollect fill:#f97316,stroke:#fdba74,color:#1a0d00,stroke-width:1.5px;
+    classDef svcFeat fill:#0ea5e9,stroke:#7dd3fc,color:#0b1220,stroke-width:1.5px;
+    classDef svcMonitor fill:#10b981,stroke:#6ee7b7,color:#062418,stroke-width:1.5px;
+
+    class A img;
+    class B ep;
+    class C svcDash;
+    class D svcTrain;
+    class E svcCollect;
+    class F svcFeat;
+    class G svcMonitor;
+```
+
+**Environment Variable Controls:**
+```bash
+ENTRYPOINT_COMMAND=dashboard     → Web dashboard (default)
+ENTRYPOINT_COMMAND=train-model   → ML training pipeline
+ENTRYPOINT_COMMAND=batch-collect → Data collection service
+ENTRYPOINT_COMMAND=build-features → Feature engineering
+ENTRYPOINT_COMMAND=monitor-model → Model monitoring
+```
+
+#### **Deployment Examples:**
+
+```bash
+# Google Cloud Run - Dashboard Service
+gcloud run deploy dashboard-service \
+  --image=REGION-docker.pkg.dev/PROJECT/REPO/IMAGE:latest \
+  --set-env-vars="ENTRYPOINT_COMMAND=dashboard"
+
+# Google Cloud Run - Training Service
+gcloud run deploy training-service \
+  --image=REGION-docker.pkg.dev/PROJECT/REPO/IMAGE:latest \
+  --set-env-vars="ENTRYPOINT_COMMAND=train-model,WANDB_KEY=xxx,BASE_DATA_PATH=/data"
+
+# Google Cloud Run - Data Collection Service
+gcloud run deploy data-collection-service \
+  --image=REGION-docker.pkg.dev/PROJECT/REPO/IMAGE:latest \
+  --set-env-vars="ENTRYPOINT_COMMAND=batch-collect,BASE_DATA_PATH=/data"
+```
 
 **Application Image: (`Dockerfile`)**
 
