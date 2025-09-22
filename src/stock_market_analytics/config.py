@@ -6,10 +6,9 @@ of the system: data collection, feature engineering, and modeling.
 """
 
 import os
-from pathlib import Path
 from typing import Any
 
-from pydantic import BaseModel, Field, validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 class DataCollectionConfig(BaseModel):
@@ -312,8 +311,8 @@ class ModelingConfig(BaseModel):
 class AppConfig(BaseModel):
     """Main application configuration."""
 
-    base_data_path: Path | None = Field(
-        default=None, description="Base path for data files"
+    base_data_path: str | None = Field(
+        default=None, description="Base path for data files (local path or cloud URL)"
     )
     wandb_key: str | None = Field(default=None, description="Weights & Biases API key")
 
@@ -327,76 +326,117 @@ class AppConfig(BaseModel):
         default=None, description="Model name in Weights & Biases"
     )
 
-    tickers_path: Path | None = Field(default=None, description="Path for tickers file")
-
-    metadata_path: Path | None = Field(
+    tickers_path: str | None = Field(default=None, description="Path for tickers file")
+    metadata_path: str | None = Field(
         default=None, description="Path for metadata file"
     )
-    stocks_history_path: Path | None = Field(
+    stocks_history_path: str | None = Field(
         default=None, description="Path for stocks history file"
     )
-    features_path: Path | None = Field(
+    features_path: str | None = Field(
         default=None, description="Path for features file"
     )
 
-    @validator("base_data_path", pre=True, always=True)
-    def validate_base_data_path(cls, v: Any) -> Any:
+    def _join_path(self, base: str, filename: str) -> str:
+        """
+        URL-aware path joining that works for both local paths and cloud URLs.
+
+        Args:
+            base: Base path (local or URL)
+            filename: Filename to append
+
+        Returns:
+            Properly joined path/URL
+        """
+        if not base:
+            return filename
+
+        # For URLs, always use forward slashes
+        if base.startswith(("http://", "https://", "gs://", "s3://", "gcs://")):
+            return f"{base.rstrip('/')}/{filename}"
+
+        # For local paths, use os.path.join for OS compatibility
+        # but normalize to forward slashes for consistency
+        import os.path
+
+        joined = os.path.join(base, filename)
+        # Convert to forward slashes for consistency (works on all platforms)
+        return joined.replace("\\", "/")
+
+    @field_validator("base_data_path", mode="before")
+    @classmethod
+    def validate_base_data_path(cls, v: Any) -> str | None:
         """Load base data path from environment if not provided."""
-        if v is None:
-            env_path = os.environ.get("BASE_DATA_PATH")
-            if env_path:
-                return Path(env_path)
-        return v
+        # In Pydantic v2, None may not be passed if it's the default
+        if v is None or v == "":
+            env_val = os.environ.get("BASE_DATA_PATH")
+            return env_val if env_val else None
+        return str(v) if v is not None else None
 
-    @validator("wandb_key", pre=True, always=True)
-    def validate_wandb_key(cls, v: Any) -> Any:
+    @field_validator("wandb_key", mode="before")
+    @classmethod
+    def validate_wandb_key(cls, v: Any) -> str | None:
         """Load WANDB key from environment if not provided."""
-        if v is None:
-            return os.environ.get("WANDB_KEY")
-        return v
+        if v is None or v == "":
+            env_val = os.environ.get("WANDB_KEY")
+            return env_val if env_val else None
+        return str(v) if v is not None else None
 
-    @validator("model_name", pre=True, always=True)
-    def validate_model_name(cls, v: Any) -> Any:
+    @field_validator("model_name", mode="before")
+    @classmethod
+    def validate_model_name(cls, v: Any) -> str | None:
         """Load model name from environment if not provided."""
-        if v is None:
-            return os.environ.get("MODEL_NAME")
-        return v
+        if v is None or v == "":
+            env_val = os.environ.get("MODEL_NAME")
+            return env_val if env_val else None
+        return str(v) if v is not None else None
 
-    @validator("tickers_path", pre=True, always=True)
-    def validate_tickers_path(cls, v: Any, values: dict[str, Any]) -> Any:
-        """Construct tickers path from base data path and tickers file name."""
-        if v is None:
-            base_path = values.get("base_data_path")
-            if base_path:
-                return base_path / values["data_collection"].tickers_file
-        return v
+    @model_validator(mode="after")
+    def validate_paths(self) -> "AppConfig":
+        """Handle environment variables and construct file paths."""
+        # Load from environment if fields are None
+        if self.base_data_path is None:
+            env_base = os.environ.get("BASE_DATA_PATH")
+            if env_base:
+                self.base_data_path = env_base
 
-    @validator("metadata_path", pre=True, always=True)
-    def validate_metadata_path(cls, v: Any, values: dict[str, Any]) -> Any:
-        """Construct metadata path from base data path and metadata file name."""
-        if v is None:
-            base_path = values.get("base_data_path")
-            if base_path:
-                return base_path / values["data_collection"].metadata_file
-        return v
+        if self.wandb_key is None:
+            env_wandb = os.environ.get("WANDB_KEY")
+            if env_wandb:
+                self.wandb_key = env_wandb
 
-    @validator("stocks_history_path", pre=True, always=True)
-    def validate_stocks_history_path(cls, v: Any, values: dict[str, Any]) -> Any:
-        """Construct stocks history path from base data path and stocks history file name."""
-        if v is None:
-            base_path = values.get("base_data_path")
-            if base_path:
-                return base_path / values["data_collection"].stocks_history_file
-        return v
+        if self.model_name is None:
+            env_model = os.environ.get("MODEL_NAME")
+            if env_model:
+                self.model_name = env_model
 
-    @validator("features_path", pre=True, always=True)
-    def validate_features_path(cls, v: Any, values: dict[str, Any]) -> Any:
-        """Construct features path from base data path and features file name."""
-        if v is None:
-            base_path = values.get("base_data_path")
-            if base_path:
-                return base_path / values["modeling"].features_file
-        return v
+        # Construct file paths if base_data_path is available
+        if self.base_data_path:
+            # Set tickers_path if not provided
+            if not self.tickers_path:
+                self.tickers_path = self._join_path(
+                    self.base_data_path, self.data_collection.tickers_file
+                )
+
+            # Set metadata_path if not provided
+            if not self.metadata_path:
+                self.metadata_path = self._join_path(
+                    self.base_data_path, self.data_collection.metadata_file
+                )
+
+            # Set stocks_history_path if not provided
+            if not self.stocks_history_path:
+                self.stocks_history_path = self._join_path(
+                    self.base_data_path, self.data_collection.stocks_history_file
+                )
+
+            # Set features_path if not provided
+            if not self.features_path:
+                self.features_path = self._join_path(
+                    self.base_data_path, self.modeling.features_file
+                )
+
+        return self
 
 
 # Global configuration instance
