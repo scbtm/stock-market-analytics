@@ -197,11 +197,11 @@ flowchart TB
 
     subgraph H[☁️ Google Cloud]
       direction TB
-      X[Single Image → Multiple Services] --> I[🌐 Dashboard Service<br/>ENTRYPOINT_COMMAND=dashboard]
-      X[Single Image → Multiple Services] --> J[🤖 Training Service<br/>ENTRYPOINT_COMMAND=train-model]
-      X[Single Image → Multiple Services] --> K[📊 Data Collection<br/>ENTRYPOINT_COMMAND=batch-collect]
-      X[Single Image → Multiple Services] --> L[⚙️ Feature Engineering<br/>ENTRYPOINT_COMMAND=build-features]
-      X[Single Image → Multiple Services] --> M[📈 Model Monitoring<br/>ENTRYPOINT_COMMAND=monitor-model]
+      X[Single Image → Multiple Deployments] --> I[🌐 Dashboard Service<br/>ENTRYPOINT_COMMAND=dashboard]
+      X[Single Image → Multiple Deployments] --> J[🤖 Training Job<br/>ENTRYPOINT_COMMAND=train-model]
+      X[Single Image → Multiple Deployments] --> K[📊 Data Collection Job<br/>ENTRYPOINT_COMMAND=batch-collect]
+      X[Single Image → Multiple Deployments] --> L[⚙️ Feature Engineering Job<br/>ENTRYPOINT_COMMAND=build-features]
+      X[Single Image → Multiple Deployments] --> M[📈 Model Monitoring Job<br/>ENTRYPOINT_COMMAND=monitor-model]
     end
 
     %% Modern, high-contrast palette (reads well in light & dark)
@@ -213,6 +213,7 @@ flowchart TB
     classDef registry fill:#f97316,stroke:#fdba74,color:#1a0d00,stroke-width:2.5px;
     classDef group fill:#111827,stroke:#334155,color:#e5e7eb,stroke-width:2.5px;
     classDef svc fill:#0f766e,stroke:#34d399,color:#ecfeff,stroke-width:2.5px;
+    classDef job fill:#be123c,stroke:#fda4af,color:#f8fafc,stroke-width:2.5px;
 
     class A,B dev;
     class C ci;
@@ -221,7 +222,8 @@ flowchart TB
     class F image;
     class G registry;
     class H group;
-    class I,J,K,L,M svc;
+    class I svc;
+    class J,K,L,M job;
 ```
 
 The pipeline is split into two main parts:
@@ -253,7 +255,7 @@ The CD pipeline implements a **flexible microservices deployment strategy** usin
 
 #### **🚀 Flexible Multi-Service Architecture**
 
-**Key Benefits:**
+**Key Benefits**:
 - **Single Source of Truth**: One Docker image contains all services, ensuring consistency
 - **Simplified Dependency Management**: No need to maintain separate repositories or images
 - **Rapid Deployment**: Deploy any service (dashboard, training, data collection) instantly
@@ -272,12 +274,15 @@ The CD pipeline implements a **flexible microservices deployment strategy** usin
 #### **Multi-Service Deployment Strategy:**
 
 ```bash
-# Same Docker image, different services via environment variables
-DASHBOARD_SERVICE:     ENTRYPOINT_COMMAND=dashboard
-TRAINING_SERVICE:      ENTRYPOINT_COMMAND=train-model + WANDB_KEY + BASE_DATA_PATH
-DATA_COLLECTION:       ENTRYPOINT_COMMAND=batch-collect + BASE_DATA_PATH
-FEATURE_ENGINEERING:   ENTRYPOINT_COMMAND=build-features + BASE_DATA_PATH
-MODEL_MONITORING:      ENTRYPOINT_COMMAND=monitor-model + WANDB_KEY + BASE_DATA_PATH
+# Same Docker image, different deployments via environment variables
+# Cloud Run Service (for the web app)
+DASHBOARD_SERVICE:     ENTRYPOINT_COMMAND=dashboard + WANDB_KEY
+
+# Cloud Run Jobs (for batch/task processing)
+TRAINING_JOB:          ENTRYPOINT_COMMAND=train-model + WANDB_KEY + BASE_DATA_PATH + USERNAME
+DATA_COLLECTION_JOB:   ENTRYPOINT_COMMAND=batch-collect + BASE_DATA_PATH + USERNAME
+FEATURE_ENGINEERING_JOB: ENTRYPOINT_COMMAND=build-features + BASE_DATA_PATH + USERNAME
+MODEL_MONITORING_JOB:  ENTRYPOINT_COMMAND=monitor-model + WANDB_KEY + BASE_DATA_PATH + USERNAME
 ```
 
 **Deployment Configuration: (`cloudbuild.yaml`)**
@@ -393,17 +398,23 @@ ENTRYPOINT_COMMAND=monitor-model → Model monitoring
 # Google Cloud Run - Dashboard Service
 gcloud run deploy dashboard-service \
   --image=REGION-docker.pkg.dev/PROJECT/REPO/IMAGE:latest \
-  --set-env-vars="ENTRYPOINT_COMMAND=dashboard"
+  --set-env-vars="ENTRYPOINT_COMMAND=dashboard" \
+  --platform=managed \
+  --allow-unauthenticated \
+  --region=REGION
 
-# Google Cloud Run - Training Service
-gcloud run deploy training-service \
+# Google Cloud Run - Training Job
+# This command creates a job definition. To run it, use 'gcloud run jobs execute training-job'.
+gcloud run jobs deploy training-job \
   --image=REGION-docker.pkg.dev/PROJECT/REPO/IMAGE:latest \
-  --set-env-vars="ENTRYPOINT_COMMAND=train-model,WANDB_KEY=xxx,BASE_DATA_PATH=/data"
+  --set-env-vars="ENTRYPOINT_COMMAND=train-model,WANDB_KEY=xxx,BASE_DATA_PATH=/data,USERNAME=your-name" \
+  --region=REGION
 
-# Google Cloud Run - Data Collection Service
-gcloud run deploy data-collection-service \
+# Google Cloud Run - Data Collection Job
+gcloud run jobs deploy data-collection-job \
   --image=REGION-docker.pkg.dev/PROJECT/REPO/IMAGE:latest \
-  --set-env-vars="ENTRYPOINT_COMMAND=batch-collect,BASE_DATA_PATH=/data"
+  --set-env-vars="ENTRYPOINT_COMMAND=batch-collect,BASE_DATA_PATH=/data,USERNAME=your-name" \
+  --region=REGION
 ```
 
 **Application Image: (`Dockerfile`)**
@@ -451,8 +462,9 @@ The data collection pipeline supports **parallel processing** with **quality val
 - **Error Resilience**: Graceful handling of API failures
 
 ```bash
-# Set data directory
+# Set environment variables
 export BASE_DATA_PATH="/path/to/your/data"
+export USERNAME="your-name" # Required for Metaflow to namespace artifacts
 
 # Prepare ticker list (CSV with Symbol, Name, Country, IPO Year, Sector, Industry)
 # Download from: https://www.nasdaq.com/market-activity/stocks/screener
@@ -510,6 +522,7 @@ The ML pipeline implements **multi-quantile regression** with **uncertainty quan
 # Complete training pipeline
 export BASE_DATA_PATH="/path/to/data"
 export WANDB_KEY="your_wandb_key"
+export USERNAME="your-name" # Required for Metaflow to namespace artifacts
 uv run train-model run
 ```
 
