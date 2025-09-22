@@ -193,13 +193,13 @@ flowchart TB
     F --> G[📦 Push to Artifact Registry]
     G --> H
 
-    subgraph H[☁️ Single Image → Multiple Services]
+    subgraph H[☁️ Single Image → <br/> Multiple Services]
       direction TB
-      I[🌐 Dashboard Service\nENTRYPOINT_COMMAND=dashboard]
-      J[🤖 Training Service\nENTRYPOINT_COMMAND=train-model]
-      K[📊 Data Collection\nENTRYPOINT_COMMAND=batch-collect]
-      L[⚙️ Feature Engineering\nENTRYPOINT_COMMAND=build-features]
-      M[📈 Model Monitoring\nENTRYPOINT_COMMAND=monitor-model]
+      I[🌐 Dashboard Service<br/>ENTRYPOINT_COMMAND=dashboard]
+      J[🤖 Training Service<br/>ENTRYPOINT_COMMAND=train-model]
+      K[📊 Data Collection<br/>ENTRYPOINT_COMMAND=batch-collect]
+      L[⚙️ Feature Engineering<br/>ENTRYPOINT_COMMAND=build-features]
+      M[📈 Model Monitoring<br/>ENTRYPOINT_COMMAND=monitor-model]
     end
 
     %% Modern, high-contrast palette (reads well in light & dark)
