@@ -181,7 +181,9 @@ This project implements a modern CI/CD pipeline to automate testing and deployme
     "edgeLabelBackground": "#0f172a",
     "clusterBkg": "#111827",
     "clusterBorder": "#334155"
-}}%%
+},
+"flowchart": { "nodeSpacing": 80, "rankSpacing": 80, "titleTopMargin": 120, "height": 50 }
+}%%
 
 flowchart TB
     A[👨‍💻 Developer] -->|Push code| B[📁 GitHub Repository]
@@ -193,14 +195,13 @@ flowchart TB
     F --> G[📦 Push to Artifact Registry]
     G --> H
 
-    subgraph H[☁️ Single Image → Multiple Services]
+    subgraph H[☁️ Google Cloud]
       direction TB
-      padTop[" "]:::spacer
-      I[🌐 Dashboard Service<br/>ENTRYPOINT_COMMAND=dashboard]
-      J[🤖 Training Service<br/>ENTRYPOINT_COMMAND=train-model]
-      K[📊 Data Collection<br/>ENTRYPOINT_COMMAND=batch-collect]
-      L[⚙️ Feature Engineering<br/>ENTRYPOINT_COMMAND=build-features]
-      M[📈 Model Monitoring<br/>ENTRYPOINT_COMMAND=monitor-model]
+      X[Single Image → Multiple Services] --> I[🌐 Dashboard Service<br/>ENTRYPOINT_COMMAND=dashboard]
+      X[Single Image → Multiple Services] --> J[🤖 Training Service<br/>ENTRYPOINT_COMMAND=train-model]
+      X[Single Image → Multiple Services] --> K[📊 Data Collection<br/>ENTRYPOINT_COMMAND=batch-collect]
+      X[Single Image → Multiple Services] --> L[⚙️ Feature Engineering<br/>ENTRYPOINT_COMMAND=build-features]
+      X[Single Image → Multiple Services] --> M[📈 Model Monitoring<br/>ENTRYPOINT_COMMAND=monitor-model]
     end
 
     %% Modern, high-contrast palette (reads well in light & dark)
@@ -350,11 +351,11 @@ The Docker image includes an intelligent entrypoint script (`docker-entrypoint.s
 flowchart LR
     A[🐳 Unified Docker Image] --> B{docker-entrypoint.sh}
 
-    B -->|ENTRYPOINT_COMMAND=dashboard| C[🌐 Web Dashboard\nGunicorn + Dash]
-    B -->|ENTRYPOINT_COMMAND=train-model| D[🤖 ML Training\nCatBoost + W&B]
-    B -->|ENTRYPOINT_COMMAND=batch-collect| E[📊 Data Collection\nYFinance + Validation]
-    B -->|ENTRYPOINT_COMMAND=build-features| F[⚙️ Feature Engineering\nHamilton + Polars]
-    B -->|ENTRYPOINT_COMMAND=monitor-model| G[📈 Model Monitoring\nMetaflow + Metrics]
+    B -->|ENTRYPOINT_COMMAND=dashboard| C[🌐 Web Dashboard<br/>Gunicorn + Dash]
+    B -->|ENTRYPOINT_COMMAND=train-model| D[🤖 ML Training<br/>CatBoost + W&B]
+    B -->|ENTRYPOINT_COMMAND=batch-collect| E[📊 Data Collection<br/>YFinance + Validation]
+    B -->|ENTRYPOINT_COMMAND=build-features| F[⚙️ Feature Engineering<br/>Hamilton + Polars]
+    B -->|ENTRYPOINT_COMMAND=monitor-model| G[📈 Model Monitoring<br/>Metaflow + Metrics]
 
     B -->|Default/Unknown| C
 
