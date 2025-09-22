@@ -193,7 +193,7 @@ flowchart TB
     F --> G[📦 Push to Artifact Registry]
     G --> H
 
-    subgraph H[☁️ Single Image → <br/> Multiple Services]
+    subgraph H[☁️ Single Image → Multiple Services]
       direction TB
       I[🌐 Dashboard Service<br/>ENTRYPOINT_COMMAND=dashboard]
       J[🤖 Training Service<br/>ENTRYPOINT_COMMAND=train-model]
@@ -203,14 +203,14 @@ flowchart TB
     end
 
     %% Modern, high-contrast palette (reads well in light & dark)
-    classDef dev fill:#1d4ed8,stroke:#93c5fd,color:#f8fafc,stroke-width:1.5px;
-    classDef ci fill:#0ea5e9,stroke:#7dd3fc,color:#0b1220,stroke-width:1.5px;
-    classDef merge fill:#10b981,stroke:#6ee7b7,color:#062418,stroke-width:1.5px;
-    classDef build fill:#a855f7,stroke:#c084fc,color:#1f0a33,stroke-width:1.5px;
-    classDef image fill:#f59e0b,stroke:#fcd34d,color:#1a1200,stroke-width:1.5px;
-    classDef registry fill:#f97316,stroke:#fdba74,color:#1a0d00,stroke-width:1.5px;
-    classDef group fill:#111827,stroke:#334155,color:#e5e7eb,stroke-width:1.5px;
-    classDef svc fill:#0f766e,stroke:#34d399,color:#ecfeff,stroke-width:1.5px;
+    classDef dev fill:#1d4ed8,stroke:#93c5fd,color:#f8fafc,stroke-width:2.5px;
+    classDef ci fill:#0ea5e9,stroke:#7dd3fc,color:#0b1220,stroke-width:2.5px;
+    classDef merge fill:#10b981,stroke:#6ee7b7,color:#062418,stroke-width:2.5px;
+    classDef build fill:#a855f7,stroke:#c084fc,color:#1f0a33,stroke-width:2.5px;
+    classDef image fill:#f59e0b,stroke:#fcd34d,color:#1a1200,stroke-width:2.5px;
+    classDef registry fill:#f97316,stroke:#fdba74,color:#1a0d00,stroke-width:2.5px;
+    classDef group fill:#111827,stroke:#334155,color:#e5e7eb,stroke-width:2.5px;
+    classDef svc fill:#0f766e,stroke:#34d399,color:#ecfeff,stroke-width:2.5px;
 
     class A,B dev;
     class C ci;
