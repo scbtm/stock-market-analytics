@@ -39,11 +39,8 @@ def load_metadata(metadata_path: str) -> list[dict[str, Any]]:
         if metadata_df.empty:
             return []
 
-    except FileNotFoundError:
+    except Exception:
         return []
-
-    except Exception as e:
-        raise ValueError(f"Error reading metadata file: {str(e)}") from e
 
     try:
         # Validate required columns
@@ -183,10 +180,8 @@ def update_metadata(metadata_path: str, metadata_updates: list[dict[str, Any]]) 
         else:
             combined_df = new_metadata_df
 
-    except FileNotFoundError:
+    except Exception:
         combined_df = new_metadata_df
-    except Exception as e:
-        raise ValueError(f"Error reading existing metadata file: {str(e)}") from e
 
     # Clean up metadata: keep only the latest entry per symbol
     final_metadata_df = (
@@ -210,7 +205,7 @@ def _combine_with_existing_data(
             ["date", "symbol", "open", "high", "low", "close", "volume"]
         ).cast({"volume": pl.Int64})
         return pl.concat([existing_data, new_data])
-    except FileNotFoundError:
+    except Exception:
         return new_data
 
 
