@@ -1,17 +1,20 @@
-# Stock Market Analytics
+# Stock Market Analytics: MLOps Architecture Showcase
 
-A production-grade machine learning project for quantitative finance, implementing modern MLOps and software architecture practices for scalable and rigorous stock market prediction and analysis.
+A comprehensive demonstration of modern MLOps practices and clean architecture principles using stock market prediction as a practical use case. This project prioritizes code organization, maintainability, and engineering best practices over predictive accuracy.
+
+**Important Note:** This is a portfolio project focused on demonstrating software engineering and MLOps capabilities. It is not intended for actual trading or financial decision-making, and it is not financial advice. Never use this for actual trading without proper risk management and regulatory compliance.
 
 ## Table of Contents
 
 - [Overview](#overview)
+- [Project Scope](#project-scope--limitations)
 - [Key Features](#key-features)
 - [Architecture](#architecture)
   - [Design Philosophy](#design-philosophy)
   - [Module Organization](#module-organization)
   - [Data Flow](#data-flow)
 - [Technical Highlights](#technical-highlights)
-  - [Functional Feature Engineering](#functional-feature-engineering)
+  - [Feature Engineering](#feature-engineering-with-hamilton)
   - [Protocol-Driven Design](#protocol-driven-design)
   - [Production-Ready Infrastructure](#production-ready-infrastructure)
   - [Quality Assurance](#quality-assurance)
@@ -21,23 +24,46 @@ A production-grade machine learning project for quantitative finance, implementi
   - [Data Collection](#data-collection)
   - [Feature Engineering](#feature-engineering)
   - [Model Training](#model-training)
-  - [Code Organization](#code-organization)
 
 ## Overview
 
-This platform demonstrates enterprise-grade quantitative finance engineering through a complete machine learning pipeline for stock market analysis. The system showcases modern software architecture principles including DAGs in a functional paradigm, protocol-driven design, and production-ready MLOps practices.
+This project demonstrates how to build a well-architected ML pipeline using financial data as a complex, real-world domain. While the system predicts stock returns using multi-quantile regression, the primary goal is showcasing:
 
-The platform predicts stock log returns using multi-quantile regression with uncertainty quantification, implemented through a sophisticated three-layer architecture that separates business logic, workflow orchestration, and data processing concerns.
+- **Clean Architecture**: Three-layer separation of concerns for maintainable ML systems
+- **Modern Python Tooling**: Hamilton DAGs, Polars, Pydantic, and Protocol-driven design
+- **MLOps Best Practices**: Metaflow orchestration, experiment tracking, and containerization
+- **Code Quality**: Type safety, linting, formatting, security scans, testing, and comprehensive documentation
+
+The financial domain was chosen because it provides rich, complex data that exercises all aspects of a modern ML pipeline - from data collection through deployment. The model predicts stock log returns using multi-quantile regression with uncertainty quantification, implemented through a three-layer architecture that separates business logic, workflow orchestration, and data processing concerns.
+
+## Project Scope & Limitations
+
+**What this project demonstrates:**
+- ✅ Clean separation of concerns in ML pipelines
+- ✅ Effective use of modern Python ML/data tools
+- ✅ Reproducible workflows with proper orchestration
+- ✅ Type-safe configuration and validation
+- ✅ Containerization and CI/CD practices
+- ✅ Comprehensive documentation and code organization
+
+**What this project doesn't include:**
+- ❌ Sophisticated alpha generation strategies
+- ❌ Real-time trading capabilities
+- ❌ Risk management or portfolio optimization
+- ❌ Regulatory compliance features
+- ❌ Backtesting with realistic transaction costs
+
+This is intentional - the focus is on demonstrating software architecture patterns that can be applied to most ML domains.
 
 ## Key Features
 
 - **🏗️ Three-Layer Architecture**: Clean separation between core business logic, reusable workflow steps, and orchestration flows
 - **📊 Advanced Feature Engineering**: Functional-based-DAGs approach using [Hamilton](https://hamilton.apache.org/) for 50+ technical indicators and statistical features
 - **🎯 Multi-Quantile Prediction**: CatBoost-based uncertainty quantification with conformal prediction calibration
-- **⚡ High-Performance Data Processing**: Polars-based vectorized operations with symbol-aware computations, allowing high speed and preventing data leakage
+- **⚡ Efficient Data Processing**: Polars-based vectorized operations with symbol-aware computations, allowing high speed and preventing data leakage
 - **🔒 Type-Safe Configuration**: Centralized Pydantic configuration system with validation and environment integration
-- **📈 Production MLOps**: Metaflow orchestration with Weights & Biases experiment tracking
-- **🛡️ Fast Data Collection and High Quality Assurance**: Comprehensive **parallelized** validation system ensuring model reliability
+- **📈 MLOps Practices**: Metaflow orchestration with Weights & Biases experiment tracking and deployment to Cloud Run
+- **🛡️ Robust Data Collection and Quality Assurance**: Comprehensive **parallelized** validation system ensuring model reliability
 - **🧪 Protocol-Driven Design**: Interface-based architecture enabling component interchangeability
 
 ## Architecture
@@ -74,14 +100,20 @@ src/stock_market_analytics/
 │   ├── feature_pipeline.py      #   🔧 Core: Hamilton functional features
 │   ├── feature_steps.py         #   📋 Steps: Feature workflow functions
 │   └── feature_building_flow.py #   ⚙️ Flow: Feature orchestration
-└── modeling/                    # 🤖 ML training and evaluation
-    ├── model_factory/           #   🔧 Core: Protocol-driven ML components
-    │   ├── protocols.py         #     Interface definitions
-    │   ├── estimation/          #     CatBoost predictors
-    │   ├── calibration/         #     Conformal prediction
-    │   └── evaluation/          #     Multi-quantile metrics
-    ├── modeling_steps.py        #   📋 Steps: Training workflow functions
-    └── training_flow_cbm_qr.py  #   ⚙️ Flow: ML training orchestration
+├── modeling/                    # 🤖 ML training and evaluation
+│    ├── model_factory/          #   🔧 Core: Protocol-driven ML components
+│    │   ├── protocols.py        #     Interface definitions
+│    │   ├── estimation/         #     CatBoost predictors
+│    │   ├── calibration/        #     Conformal prediction
+│    │   └── evaluation/         #     Multi-quantile metrics
+│    ├── modeling_steps.py       #   📋 Steps: Training workflow functions
+│    └── training_flow_cbm_qr.py #   ⚙️ Flow: ML training orchestration
+└── monitoring/                  # 📊 Performance & Drift Tracking
+    ├── monitoring_metrics.py    #   🔧 Core: Main drift and performance metrics
+    ├── monitoring_steps.py      #   📋 Steps: Monitoring workflow functions
+    └── monitoring_flow.py       #   ⚙️ Flow: ML monitoring orchestration
+
+
 ```
 
 ### Data Flow
@@ -98,15 +130,17 @@ Collections   Validation        Functional       Multi-Quantile   Prediction
 
 ## Technical Highlights
 
-### Functional Feature Engineering
+### Feature Engineering with Hamilton
 
-The feature engineering pipeline leverages the **Hamilton framework** for functional, declarative feature computation, and **Polars** for vectorized operations, allowing for high computation speed of features in a relatively large dataset.
+The feature engineering pipeline leverages the **Hamilton framework** for functional feature computation, and **Polars** for vectorized operations, allowing for high computation speed of features in a relatively large dataset.
 
 **Benefits**:
-- **Dependency Resolution**: Automatic computation graph optimization
-- **Type Safety**: Full type checking throughout the pipeline
-- **Parallelization**: Independent features computed concurrently
-- **Visualization**: Generated DAG diagrams for pipeline understanding
+- Automatic dependency resolution
+- Built-in documentation through DAG visualization
+- Type safety throughout the pipeline
+- Easy feature addition and modification
+- Polars for efficient columnar operations
+- Symbol-aware computations to prevent data leakage
 
 ![Hamilton Feature Engineering Pipeline](src/stock_market_analytics/feature_engineering/features_diagram.png)
 
@@ -145,13 +179,15 @@ This enables:
 
 ### Production-Ready Infrastructure
 
-The system demonstrates **MLOps best practices**:
+The system demonstrates MLOps best practices:
 
-- **Reproducible Pipelines**: Metaflow ensures versioned, traceable execution
+- **Data Validation**: Comprehensive data validation at ingestion time preventing bad data propagation
 - **Experiment Tracking**: Weights & Biases integration for model monitoring
-- **Configuration Management**: Environment-aware Pydantic configuration
-- **Quality Gates**: Comprehensive data validation preventing bad data propagation
-- **Error Handling**: Graceful degradation with detailed logging
+- **Online Inference & Deployment**: Serverless dashboard web app service runs on the latest model version automatically
+- **Retraining & Rollbacks**: Model version rollbacks and canary deployments require only an environment variable change in Cloud Run
+- **Monitoring**: comprehensive monitoring html report with perfromance and drift analyses logged to W&B
+- **Reproducible Pipelines**: Metaflow + W&B ensures versioned, traceable execution
+- **Dependency Injection**: Environment-aware centralized Pydantic configuration
 
 ### Quality Assurance
 
@@ -165,7 +201,7 @@ The system demonstrates **MLOps best practices**:
 
 ### CI/CD Pipeline
 
-This project implements a modern CI/CD pipeline to automate testing and deployment, ensuring that the application is always in a deployable state. The pipeline uses a **unified Docker image** approach that enables flexible microservices deployment.
+This project implements a CI/CD pipeline with GitHub Actions, Google Cloud Build and Artifact Registry. The pipeline uses a **unified Docker image** approach where a single image can run as different services based on environment variables. This follows the principle of "what changes together lives together" - keeping related components in one repository rather than artificially splitting them into microservices that would need complex coordination.
 
 #### **📊 Pipeline Architecture Overview**
 
@@ -228,7 +264,7 @@ flowchart TB
 
 The pipeline is split into two main parts:
 
-*   **Continuous Integration (CI)**, handled by GitHub Actions, focuses on running tests to ensure code quality.
+*   **Continuous Integration (CI)**, handled by GitHub Actions, focuses on running formatting, linting, type checks, security scans, and tests to ensure code quality.
 *   **Continuous Deployment (CD)**, handled by Google Cloud Build, focuses on building a unified image that can deploy any service component.
 
 ---
@@ -251,7 +287,7 @@ The CI pipeline is designed to prevent regressions and maintain code quality by 
 
 ### Continuous Deployment (CD)
 
-The CD pipeline implements a **flexible microservices deployment strategy** using a single Docker image that can run any component of the system. This approach builds the entire codebase into one image and uses environment variables to control which service runs.
+The CD pipeline implements a unified, multi-purpose Docker image that can run any component of the system and uses environment variables to control which service runs.
 
 #### **🚀 Flexible Multi-Service Architecture**
 
@@ -456,9 +492,9 @@ uv run make verify
 The data collection pipeline supports **parallel processing** with **quality validation**:
 
 **Pipeline Features**:
-- **Incremental Updates**: Automatic detection of existing data
-- **Quality Validation**: Real-time OHLC and volume checks
-- **Parallel Processing**: Configurable symbol batching
+- **Parallel Processing**: using Metaflow's native capabilities
+- **Incremental Updates**: Automatic detection of existing data and metadata, only necessary updates are ingested
+- **Quality Validation**: Comprehensive validation at ingestion time
 - **Error Resilience**: Graceful handling of API failures
 
 ```bash
@@ -469,7 +505,7 @@ export USERNAME="your-name" # Required for Metaflow to namespace artifacts
 # Prepare ticker list (CSV with Symbol, Name, Country, IPO Year, Sector, Industry)
 # Download from: https://www.nasdaq.com/market-activity/stocks/screener
 
-# Run parallel data collection (500 tickers in ~5 minutes)
+# Run parallel data collection
 uv run batch-collect run
 
 # For large datasets, specify max parallel splits
@@ -549,7 +585,7 @@ cb_params = {
 
 **CatBoost Model Performance vs Historical Baseline**:
 
-Our advanced CatBoost quantile regression model with conformal calibration demonstrates significant improvements over the historical quantile baseline:
+Our CatBoost quantile regression model with conformal calibration shows some improvements over the historical quantile (naive) baseline, which is used as a sanity check as it should with any ML model:
 
 | Metric | CatBoost | Baseline | Improvement |
 |--------|----------|----------|-------------|
@@ -558,20 +594,17 @@ Our advanced CatBoost quantile regression model with conformal calibration demon
 | **Q90 Pinball Loss** | 0.0092 | 0.0103 | **11.0% better** 📈 |
 | **Q10 Pinball Loss** | 0.0102 | 0.0107 | **4.7% better** 📈 |
 
-**Key Improvements:**
-- **Superior Prediction Accuracy**: 3.1% reduction in mean pinball loss
+**Improvements:**
+- **Prediction Accuracy**: 3.1% reduction in mean pinball loss
 - **More Efficient Uncertainty**: 13.4% narrower prediction intervals while maintaining calibration
 - **Better Tail Performance**: Significant improvements in extreme quantiles (Q10: 4.7%, Q90: 11.0%)
 - **Maintained Statistical Rigor**: Conformal calibration ensures reliable uncertainty quantification
 
-The CatBoost model leverages 50+ engineered features through Hamilton DAGs, achieving better predictive performance with more efficient uncertainty estimates compared to the historical baseline approach.
+*Note: Performance improvements shown are for demonstration purposes. Real-world trading would require more sophisticated features and risk-adjusted metrics.*
 
-### Code Organization
 
-**36 Python files** organized by domain:
+## Contributing & Contact
 
-- **Configuration**: `config.py` - Type-safe Pydantic configuration
-- **Data Collection**: 8 files - Collectors, processors, quality validation
-- **Feature Engineering**: 4 files - Hamilton functions, workflow steps
-- **Modeling**: 17 files - Protocol-driven ML components
-- **Orchestration**: 3 files - Metaflow pipeline definitions
+This project is for educational purposes only. If you find it useful as a reference or have suggestions for improvements, please feel free to open an issue or reach out.
+
+Remember: This is a demonstration of engineering practices, not financial advice. Never use this for actual trading without proper risk management and regulatory compliance.
