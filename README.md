@@ -1,8 +1,8 @@
-# Stock Market Analytics: MLOps Architecture Showcase
+# Stock Market Analytics: Full-Stack Data Science Project Example
 
-A comprehensive demonstration of modern MLOps practices and clean architecture principles using stock market prediction as a practical use case. This project prioritizes code organization, maintainability, and engineering best practices over predictive accuracy.
+A comprehensive demonstration of modern Data Science and MLOps practices and clean architecture principles using stock market prediction as a practical use case. This project prioritizes code organization, maintainability, and engineering best practices over predictive accuracy.
 
-**Important Note:** This is a portfolio project focused on demonstrating software engineering and MLOps capabilities. It is not intended for actual trading or financial decision-making, and it is not financial advice. Never use this for actual trading without proper risk management and regulatory compliance.
+**Important Note:** This is a portfolio project focused on demonstrating modern data science, software engineering, and mlops practices. It is not intended for actual trading or financial decision-making, and it is not financial advice. Never use this for actual trading without proper risk management and regulatory compliance.
 
 ## Table of Contents
 
