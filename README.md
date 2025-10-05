@@ -88,32 +88,48 @@ This design ensures:
 
 ```
 src/stock_market_analytics/
-├── config.py                    # 🔧 Type-safe centralized configuration
-├── main.py                      # 📋 CLI entry point
-├── data_collection/             # 📊 Data ingestion pipeline
-│   ├── collectors/              #   🔧 Core: YFinance, protocol-based collectors
-│   ├── processors/              #   🔧 Core: Data quality validation
-│   ├── models/                  #   🔧 Core: Pydantic schemas & quality rules
-│   ├── collection_steps.py      #   📋 Steps: Workflow step functions
-│   └── batch_collection_flow.py #   ⚙️ Flow: Metaflow orchestration
-├── feature_engineering/         # 🧮 Feature computation pipeline
-│   ├── feature_pipeline.py      #   🔧 Core: Hamilton functional features
-│   ├── feature_steps.py         #   📋 Steps: Feature workflow functions
-│   └── feature_building_flow.py #   ⚙️ Flow: Feature orchestration
-├── modeling/                    # 🤖 ML training and evaluation
-│    ├── model_factory/          #   🔧 Core: Protocol-driven ML components
-│    │   ├── protocols.py        #     Interface definitions
-│    │   ├── estimation/         #     CatBoost predictors
-│    │   ├── calibration/        #     Conformal prediction
-│    │   └── evaluation/         #     Multi-quantile metrics
-│    ├── modeling_steps.py       #   📋 Steps: Training workflow functions
-│    └── training_flow_cbm_qr.py #   ⚙️ Flow: ML training orchestration
-└── monitoring/                  # 📊 Performance & Drift Tracking
-    ├── monitoring_metrics.py    #   🔧 Core: Main drift and performance metrics
-    ├── monitoring_steps.py      #   📋 Steps: Monitoring workflow functions
-    └── monitoring_flow.py       #   ⚙️ Flow: ML monitoring orchestration
-
-
+├── config.py                                   # Type-safe centralized configuration
+├── main.py                                     # CLI entry point
+├── data_collection/                            # Data ingestion pipeline
+│   ├── collectors/                             #   🔧 Core: YFinance, protocol-based collectors
+│   │   ├── base.py                             #      Base collector protocols
+│   │   └── yfinance_collector.py               #      YFinance implementation
+│   ├── processors/                             #   🔧 Core: Data quality validation
+│   │   ├── data_quality.py                     #      Quality validation logic
+│   │   └── timeline.py                         #      Time series processing
+│   ├── models/                                 #   🔧 Core: Pydantic schemas & quality rules
+│   │   ├── collection_plans.py                 #      Data collection schemas
+│   │   └── data_quality_rules.py               #      Validation rule definitions
+│   ├── collection_steps.py                     #   📋 Steps: Workflow step functions
+│   └── batch_collection_flow.py                #   ⚙️ Flow: Metaflow orchestration
+├── feature_engineering/                        # Feature computation pipeline
+│   ├── feature_pipeline.py                     #   🔧 Core: Hamilton functional features
+│   ├── feature_steps.py                        #   📋 Steps: Feature workflow functions
+│   └── feature_building_flow.py                #   ⚙️ Flow: Feature orchestration
+├── inference/                                  # Model inference and web dashboard
+│   ├── dashboard.py                            #   🔧 Core: Interactive Dash web application
+│   ├── inference_functions.py                  #   🔧 Core: Prediction logic
+│   └── inference_steps.py                      #   📋 Steps: Inference workflow functions
+├── modeling/                                   # ML training and evaluation
+│    ├── model_factory/                         #   🔧 Core: Protocol-driven ML components
+│    │   ├── protocols.py                       #       Interface definitions
+│    │   ├── estimation/                        #       CatBoost predictors
+│    │   │   ├── estimators.py                  #        Model implementations
+│    │   │   └── estimation_functions.py        #        Training utilities
+│    │   ├── calibration/                       #       Conformal prediction
+│    │   │   ├── calibrators.py                 #        Calibration implementations
+│    │   │   └── calibration_functions.py       #        Calibration utilities
+│    │   ├── evaluation/                        #       Multi-quantile metrics
+│    │   │   ├── evaluators.py                  #        Evaluation implementations
+│    │   │   └── evaluation_functions.py        #        Metric calculations
+│    │   └── data_management/                   #       Data preprocessing
+│    │       └── preprocessing.py               #        Feature preparation
+│    ├── modeling_steps.py                      #   📋 Steps: Training workflow functions
+│    └── training_flow_cbm_qr.py                #   ⚙️ Flow: ML training orchestration
+└── monitoring/                                 # Performance & Drift Tracking
+    ├── monitoring_metrics.py                   #   🔧 Core: Main drift and performance metrics
+    ├── monitoring_steps.py                     #   📋 Steps: Monitoring workflow functions
+    └── monitoring_flow.py                      #   ⚙️ Flow: ML monitoring orchestration
 ```
 
 ### Data Flow
